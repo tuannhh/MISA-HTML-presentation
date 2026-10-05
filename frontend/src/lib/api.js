@@ -87,7 +87,9 @@ export async function uploadForm(path, form, { onProgress, retryCsrf = true } = 
     return uploadForm(path, form, { onProgress, retryCsrf: false });
   }
   if (status === 401) window.dispatchEvent(new CustomEvent('mp:unauthorized'));
-  throw new ApiError(status, e.code || 'HTTP_ERROR', e.message || (status === 413 ? 'Dữ liệu gửi lên quá lớn' : `Lỗi ${status}`), e.details);
+  // 413 không kèm JSON = proxy phía trước (Nginx) chặn trước khi tới ứng dụng (client_max_body_size thấp hơn MAX_UPLOAD_MB).
+  const fallback = status === 413 ? 'Tổng dung lượng tệp vượt giới hạn máy chủ cho phép' : `Lỗi ${status}`;
+  throw new ApiError(status, e.code || (status === 413 ? 'UPLOAD_TOO_LARGE' : 'HTTP_ERROR'), e.message || fallback, e.details);
 }
 
 // Tải file (HTML/PDF) bằng fetch để giữ cookie + báo lỗi tiếng Việt thay vì trang lỗi trình duyệt.

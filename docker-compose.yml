@@ -41,6 +41,27 @@ services:
       - app-data:/data
     shm_size: "512mb"
 
+  # Reverse proxy Nginx (tuỳ chọn): docker compose --profile proxy up -d
+  # Cho phép request 310 MB (tổng tư liệu 300 MB), chuyển luồng upload thẳng tới app, timeout đủ cho xuất PDF.
+  # Khi bật: đặt TRUST_PROXY=1 và APP_BASE_URL = địa chỉ qua proxy trong .env (xem deploy/nginx/default.conf).
+  proxy:
+    image: nginx:1.28-alpine
+    profiles: ["proxy"]
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "${PROXY_PORT:-80}:80"
+    volumes:
+      # Mount cả thư mục (không mount 1 tệp): sửa tệp cấu hình xong chỉ cần `nginx -s reload`.
+      - ./deploy/nginx:/etc/nginx/conf.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/nginx-health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
 volumes:
   mysql-data:
   app-data:

@@ -1,5 +1,11 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-05 — Reverse proxy Nginx cho upload 300MB
+
+- Thêm `deploy/nginx/default.conf` + service `proxy` (profile `proxy`, `nginx:1.28-alpine`) trong `docker-compose.yml`: `client_max_body_size 310m`, `proxy_request_buffering off`, timeout 300/600s, giữ Host + X-Forwarded-Proto, `server_tokens off`, gzip, phân giải lại tên `app` qua DNS Docker (`resolve`) để build lại app không gây 502. Chi tiết + lý do: `07`.
+- Giao diện: 413 không kèm JSON (proxy chặn) → thông báo "Tổng dung lượng tệp vượt giới hạn máy chủ cho phép".
+- Kiểm chứng qua proxy: 297 MB thành công (75s, Files API, uploads dọn sạch); 301 MB → 413 JSON của app; 330 MB → 413 của Nginx; CSRF/đăng nhập qua proxy OK; app đổi IP → proxy vẫn 200. Unit 18/18, smoke TẤT CẢ ĐẠT.
+
 ## 2026-10-05 — Tư liệu đa tệp 300MB, ghi âm + OCR, số trang tự động, tông nền Sáng/Tối
 
 ### Thay đổi

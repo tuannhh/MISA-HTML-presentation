@@ -65,11 +65,32 @@ docker compose exec app node scripts/create-admin.js admin@misa.com.vn "Quản t
 - App lúc khởi động: kiểm tra đủ bảng (`verifyTables`), đánh `failed` các bài `generating` dở dang, dọn phiên hết hạn định kỳ.
 - Volume: `mysql-data` (DB), `app-data` → `/data` (tệp ảnh, thumbnail, tạm).
 - Health: `GET /api/health` (liveness), `GET /api/health/ready` (DB + hàng đợi).
-- Cổng: máy dev hiện tại dùng `APP_PORT=8088` vì 8080 đã bị `misa-flipbook-proxy` chiếm.
+- Cổng: máy dev hiện tại dùng `APP_PORT=8088` vì 8080 đã bị project khác chiếm.
 
-### Sau reverse proxy HTTPS
+### Reverse proxy Nginx (có sẵn trong repo)
 
-Đặt `TRUST_PROXY=1`, `SESSION_COOKIE_SECURE=true`, `APP_BASE_URL=https://…`. Proxy cần cho phép body ≥ `MAX_UPLOAD_MB` + 4MB (Nginx: `client_max_body_size 310m`), timeout đủ cho tải 300MB và xuất PDF. Tệp nguồn nằm tạm ở `STORAGE_DIR/uploads` (volume) — khởi động xoá sạch, định kỳ xoá tệp > 12 giờ.
+Cấu hình đã kiểm chứng: [`deploy/nginx/default.conf`](../deploy/nginx/default.conf). Chạy kèm compose bằng profile (mặc định **không** bật):
+
+```bash
+PROXY_PORT=80 docker compose --profile proxy up -d      # Nginx :PROXY_PORT → app:3000
+```
+
+| Thiết lập | Giá trị | Vì sao |
+|---|---|---|
+| `client_max_body_size` | `310m` (= `MAX_UPLOAD_MB` + 10) | Mặc định Nginx 1 MB → tệp tư liệu bị chặn 413 trước khi tới app. Đổi `MAX_UPLOAD_MB` phải đổi số này |
+| `proxy_request_buffering off` | | Chuyển luồng upload thẳng tới app: app chặn sớm theo Content-Length, % tải lên trên giao diện đúng thực tế, Nginx không ghi tạm 300 MB ra đĩa |
+| `client_body_timeout` / `proxy_read_timeout` / `proxy_send_timeout` | 300s / 600s / 600s | Mạng chậm khi tải 300 MB; xuất PDF bài dài |
+| `proxy_set_header Host $http_host` | giữ cả cổng | App so Origin với `protocol://host` (CSRF) và dựng CSP trang xem trước |
+| `X-Forwarded-Proto` | giữ của lớp TLS phía trước nếu có (`map`) | `req.protocol` đúng khi TLS kết thúc ở LB |
+| `resolver 127.0.0.11` + `server app:3000 resolve` (cần `zone`) | DNS nội bộ Docker, 10s | Build lại app → container đổi IP; không phân giải lại thì proxy 502 tới khi restart Nginx |
+| `server_tokens off`, `gzip` (gồm `text/javascript`) | | Ẩn phiên bản; JS 51 KB → 20 KB |
+
+Phía app khi đặt sau proxy: `TRUST_PROXY=1` (2 nếu còn 1 lớp LB/TLS trước Nginx), `APP_BASE_URL` = địa chỉ người dùng truy cập; HTTPS thì `SESSION_COOKIE_SECURE=true`. Production nên chỉ mở cổng proxy ra ngoài (cổng app để nội bộ/firewall).
+Nginx cài trên máy chủ (không dùng compose): chép khối `upstream` + `server`, bỏ `resolver`/`zone`/`resolve`, đổi máy chủ upstream thành `127.0.0.1:<APP_PORT>`, thêm `listen 443 ssl` + chứng chỉ.
+
+Đã kiểm chứng qua proxy (2026-10-05): 297 MB (WAV 250 MB + PDF 47 MB) tạo bài thành công trong 75s; 301 MB → app trả 413 JSON sau ~2,5s (luồng không bị Nginx gom lại); 330 MB → Nginx 413 tức thì (giao diện hiện "Tổng dung lượng tệp vượt giới hạn máy chủ cho phép"); đăng nhập/CSRF hoạt động qua proxy; tạo lại container app với IP khác (192.168.112.3 → .5) → proxy vẫn 200 không cần restart.
+
+Tệp nguồn nằm tạm ở `STORAGE_DIR/uploads` (volume) — khởi động xoá sạch, định kỳ xoá tệp > 12 giờ.
 
 ## Kiểm thử
 

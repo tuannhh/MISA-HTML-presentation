@@ -11,6 +11,11 @@
 - Ảnh/thumbnail nằm trong volume `app-data`. Dev local dùng `./data/storage` — **chung DB nhưng khác thư mục tệp** → bài tạo bên dev mở bên container sẽ thiếu ảnh (và ngược lại). Không phải lỗi app.
 - Sao lưu phải gồm cả DB và volume cùng thời điểm.
 
+### Nginx proxy trong compose
+- Bind-mount 1 tệp: mount `./deploy/nginx/default.conf` → trình soạn thảo/`sed -i` ghi tệp mới (inode mới), container vẫn trỏ inode cũ → `nginx -s reload` báo "No such file". Compose mount **cả thư mục** `./deploy/nginx:/etc/nginx/conf.d`.
+- `upstream { server app:3000; }` chỉ phân giải DNS 1 lần lúc Nginx khởi động → `docker compose up -d --build app` có thể đổi IP container → 502. Dùng `resolver 127.0.0.11` + `zone` + `server app:3000 resolve` (Nginx ≥ 1.27.3).
+- Express trả JS với `text/javascript` → phải có trong `gzip_types` (không chỉ `application/javascript`).
+
 ### `CHROME_NO_SANDBOX=true`
 - Chromium trong container chạy với `--no-sandbox` vì container không có user namespace cho sandbox của Chrome. Bù lại: Chromium chỉ render HTML do chính server sinh (đã escape), chặn mọi request mạng, chạy dưới user `node`. Không bật trên máy dev nếu không cần.
 

@@ -1,6 +1,6 @@
 # MISA Presentation
 
-AI tạo **bài trình bày HTML có chuyển động** từ tài liệu (pptx/docx/pdf/txt/ảnh), link (Google Slides/Docs, trang web công khai) hoặc nội dung nhập tay. Sửa chữ/ảnh từng trang, lưu để render lại, trình chiếu, xuất **HTML một tệp** (giữ chuyển động, media nhúng base64) hoặc **PDF**. Tỷ lệ 16:9 · 4:3 · 2:1 · 3:1. Đa tenant, chia sẻ Riêng tư / Công khai.
+AI tạo **bài trình bày HTML có chuyển động** từ nhiều tệp tư liệu (pptx/docx/pdf kể cả bản scan/txt/ảnh/ghi âm — tổng tối đa 300 MB), link (Google Slides/Docs, trang web công khai) hoặc nội dung nhập tay. Số trang tự động hoặc tuỳ chỉnh, tông nền Sáng/Tối. Sửa chữ/ảnh từng trang, lưu để render lại, trình chiếu, xuất **HTML một tệp** (giữ chuyển động, media nhúng base64) hoặc **PDF**. Tỷ lệ 16:9 · 4:3 · 2:1 · 3:1. Đa tenant, chia sẻ Riêng tư / Công khai.
 
 - Backend: Node 24 · Express 5 · MySQL 8.4 · Gemini (`gemini-3.8-flash`) · Chromium (puppeteer-core)
 - Giao diện: Vue 3 · Vite · Tailwind v4 · **MISA Design System 2.0** (desktop + mobile mini-app)
@@ -27,7 +27,15 @@ docker compose exec app node scripts/create-admin.js admin@misa.com.vn "Quản t
 
 Mở `http://localhost:${APP_PORT}`. Kiểm tra: `GET /api/health`, `GET /api/health/ready`.
 
-Sau reverse proxy HTTPS: `TRUST_PROXY=1`, `SESSION_COOKIE_SECURE=true`, `APP_BASE_URL=https://…`.
+### Đặt sau Nginx (khuyến nghị cho production)
+
+Repo có sẵn cấu hình Nginx đã kiểm chứng cho upload tư liệu tổng 300 MB ([`deploy/nginx/default.conf`](deploy/nginx/default.conf): `client_max_body_size 310m`, chuyển luồng upload thẳng tới app, timeout cho tệp lớn/xuất PDF):
+
+```bash
+PROXY_PORT=80 docker compose --profile proxy up -d
+```
+
+Trong `.env`: `TRUST_PROXY=1`, `APP_BASE_URL` = địa chỉ qua proxy; chạy HTTPS thì thêm `SESSION_COOKIE_SECURE=true`. Nginx cài sẵn trên máy chủ: chép khối `server` trong tệp cấu hình, đổi `proxy_pass` thành `http://127.0.0.1:<APP_PORT>`. Chi tiết: [`memory-bank/07`](memory-bank/07-deployment-infrastructure.md).
 
 ## Phát triển
 
