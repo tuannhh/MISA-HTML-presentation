@@ -1,0 +1,25 @@
+@import "tailwindcss";
+@source "../components";
+@source "../desktop";
+@source "../mobile";
+@source "../shared";
+
+/* MDS 2.0 — font tự host + token (không định nghĩa lại biến --mds-*) */
+@import "./mds/fonts/inter.css";
+@import "./mds/tokens.css";
+@import "./mds/tokens/base-colors.css";
+@import "./mds/tokens/number.css";
+@import "./mds/tokens/font.css";
+@import "./mds/tokens/themes/blue.css";
+
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  font-family: 'InterVariable', var(--mds-font-family-body), system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--mds-text);
+  background: var(--mds-bg-page);
+  font-feature-settings: 'liga' 1, 'calt' 1, 'tnum' 1, 'lnum' 1;
+  -webkit-font-smoothing: antialiased;
+}

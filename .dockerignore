@@ -1,0 +1,12 @@
+node_modules
+dist
+data
+tmp
+coverage
+.git
+.env
+.env.*
+!.env.example
+*.log
+memory-bank
+test

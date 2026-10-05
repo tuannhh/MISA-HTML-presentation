@@ -1,0 +1,384 @@
+/**
+ * MISA Design System (MDS 2.0) — Design tokens
+ * Giá trị đo trực tiếp từ bản export chính thức của MDS Web Components v2.0.
+ * Import file này (hoặc copy biến vào hệ thống theme của project) và LUÔN dùng
+ * biến thay vì hard-code mã màu.
+ */
+:root {
+  /* ── Thang Brand — theme Blue mặc định của MISA ─────────────
+     10 theme chính thức trong tokens/themes/*.css (blue, indigo, cyan, teal,
+     green, orange, red, pink, purple, blue-gray). Muốn đổi theme: import file
+     theme tương ứng hoặc đặt data-mds-theme="<tên>" — KHÔNG tự chế màu. */
+  --mds-brand-50: #F0F6FE;
+  --mds-brand-100: #DDEAFC;
+  --mds-brand-200: #C2DBFB;
+  --mds-brand-300: #99C5F7;
+  --mds-brand-400: #68A6F2;
+  --mds-brand-500: #4584EC;
+  --mds-brand-600: #245FDF;        /* Brand default */
+  --mds-brand-700: #2753CE;
+  --mds-brand-800: #2644A7;
+  --mds-brand-900: #243D84;
+  --mds-brand: var(--mds-brand-600);
+
+  /* ── Màu thương hiệu / trạng thái ───────────────────────── */
+  --mds-primary: var(--mds-brand); /* nút primary, focus, link */
+  --mds-selected: #4262F0;         /* trạng thái selected (date picker...) */
+  --mds-danger: #F04438;           /* lỗi, xóa, cảnh báo nghiêm trọng */
+  --mds-success: #12B76A;
+  --mds-warning: #F79009;
+  --mds-info: #2E90FA;
+  /* Màu nền trạng thái dùng solid token để chạy ổn trên WebView cũ không có color-mix(). */
+  --mds-danger-soft: #FDE9E7;
+  --mds-success-soft: #E3F8EF;
+  --mds-warning-soft: #FEF2E1;
+  --mds-info-soft: #E6F2FF;
+  --mds-purple: #9E77ED;
+
+  /* ── Văn bản & icon ─────────────────────────────────────── */
+  --mds-text: #10141B;             /* chữ chính (Neutral/950 — khớp demo chuẩn & themes/*.css) */
+  --mds-text-secondary: #6B707A;   /* chữ phụ (Neutral/700) */
+  --mds-text-placeholder: #9DA2AC;
+  --mds-text-muted: #99A1B2;       /* chữ phụ/ngoài phạm vi (vd: ngày ngoài tháng) */
+  --mds-icon-neutral: #6B707A;     /* màu icon mặc định */
+  --mds-text-ai: #1482FF;          /* text/stroke tính năng AI; button AI dùng gradient 110deg #1482FF→#CF11FF */
+
+  /* ── Nền & viền ─────────────────────────────────────────── */
+  --mds-bg: #FFFFFF;
+  --mds-bg-page: #ECEDEF;          /* nền xám của vùng content */
+  --mds-bg-disabled: #F2F2F4;
+  --mds-bg-hover-soft: #E7EBFD;    /* hover/range nhạt */
+  /* Stroke = tham chiếu chính thang Neutral (xác nhận từ giám đốc thiết kế) */
+  --mds-neutral-200: #ECEDEF;
+  --mds-neutral-300: #E9EAEB;
+  --mds-neutral-400: #CED1D6;
+  --mds-border: var(--mds-neutral-400);          /* Stroke Neutral — viền mặc định */
+  --mds-border-light: var(--mds-neutral-300);    /* Stroke Neutral Light — phân tách rất nhẹ (header/sub-nav/kẻ trong card) */
+  --mds-border-divider: var(--mds-neutral-300);  /* Divider */
+  --mds-border-disable: var(--mds-neutral-200);  /* Stroke Neutral Disable */
+  --mds-alpha-black-100: rgba(0,0,0,0.10);       /* Alpha-Black-100 — dùng cho shadow-card */
+
+  /* ── Typography (Inter Variable v4 — font thống nhất toàn MISA) ─
+     Self-host InterVariable.woff2 thật (weight 100–900) qua assets/fonts/inter.css;
+     alias 'Inter var' giữ tương thích ngược nếu project khác đã cài theo tên đó.
+     Bật 'tnum','lnum' để số liệu thẳng cột. */
+  --mds-font-family: InterVariable, 'Inter var', 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  --mds-font-size-body: 13px;      /* Body Regular 13/18 — mặc định mọi text */
+  --mds-line-height-body: 18px;
+  --mds-font-size-body-lg: 16px;   /* Body Large 16/20 — văn bản dài, rich text */
+  --mds-line-height-body-lg: 20px;
+  --mds-font-size-h3: 16px;        /* H3 16/22 — tiêu đề form/card/section/group */
+  --mds-line-height-h3: 22px;
+  --mds-font-size-h2: 20px;        /* H2 20/28 — tiêu đề app/page */
+  --mds-line-height-h2: 28px;
+  --mds-font-size-h1: 24px;        /* H1 24/36 — tiêu đề banner */
+  --mds-line-height-h1: 36px;
+
+  /* ── Kích thước control (mật độ Trung bình — mặc định) ────
+     Density: data-density="compact" → btn/input 28px, row 32px;
+              data-density="comfortable" → btn 36px, input 40px, row 40px. */
+  --mds-btn-height: 32px;
+  --mds-btn-min-width: 80px;
+  --mds-input-height: 36px;
+  --mds-dt-row-height: 36px;       /* row 1 dòng — đổi theo density */
+  --mds-dt-row-height-2: 56px;     /* row 2 dòng — CỐ ĐỊNH */
+  --mds-dt-row-height-3: 72px;     /* row 3 dòng — CỐ ĐỊNH */
+
+  /* ── Radius scale ───────────────────────────────────────── */
+  --mds-radius-sm: 4px;            /* chi tiết nhỏ */
+  --mds-radius-inner: 6px;         /* phần tử lồng trong control */
+  --mds-radius-default: 8px;       /* button, input, card, badge */
+  --mds-radius-dialog: 12px;       /* dialog, popover, context menu */
+  --mds-radius-pill: 9999px;
+  --mds-radius-input: 8px;         /* alias cũ — giữ tương thích */
+  --mds-radius-popup: 12px;        /* dropdown/popover bo 12px theo demo chuẩn */
+
+  /* ── Layout ─────────────────────────────────────────────── */
+  --mds-layout-header-h: 48px;
+  --mds-layout-subnav-h: 48px;
+  --mds-layout-page-header-h: 56px;
+  --mds-layout-sidebar-w: 200px;
+  --mds-layout-sidebar-sm-w: 64px;
+
+  /* ── Shadow ─────────────────────────────────────────────── */
+  /* BẮT BUỘC cho mọi box trắng trên nền xám (Drop Shadow/Neutral/All 2).
+     Dùng: border-radius:8px; background:#FFF; box-shadow: var(--mds-shadow-card); */
+  --mds-shadow-card: 0 0 2px 0 var(--mds-alpha-black-100);
+  --mds-shadow-sm: 0 1px 2px rgba(16,24,40,0.05);
+  --mds-shadow-md: 0 4px 8px -2px rgba(16,24,40,0.10), 0 2px 4px -2px rgba(16,24,40,0.06);
+  --mds-shadow-lg: 0 12px 16px -4px rgba(16,24,40,0.08), 0 4px 6px -2px rgba(16,24,40,0.03);
+  --mds-shadow-dialog: 0 8px 24px rgba(16,24,40,0.15);
+
+  /* ── Hình nền + hiệu ứng kính (header-bar.md mục 3 "Hình nền") ──── */
+  --mds-wallpaper-image: none;
+  --mds-glass-bg: rgba(255,255,255,0.78);
+  --mds-glass-border: rgba(255,255,255,0.6);
+  --mds-glass-dropdown-bg: rgba(255,255,255,0.95);
+
+  /* ── Chart palette (series chính lấy brand theme hiện tại) ─ */
+  --mds-chart-c1: var(--mds-brand-600);
+  --mds-chart-c2: #12B76A;
+  --mds-chart-c3: #F79009;
+  --mds-chart-c4: #F04438;
+  --mds-chart-c5: #0BA5EC;
+  --mds-chart-c6: #7A5AF8;
+
+  /* ── Icon (stroke 1.5px, vùng chạm tối thiểu 40px) ──────── */
+  --mds-icon-stroke: 1.5px;
+  --mds-icon-xs: 12px;
+  --mds-icon-sm: 16px;
+  --mds-icon-md: 20px;
+  --mds-icon-lg: 24px;             /* kích thước mặc định */
+  --mds-icon-xl: 32px;
+  --mds-icon-touch-target: 40px;
+
+  /* ── Mobile mini-app trong native host MISA AMIS ──────────── */
+  --mds-mobile-touch-target: 48px;
+  --mds-mobile-topbar-height: 56px;
+  --mds-mobile-bottom-nav-height: 64px;
+  --mds-mobile-gutter: 16px;
+  --mds-mobile-safe-top: env(safe-area-inset-top, 0px);
+  --mds-mobile-safe-right: env(safe-area-inset-right, 0px);
+  --mds-mobile-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --mds-mobile-safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* ── Density overrides ─────────────────────────────────────
+   Đặt data-density="compact"|"comfortable" trên <html>; bỏ thuộc tính
+   (hoặc "medium") = mật độ Trung bình mặc định ở khối :root phía trên. */
+:root[data-density="compact"] {
+  --mds-btn-height: 28px;
+  --mds-input-height: 28px;
+  --mds-dt-row-height: 32px;
+}
+:root[data-density="comfortable"] {
+  --mds-btn-height: 36px;
+  --mds-input-height: 40px;
+  --mds-dt-row-height: 40px;
+}
+
+/* Root bắt buộc của mini-app. Mobile ưu tiên khả năng chạm, không kế thừa
+   mật độ desktop hiện tại và không để iOS zoom khi focus input. */
+.mds-mobile-app {
+  --mds-btn-height: var(--mds-mobile-touch-target);
+  --mds-input-height: var(--mds-mobile-touch-target);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  overflow-x: hidden;
+  padding-right: var(--mds-mobile-safe-right);
+  padding-left: var(--mds-mobile-safe-left);
+  font-family: var(--mds-font-family);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@supports (container-type: inline-size) {
+  .mds-mobile-app {
+    container-type: inline-size;
+  }
+}
+
+.mds-mobile-app *,
+.mds-mobile-app *::before,
+.mds-mobile-app *::after {
+  box-sizing: border-box;
+}
+
+.mds-mobile-app img,
+.mds-mobile-app video,
+.mds-mobile-app canvas,
+.mds-mobile-app svg {
+  max-width: 100%;
+}
+
+.mds-mobile-app input,
+.mds-mobile-app textarea {
+  font-size: 16px;
+}
+
+.mds-mobile-app button,
+.mds-mobile-app [role="tab"] {
+  white-space: nowrap;
+}
+
+.mds-mobile-app [role="tab"],
+.mds-mobile-app [role="radiogroup"] label {
+  min-height: var(--mds-mobile-touch-target);
+}
+
+/* Utility chống va chạm cho mini-app: áp vào vùng chart/shape và text một dòng. */
+.mds-mobile-app .mds-mobile-clip-region {
+  min-width: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.mds-mobile-app .mds-mobile-gutter-x {
+  padding-right: var(--mds-mobile-gutter);
+  padding-left: var(--mds-mobile-gutter);
+}
+
+.mds-mobile-app .mds-mobile-single-line {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mds-mobile-app .mds-mobile-readable {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* iOS <= 14.4 chưa hỗ trợ flex-gap. Không thể feature-detect flex-gap bằng
+   @supports, nên vùng trọng yếu dùng sibling margin ổn định trên mọi WebView. */
+.mds-mobile-app .mds-button,
+.mds-mobile-app .mds-tag,
+.mds-mobile-app .mds-mobile-row-gap-1,
+.mds-mobile-app .mds-mobile-row-gap-2,
+.mds-mobile-app .mds-mobile-row-gap-3,
+.mds-mobile-app .mds-mobile-row-gap-4,
+.mds-mobile-app .mds-mobile-column-gap-1,
+.mds-mobile-app .mds-mobile-column-gap-2,
+.mds-mobile-app .mds-mobile-column-gap-4 {
+  gap: 0;
+}
+
+.mds-mobile-app .mds-button > * + * {
+  margin-left: 6px;
+}
+
+.mds-mobile-app .mds-tag > * + *,
+.mds-mobile-app .mds-mobile-row-gap-1 > * + * {
+  margin-left: 4px;
+}
+
+.mds-mobile-app .mds-mobile-row-gap-2 > * + * {
+  margin-left: 8px;
+}
+
+.mds-mobile-app .mds-mobile-row-gap-3 > * + * {
+  margin-left: 12px;
+}
+
+.mds-mobile-app .mds-mobile-row-gap-4 > * + * {
+  margin-left: 16px;
+}
+
+.mds-mobile-app .mds-mobile-column-gap-1 > * + * {
+  margin-top: 4px;
+}
+
+.mds-mobile-app .mds-mobile-column-gap-2 > * + * {
+  margin-top: 8px;
+}
+
+.mds-mobile-app .mds-mobile-column-gap-4 > * + * {
+  margin-top: 16px;
+}
+
+/* 320px và cửa sổ chia đôi: ưu tiên một cột, khoảng đệm 12px, tuyệt đối không ép nội dung. */
+@media (max-width: 359px) {
+  .mds-mobile-app {
+    --mds-mobile-gutter: 12px;
+  }
+
+  .mds-mobile-app .mds-mobile-kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mds-mobile-app .mds-mobile-detail-summary-media {
+    width: 96px;
+    height: 68px;
+  }
+
+  .mds-mobile-app .mds-mobile-list-thumbnail {
+    width: 72px;
+    height: 52px;
+  }
+
+  .mds-mobile-app .mds-mobile-metadata-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    align-items: start;
+  }
+
+  .mds-mobile-app .mds-mobile-metadata-row > :last-child {
+    width: auto;
+    text-align: left;
+  }
+}
+
+/* Enhancement cho mini-app chạy trong split view/nested native container: media
+   query ở trên là fallback cho WebView cũ, container query xử lý host hiện đại. */
+@container (max-width: 359px) {
+  .mds-mobile-app .mds-mobile-gutter-x {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .mds-mobile-app .mds-mobile-kpi-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mds-mobile-app .mds-mobile-detail-summary-media {
+    width: 96px;
+    height: 68px;
+  }
+
+  .mds-mobile-app .mds-mobile-list-thumbnail {
+    width: 72px;
+    height: 52px;
+  }
+
+  .mds-mobile-app .mds-mobile-metadata-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+    align-items: start;
+  }
+
+  .mds-mobile-app .mds-mobile-metadata-row > :last-child {
+    width: auto;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mds-mobile-app *,
+  .mds-mobile-app *::before,
+  .mds-mobile-app *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ── Hình nền + hiệu ứng kính ────────────────────────────────
+   MSettingsDialog tab "Hình nền" set data-mds-wallpaper (id) +
+   data-mds-glass="true" trên <html> khi chọn wallpaper khác "Không có"
+   (header-bar.md mục 3). Áp wallpaper lên nền trang; card/table/dropdown
+   dùng class .mds-card / .mds-dropdown-glass để ăn hiệu ứng kính —
+   header, sidebar, dialog KHÔNG có 2 class này nên vẫn solid như spec. */
+:root[data-mds-wallpaper] body {
+  background-image: var(--mds-wallpaper-image);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+:root[data-mds-glass="true"] .mds-card {
+  background: var(--mds-glass-bg);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid var(--mds-glass-border);
+}
+:root[data-mds-glass="true"] .mds-dropdown-glass {
+  background: var(--mds-glass-dropdown-bg);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+}

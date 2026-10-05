@@ -1,0 +1,19 @@
+/* InterVariable — self-host thật (không qua CDN rsms.me nữa).
+   File .woff2 lấy từ bản phát hành chính thức rsms.me/inter (v4), copy nguyên
+   văn vào assets/fonts/. Weight 100–900 dùng chung 1 file variable font. */
+@font-face {
+  font-family: 'InterVariable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./InterVariable.woff2') format('woff2-variations'),
+       url('./InterVariable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'InterVariable';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./InterVariable-Italic.woff2') format('woff2-variations'),
+       url('./InterVariable-Italic.woff2') format('woff2');
+}

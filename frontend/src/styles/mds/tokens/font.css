@@ -1,0 +1,11 @@
+/* MDS Font Family/Weight — sinh tự động bởi scripts/build-tokens.py, không sửa tay */
+:root {
+  --mds-font-family-display: Inter;
+  --mds-font-family-heading: Inter;
+  --mds-font-family-body: Inter;
+  --mds-font-family-caption: Inter;
+  --mds-font-weight-regular: Regular;
+  --mds-font-weight-medium: Medium;
+  --mds-font-weight-semi-bold: Semi Bold;
+  --mds-font-weight-bold: Bold;
+}

@@ -1,0 +1,6 @@
+# Chỉ dùng khi phát triển: mở cổng MySQL ra 127.0.0.1:3307 để chạy API bằng `npm run dev:api`.
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d mysql
+services:
+  mysql:
+    ports:
+      - "127.0.0.1:3307:3306"

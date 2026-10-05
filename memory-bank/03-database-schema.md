@@ -1,0 +1,78 @@
+# 03 — Lược đồ cơ sở dữ liệu
+
+Nguồn: `startup/database/schema.sql` (baseline `schema.sql@2026-10-05-baseline`). Mọi thời gian lưu UTC, `DATETIME(3)`. Khoá chính là UUID dạng `CHAR(36)` do server sinh.
+
+## Danh sách bảng
+
+### Bảng: `users`
+
+Mỗi người dùng đồng thời là **một tenant** (`presentations.tenant_id = users.id`).
+
+| Cột | Kiểu | Ràng buộc | Ý nghĩa |
+|---|---|---|---|
+| id | CHAR(36) | PK | Mã người dùng = mã tenant |
+| email | VARCHAR(190) | UNIQUE | Chuẩn hoá chữ thường |
+| display_name | VARCHAR(120) | NOT NULL | 2–120 ký tự |
+| password_hash | VARCHAR(100) | NOT NULL | bcrypt |
+| role | ENUM('user','admin') | default 'user' | |
+| status | ENUM('active','disabled') | default 'active' | `disabled` → không đăng nhập, phiên cũ bị chặn |
+| must_change_password | TINYINT(1) | default 0 | 1 khi admin tạo/đặt lại mật khẩu tạm |
+| session_version | INT UNSIGNED | default 1 | Tăng khi đổi mật khẩu/khoá → vô hiệu mọi phiên cũ |
+| created_at / updated_at / last_login_at | DATETIME(3) | | |
+
+### Bảng: `presentations`
+
+| Cột | Kiểu | Ràng buộc | Ý nghĩa |
+|---|---|---|---|
+| id | CHAR(36) | PK | |
+| tenant_id | CHAR(36) | FK → users.id ON DELETE CASCADE | Chủ sở hữu |
+| title | VARCHAR(200) | NOT NULL | Tên bài (hiển thị danh sách) |
+| ratio | ENUM('16:9','4:3','2:1','3:1') | default '16:9' | Đổi được bất kỳ lúc nào (không cần render lại spec) |
+| visibility | ENUM('private','public') | default 'private' | |
+| status | ENUM('generating','ready','failed') | | `generating` quá hạn khi khởi động lại → `failed` (`failStaleGenerating`) |
+| source_kind | ENUM('file','url','text','copy') | | `copy` = bản nhân bản |
+| source_label | VARCHAR(300) | NULL | Tên tệp/URL nguồn (không lưu nội dung nguồn) |
+| instructions | VARCHAR(2000) | NULL | Yêu cầu thêm cho AI |
+| spec | JSON | NULL | **Đặc tả bài trình bày — nguồn sự thật duy nhất** để render |
+| spec_version | INT UNSIGNED | default 0 | Khoá lạc quan: lưu với version cũ → 409 |
+| slide_count | SMALLINT UNSIGNED | | |
+| thumbnail_asset_id | CHAR(36) | NULL | Ảnh bìa (asset kind `thumbnail`) |
+| error_message | VARCHAR(500) | NULL | Lỗi tiếng Việt khi tạo thất bại |
+| published_at | DATETIME(3) | NULL | Lúc công khai (COALESCE giữ lần đầu); về private → NULL |
+
+Chỉ mục: `(tenant_id, updated_at)` cho "Bài của tôi"; `(visibility, status, published_at)` cho thư viện công khai.
+
+### Bảng: `assets`
+
+| Cột | Kiểu | Ràng buộc | Ý nghĩa |
+|---|---|---|---|
+| id | CHAR(36) | PK | Được tham chiếu trong spec (`image.asset`) |
+| tenant_id | CHAR(36) | FK → users ON DELETE CASCADE | |
+| presentation_id | CHAR(36) | FK → presentations ON DELETE CASCADE | Ảnh thuộc đúng 1 bài |
+| kind | ENUM('image','thumbnail') | | |
+| mime, bytes, width, height | | | Luôn `image/webp` sau chuẩn hoá |
+| storage_key | VARCHAR(255) | | Đường dẫn tương đối do server sinh, không lấy từ tên client |
+| original_name | VARCHAR(255) | NULL | Chỉ để hiển thị |
+
+### Bảng: `sessions`
+
+Store của express-session (`MySqlSessionStore`): `session_id` PK, `expires` (ms epoch, có index), `data` MEDIUMTEXT. Dọn phiên hết hạn mỗi 15 phút.
+
+### Bảng: `audit_logs`
+
+`actor_id`, `action` (vd. `auth.login`, `presentation.visibility`, `presentation.export_pdf`, `admin.user_create`), `target_type`, `target_id`, `result`, `ip`, `meta` JSON. Không bao giờ ghi mật khẩu/token. Ghi lỗi chỉ cảnh báo, không làm hỏng request.
+
+### Bảng: `schema_changelog`
+
+Tên các changelog đã áp dụng (baseline tự chèn). Changelog mới đặt ở `startup/database/changelogs/` và chạy **thủ công** (xem README trong thư mục đó).
+
+## Quan hệ giữa các bảng
+
+```
+users 1 ──< presentations 1 ──< assets
+  (xoá user → xoá bài → xoá asset trong DB; tệp trên đĩa dọn bằng storage.removePrefix khi xoá bài qua API)
+```
+
+## Lịch sử thay đổi lược đồ đáng chú ý
+
+- 2026-10-05: baseline đầu tiên.
