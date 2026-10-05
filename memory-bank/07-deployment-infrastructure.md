@@ -22,13 +22,16 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `GEMINI_API_KEY` | ✅ | | Khoá Gemini — **không bao giờ commit/log** |
 | `GEMINI_MODEL` | | `gemini-3.8-flash` | |
 | `GEMINI_TIMEOUT_MS` / `GEMINI_BASE_URL` | | 240000 / `https://generativelanguage.googleapis.com/v1beta` | |
+| `GEMINI_MEDIA_TIMEOUT_MS` | | 900000 | Lượt chuyển thể ghi âm dài / đọc PDF lớn, tải tệp lên Files API |
 | `GOOGLE_API_KEY` | | | Tuỳ chọn, Drive API cho link Google |
 | `SELF_REGISTRATION` | | true | |
 | `ALLOWED_EMAIL_DOMAINS` | | `misa.com.vn` | Phân tách dấu phẩy; trống = mọi domain |
 | `BCRYPT_ROUNDS` | | 12 | |
 | `STORAGE_DIR` | | `./data/storage` (dev) / `/data/storage` (Docker) | |
 | `TEMP_TTL_MINUTES` | | 60 | Dọn tệp tạm quá hạn |
-| `MAX_UPLOAD_MB` / `MAX_IMAGE_UPLOAD_MB` | | 50 / 15 | |
+| `MAX_UPLOAD_MB` / `MAX_IMAGE_UPLOAD_MB` | | 300 / 15 | `MAX_UPLOAD_MB` = **tổng** tệp nguồn 1 lần tạo (và trần tải từ link) |
+| `MAX_UPLOAD_FILES` | | 20 | Số tệp nguồn tối đa 1 lần tạo |
+| `MAX_SOURCE_CHARS` | | 400000 | Tổng ký tự tư liệu (văn bản + bản chuyển thể) gửi bước dựng bài |
 | `MAX_TEXT_CHARS` | | 200000 | |
 | `MAX_IMAGES_PER_DECK` | | 60 | Ảnh rút từ tài liệu nguồn |
 | `GENERATION_CONCURRENCY` / `RENDER_CONCURRENCY` | | 2 / 2 | Song song AI / Chromium |
@@ -66,7 +69,7 @@ docker compose exec app node scripts/create-admin.js admin@misa.com.vn "Quản t
 
 ### Sau reverse proxy HTTPS
 
-Đặt `TRUST_PROXY=1`, `SESSION_COOKIE_SECURE=true`, `APP_BASE_URL=https://…`. Proxy cần cho phép body ≥ `MAX_UPLOAD_MB` và timeout đủ cho xuất PDF (~60s).
+Đặt `TRUST_PROXY=1`, `SESSION_COOKIE_SECURE=true`, `APP_BASE_URL=https://…`. Proxy cần cho phép body ≥ `MAX_UPLOAD_MB` + 4MB (Nginx: `client_max_body_size 310m`), timeout đủ cho tải 300MB và xuất PDF. Tệp nguồn nằm tạm ở `STORAGE_DIR/uploads` (volume) — khởi động xoá sạch, định kỳ xoá tệp > 12 giờ.
 
 ## Kiểm thử
 

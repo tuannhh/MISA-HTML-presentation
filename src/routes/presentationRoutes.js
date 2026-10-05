@@ -1,10 +1,11 @@
 // /api/presentations — danh sách (của tôi / công khai), tạo bằng AI, xem, sửa, xoá, nhân bản, ảnh, xem trước, xuất.
 import { Router } from 'express';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
 import { deckCsp } from '../middleware/security.js';
 import { ok, pick, paging, uuidParam } from '../lib/validate.js';
+import { tooLarge } from '../lib/httpError.js';
 
 // Tên file tải về: bỏ ký tự cấm, kèm filename* UTF-8 để giữ tiếng Việt.
 function disposition(title, ext) {
@@ -15,7 +16,19 @@ function disposition(title, ext) {
 
 export function presentationRoutes({ service, config, limits }) {
   const r = Router();
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.limits.maxUploadMb * 1048576, files: 1, fields: 20, fieldSize: config.limits.maxTextChars * 4 } });
+  // Tệp nguồn: ghi thẳng ra đĩa (tổng tới MAX_UPLOAD_MB, không giữ trong RAM); tên tệp do server sinh (UUID).
+  const maxSourceBytes = config.limits.maxUploadMb * 1048576;
+  const upload = multer({
+    storage: multer.diskStorage({ destination: config.storage.uploadDir, filename: (_req, _file, cb) => cb(null, randomUUID()) }),
+    limits: { fileSize: maxSourceBytes, files: config.limits.maxUploadFiles, fields: 20, fieldSize: config.limits.maxTextChars * 4 },
+  }).fields([{ name: 'files', maxCount: config.limits.maxUploadFiles }, { name: 'file', maxCount: 1 }]);
+  // Chặn sớm theo Content-Length (trước khi nhận dữ liệu) — multer chỉ giới hạn được từng tệp, không giới hạn tổng.
+  // Phần dư 4 MB cho ranh giới multipart + các trường văn bản.
+  const capSourceBody = (req, _res, next) => {
+    const len = Number(req.headers['content-length']);
+    if (Number.isFinite(len) && len > maxSourceBytes + 4 * 1048576) return next(tooLarge(`Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB`, 'UPLOAD_TOO_LARGE'));
+    return next();
+  };
   const imageUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.limits.maxImageUploadMb * 1048576, files: 1, fields: 5 } });
   const auth = requireAuth();
   const id = uuidParam('id');
@@ -27,9 +40,11 @@ export function presentationRoutes({ service, config, limits }) {
     ok(res, rows, { page, pageSize, total, hasNext: page * pageSize < total });
   });
 
-  r.post('/', auth, limits.generate, upload.single('file'), async (req, res) => {
-    const body = pick(req.body, ['url', 'text', 'ratio', 'slideCount', 'instructions', 'title']);
-    const result = await service.create(req.user, { ...body, file: req.file || null }, req.ip);
+  r.post('/', auth, limits.generate, capSourceBody, upload, async (req, res) => {
+    const body = pick(req.body, ['url', 'text', 'ratio', 'slideCount', 'tone', 'instructions', 'title']);
+    // 'file' (1 tệp) giữ cho client cũ; giao diện mới gửi 'files' (nhiều tệp).
+    const files = [...(req.files?.files || []), ...(req.files?.file || [])];
+    const result = await service.create(req.user, { ...body, files }, req.ip);
     ok(res, result, null, 202);
   });
 

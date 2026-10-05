@@ -7,7 +7,8 @@ Trình duyệt (Vue 3 SPA, MDS 2.0)
    │  /api/* (cookie phiên mp.sid + CSRF token)
    ▼
 Node 24 + Express 5  ──► MySQL 8.4 (users, presentations, assets, sessions, audit_logs)
-   │   ├─ ingestService  : đọc pptx/docx/pdf/ảnh/text/URL (chống SSRF, zip bomb)
+   │   ├─ ingestService  : đọc nhiều tệp pptx/docx/pdf/ảnh/ghi âm/text/URL (chống SSRF, zip bomb)
+   │   ├─ mediaService   : PDF/ghi âm → Gemini (trực tiếp hoặc 2 bước; Files API; cắt PDF bằng pdf-lib)
    │   ├─ geminiService  : gọi Gemini generateContent (JSON schema) → spec bài trình bày
    │   ├─ specService    : chuẩn hoá spec (allowlist + giới hạn độ dài)
    │   ├─ renderService  : spec → HTML (shared/deck: render.js + theme.css + engine.js + font Inter)

@@ -25,10 +25,18 @@ export const RATIO_OPTIONS = [
 ];
 
 export const THEME_OPTIONS = [
-  { label: 'Midnight — tối, sang trọng', value: 'midnight' },
-  { label: 'Ocean — xanh doanh nghiệp', value: 'ocean' },
-  { label: 'Aurora — tím sáng tạo', value: 'aurora' },
-  { label: 'Paper — nền sáng', value: 'paper' },
+  { label: 'Midnight — nền tối, xanh đêm', value: 'midnight' },
+  { label: 'Ocean — nền tối, xanh dương', value: 'ocean' },
+  { label: 'Aurora — nền tối, tím sáng tạo', value: 'aurora' },
+  { label: 'Paper — nền sáng, xanh dương – đen', value: 'paper' },
+  { label: 'Ember — nền sáng, cam – đen', value: 'ember' },
+];
+
+// Tông nền khi tạo bài. `swatch` là màu MINH HOẠ của bài trình bày (lấy từ shared/deck/theme.css),
+// không phải màu giao diện ứng dụng → được phép là mã màu cố định.
+export const TONE_OPTIONS = [
+  { value: 'dark', label: 'Tối', desc: 'Nền tối, chữ sáng', swatch: { bg: '#0A1530', ink: '#EEF3FF', accents: ['#2EE6D6', '#4D8DFF'] } },
+  { value: 'light', label: 'Sáng', desc: 'Nền sáng, chữ đậm tương phản cao', swatch: { bg: '#F7F9FC', ink: '#0B1220', accents: ['#1D4ED8', '#B83A0B'] } },
 ];
 
 export const STATUS_TAG = {

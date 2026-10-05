@@ -6,7 +6,7 @@ Bài trình bày được lưu dưới dạng **spec JSON** (`presentations.spec
 
 ```jsonc
 {
-  "title": "…", "theme": "midnight|aurora|ocean|paper", "footer": "…",
+  "title": "…", "theme": "midnight|aurora|ocean|paper|ember", "footer": "…",
   "slides": [
     { "layout": "cover|section|agenda|bullets|cards|stats|image|gallery|timeline|process|quote|comparison|closing",
       "kicker", "title", "highlight" /* phải là chuỗi con của title */, "subtitle", "caption", "tags": [],
@@ -39,19 +39,31 @@ POST /api/presentations (multipart)
   → hàng đợi đầy (pending ≥ MAX_PENDING_JOBS) → 503 QUEUE_FULL
   → INSERT presentations(status='generating') + audit → trả 202 {id}
   → genQueue (Semaphore GENERATION_CONCURRENCY) chạy nền:
-      ingestSource:
-        tệp .pptx/.docx → jszip đọc XML (giới hạn 5000 entry, 400MB giải nén) + rút ảnh nhúng
-        .pdf → gửi nguyên PDF cho Gemini (≤ 18MB) ; .txt/.md → text ; ảnh → ảnh
-        URL → safeFetch (chống SSRF); Google Docs/Slides/Sheets → link export (hoặc Drive API với GOOGLE_API_KEY)
+      ingestSource → { pieces (văn bản), media (PDF/ghi âm), images }:
+        tệp tải lên nằm trên đĩa (STORAGE_DIR/uploads, tên UUID) tới khi job xong — xoá trong finally của hàng đợi
+        .pptx/.docx → jszip đọc XML (giới hạn 5000 entry, 400MB giải nén) + rút ảnh nhúng
+        .pdf / ghi âm → media (giữ trên đĩa) ; .txt/.md → text ; ảnh → ảnh
+        URL → safeFetch (chống SSRF, trần = MAX_UPLOAD_MB); Google Docs/Slides/Sheets → link export (hoặc Drive API)
         text → cắt theo MAX_TEXT_CHARS
       normalizeExtractedImages → sharp → WebP ≤1920px, tối đa MAX_IMAGES_PER_DECK → lưu storage + bảng assets
-      geminiService.generateDeck: prompt tiếng Việt + responseSchema (mảng tuỳ chọn được đánh dấu required để model không bỏ sót)
-                                  + ảnh xem trước nhỏ để model chọn ảnh đúng slide (tham chiếu bằng chỉ số ảnh)
-      mapModelDeck (chỉ số ảnh → asset id) → normalizeSpec (lenient) → dropForeignAssets
+      mediaService.prepareMedia (PDF + ghi âm):
+        ước lượng token (PDF ~560/trang, ghi âm ~32/giây) ≤ 120k và không PDF quá lớn → TRỰC TIẾP: đính kèm vào lượt dựng bài
+        ngược lại → HAI BƯỚC: mỗi ghi âm / mỗi cụm PDF (≤100 trang, ≤45MB, cắt bằng pdf-lib) được Gemini chuyển thành
+          văn bản trước (ghi âm: bản chuyển thể có người nói/số liệu/trích dẫn; PDF: chép markdown + OCR bản scan), song song 3
+        vận chuyển: inline base64 khi nhỏ (tổng ≤ 8MB/lượt trực tiếp, ≤ 14MB/lượt chuyển văn bản), lớn hơn → Gemini Files API
+          (resumable upload, chờ ACTIVE, luôn DELETE sau khi dùng)
+      fitPieces: ghép tư liệu văn bản ≤ MAX_SOURCE_CHARS, chia công bằng giữa các tệp (tệp dài không "nuốt" tệp ngắn)
+      geminiService.generateDeck: prompt tiếng Việt + responseSchema (mảng tuỳ chọn được đánh dấu required để model không bỏ sót;
+                                  theme chỉ trong tông đã chọn) + ảnh xem trước 1280px (≤30 ảnh, ≤6MB) để AI đọc chữ trong ảnh
+                                  và chọn ảnh đúng slide (tham chiếu bằng chỉ số ảnh)
+      mapModelDeck (chỉ số ảnh → asset id) → normalizeSpec (lenient) → capSlides (tự động ≤ 25 / tuỳ chỉnh = N, giữ trang kết)
+        → themeForTone → dropForeignAssets
       → status='ready', spec, slide_count, title (nếu người dùng không đặt) → hẹn tạo ảnh bìa
   lỗi → status='failed', error_message tiếng Việt (lỗi không phải HttpError → thông điệp chung, chi tiết chỉ ở log)
 ```
 
+- **Số trang:** `auto` → AI tự chọn theo lượng nội dung, tối đa 25; số cụ thể → "ĐÚNG N trang" (prompt + mô tả schema) và server cắt về N nếu thừa.
+- **Tông nền:** `dark` → theme midnight/ocean/aurora; `light` → paper (xanh dương – đen) / ember (cam – đen). Theme sáng: mọi màu chữ/hình ≥ 4.5:1 trên nền, không chữ vàng/xám nhạt (xem `shared/deck/theme.css`).
 - Giao diện poll `GET /:id` mỗi ~3–4 giây khi `status='generating'`; danh sách poll khi còn bài đang tạo hoặc chưa có ảnh bìa.
 - Khởi động lại server: `recoverStale()` → các bài `generating` bị đánh `failed` (hàng đợi nằm trong RAM, không khôi phục được).
 

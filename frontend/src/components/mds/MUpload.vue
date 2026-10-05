@@ -21,6 +21,11 @@ const props = defineProps({
   maxSizeMB: { type: Number, default: 5 },
   disabled: { type: Boolean, default: false },
   label: { type: String, default: 'Đính kèm' },
+  // [MISA Presentation] block: dropzone rộng hết khung (form 1 cột rộng); sizeHint: thay chú thích "Dung lượng tối đa…"
+  // (vd. giới hạn theo TỔNG dung lượng nhiều tệp); hint: dòng phụ trong dropzone.
+  block: { type: Boolean, default: false },
+  sizeHint: { type: String, default: '' },
+  hint: { type: String, default: '' },
 })
 
 const emit = defineEmits(['select-files', 'oversized', 'remove', 'retry'])
@@ -74,13 +79,14 @@ function onDrop(e) {
     <div class="flex items-center gap-2 text-[var(--mds-text)]">
       <MIcon name="paperclip" :size="16" class="text-[var(--mds-icon-neutral)]" />
       <span class="font-medium">{{ label }}</span>
-      <span class="text-[12px] text-[var(--mds-text-secondary)]">Dung lượng tối đa {{ maxSizeMB }}MB</span>
+      <span class="text-[12px] text-[var(--mds-text-secondary)]">{{ sizeHint || `Dung lượng tối đa ${maxSizeMB}MB` }}</span>
     </div>
 
     <!-- Dropzone: click hoặc kéo-thả để chọn file -->
     <label
-      class="flex h-[60px] w-full max-w-[420px] items-center justify-center rounded-lg border-[1.5px] border-dashed text-center text-[12px] transition-colors"
+      class="flex w-full items-center justify-center rounded-lg border-[1.5px] border-dashed text-center text-[12px] transition-colors"
       :class="[
+        block ? 'min-h-[96px] flex-col gap-1 px-4 py-4' : 'h-[60px] max-w-[420px]',
         disabled
           ? 'cursor-not-allowed border-[var(--mds-border)] text-[var(--mds-text-placeholder)]'
           : 'cursor-pointer text-[var(--mds-text-secondary)] hover:border-[var(--mds-brand-600)] hover:bg-[var(--mds-brand-50)]',
@@ -91,7 +97,10 @@ function onDrop(e) {
       @dragleave.prevent="isDragOver = false"
       @drop.prevent="onDrop"
     >
-      Kéo/thả tệp vào đây hoặc bấm vào đây
+      <!-- [MISA Presentation] block: icon + dòng phụ cho dropzone rộng -->
+      <MIcon v-if="block" name="upload" :size="20" class="text-[var(--mds-icon-neutral)]" />
+      <span :class="block ? 'text-[13px] font-medium text-[var(--mds-text)]' : ''">Kéo/thả tệp vào đây hoặc bấm vào đây</span>
+      <span v-if="block && hint" class="text-[12px] text-[var(--mds-text-secondary)]">{{ hint }}</span>
       <input
         ref="inputRef"
         type="file"

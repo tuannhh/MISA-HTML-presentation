@@ -15,7 +15,9 @@ export function errorHandler(config) {
     if (err instanceof multer.MulterError) {
       e = err.code === 'LIMIT_FILE_SIZE'
         ? new HttpError(413, 'FILE_TOO_LARGE', 'Tệp vượt quá dung lượng cho phép')
-        : new HttpError(400, 'UPLOAD_ERROR', 'Tệp tải lên không hợp lệ');
+        : err.code === 'LIMIT_FILE_COUNT'
+          ? new HttpError(400, 'TOO_MANY_FILES', 'Số tệp vượt quá giới hạn cho phép')
+          : new HttpError(400, 'UPLOAD_ERROR', 'Tệp tải lên không hợp lệ');
     } else if (err?.type === 'entity.too.large') {
       e = new HttpError(413, 'PAYLOAD_TOO_LARGE', 'Dữ liệu gửi lên quá lớn');
     } else if (err?.type === 'entity.parse.failed') {

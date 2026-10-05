@@ -1,5 +1,27 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-05 — Tư liệu đa tệp 300MB, ghi âm + OCR, số trang tự động, tông nền Sáng/Tối
+
+### Thay đổi
+- **Nhiều tệp, tổng ≤ 300MB** (`MAX_UPLOAD_MB`, không giới hạn riêng từng tệp, ≤ `MAX_UPLOAD_FILES`=20): multer ghi đĩa `STORAGE_DIR/uploads` (UUID), chặn sớm theo Content-Length, xoá khi job xong / khởi động / quá 12 giờ. Link tải về cũng dùng trần 300MB (link Google Slides > 50MB trước đây báo lỗi).
+- **Ghi âm làm tư liệu**: mp3/m4a/mp4/wav/ogg/flac/aac/aiff/webm (magic bytes). Gemini nghe trực tiếp (tư liệu nhỏ) hoặc chuyển thể thành văn bản trước (tư liệu lớn) — `mediaService`.
+- **OCR**: PDF scan đọc bằng Gemini (prompt yêu cầu nhận dạng chữ), PDF lớn cắt cụm 100 trang/45MB (pdf-lib) qua Files API; ảnh gửi AI ở 1280px để đọc chữ trong ảnh.
+- **Số trang**: "Tự động" (mặc định, AI chọn ≤ 25) hoặc "Tuỳ chỉnh" 3–40 = đúng N trang (sửa lỗi cũ: yêu cầu 7 ra 6 vì prompt cho phép ±2). `capSlides` lưới an toàn phía server.
+- **Tông nền Sáng/Tối** (`tone`): AI chỉ chọn theme trong tông. Thêm theme sáng `ember` (cam – đen); viết lại `paper` (xanh dương – đen) — mọi màu chữ/hình ≥ 4.5:1, bỏ vàng/xám nhạt; bỏ glow trên nền sáng.
+- **Sửa lỗi hiển thị**: icon tâm trang bìa trắng-trên-trắng ở theme `ocean`/`paper` (thêm `--core`/`--core-ink`); tăng `--dim` theme tối.
+- **Giao diện**: ô tải tệp rộng hết khung (MUpload `block`), danh sách nhiều tệp + tổng dung lượng + % tải lên (XHR `uploadForm`), TonePicker, số trang dạng radio; mobile tương ứng.
+
+### Đã kiểm chứng (Docker + Gemini thật)
+- Unit 18/18; smoke "TẤT CẢ ĐẠT" (7 trang yêu cầu → đúng 7).
+- E2E trực tiếp: PDF scan (chỉ ảnh) + ảnh chụp ghi chú + m4a, tông Sáng, tự động → 6 trang theme `paper`, đủ 7/7 dữ kiện từ OCR + ghi âm.
+- E2E hai bước: PDF 47MB/6 trang (cắt 2 cụm, Files API) + mp3, 7 trang, tông Tối → đúng 7 trang, đọc được dữ kiện trang cuối; thư mục uploads trống sau job.
+- Giới hạn: 301MB → 413 sau ~2,5s; .exe → 415; 2 loại nguồn → 400.
+
+## 2026-10-05 — Dựng môi trường dev trên macOS
+
+- Clone về macOS, chạy Docker (`APP_PORT=8088`, MySQL dev `127.0.0.1:3307`); smoke test Docker "TẤT CẢ ĐẠT" với Gemini thật.
+- Sửa `npm test`: `node --test test/unit/` → `node --test "test/unit/**/*.test.js"` (Node 24 trên macOS/Linux không nhận thư mục làm đối số — xem `09`). Unit 13/13.
+
 ## 2026-10-05 — Phiên bản đầu tiên (0.1.0)
 
 ### Yêu cầu ban đầu

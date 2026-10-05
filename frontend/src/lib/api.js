@@ -61,6 +61,35 @@ export const patch = (path, body, opts) => api('PATCH', path, { ...opts, body })
 export const del = (path, opts) => api('DELETE', path, opts);
 export const postForm = (path, form, opts) => api('POST', path, { ...opts, form });
 
+/**
+ * Gửi multipart có báo tiến trình tải lên (fetch chưa hỗ trợ upload progress) — dùng cho tệp nguồn lớn (tới vài trăm MB).
+ * Cùng quy ước với api(): CSRF, chuẩn hoá lỗi ApiError, thử lại 1 lần khi CSRF hết hạn.
+ */
+export async function uploadForm(path, form, { onProgress, retryCsrf = true } = {}) {
+  await ensureCsrf();
+  const { status, json } = await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('accept', 'application/json');
+    xhr.setRequestHeader('x-csrf-token', csrfToken);
+    xhr.responseType = 'json';
+    if (onProgress) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+    xhr.onload = () => resolve({ status: xhr.status, json: xhr.response });
+    xhr.onerror = () => reject(new ApiError(0, 'NETWORK', 'Không kết nối được máy chủ. Kiểm tra mạng và thử lại.'));
+    xhr.send(form);
+  });
+  if (json?.data?.csrfToken) setCsrf(json.data.csrfToken);
+  if (status >= 200 && status < 300) return json;
+  const e = json?.error || {};
+  if (e.code === 'CSRF_INVALID' && retryCsrf) {
+    csrfToken = '';
+    return uploadForm(path, form, { onProgress, retryCsrf: false });
+  }
+  if (status === 401) window.dispatchEvent(new CustomEvent('mp:unauthorized'));
+  throw new ApiError(status, e.code || 'HTTP_ERROR', e.message || (status === 413 ? 'Dữ liệu gửi lên quá lớn' : `Lỗi ${status}`), e.details);
+}
+
 // Tải file (HTML/PDF) bằng fetch để giữ cookie + báo lỗi tiếng Việt thay vì trang lỗi trình duyệt.
 export async function download(path, fallbackName) {
   const res = await fetch(path, { credentials: 'same-origin' });

@@ -5,16 +5,18 @@ import DesktopShell from './DesktopShell.vue'
 import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
+import TonePicker from '@/shared/TonePicker.vue'
+import MRadioGroup from '@/components/mds/MRadioGroup.vue'
 import MTabs from '@/components/mds/MTabs.vue'
 import MUpload from '@/components/mds/MUpload.vue'
 import MInput from '@/components/mds/MInput.vue'
 import MTextarea from '@/components/mds/MTextarea.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
-import { useCreate, SOURCE_MODES, ACCEPT, MAX_UPLOAD_MB } from '@/composables/useCreate.js'
+import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
 
 const router = useRouter()
-const { form, errors, submitting, submitError, submit, fileList, onSelectFiles, onOversized, clearFile } = useCreate()
+const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile } = useCreate()
 
 async function onSubmit() {
   const res = await submit()
@@ -39,16 +41,25 @@ async function onSubmit() {
 
           <div v-if="form.mode === 'file'" class="flex flex-col gap-1">
             <MUpload
+              block
               :model-value="fileList"
               :accept="ACCEPT"
-              :multiple="false"
+              multiple
+              :disabled="submitting"
               :max-size-m-b="MAX_UPLOAD_MB"
-              label="Tài liệu nguồn"
+              :size-hint="`Tổng tối đa ${MAX_UPLOAD_MB}MB · tối đa ${MAX_UPLOAD_FILES} tệp`"
+              hint="Chọn được nhiều tệp cùng lúc: tài liệu, PDF scan, ảnh, ghi âm"
+              label="Tư liệu nguồn"
               @select-files="onSelectFiles"
               @oversized="onOversized"
-              @remove="clearFile"
+              @remove="removeFile"
             />
-            <p class="text-[12px] text-[var(--mds-text-secondary)]">PowerPoint (.pptx), Word (.docx), PDF, văn bản (.txt, .md) hoặc ảnh — tối đa {{ MAX_UPLOAD_MB }} MB. Ảnh trong tài liệu được giữ lại để dùng trên slide.</p>
+            <p v-if="form.files.length" class="text-[12px] text-[var(--mds-text-secondary)]">
+              {{ form.files.length }} tệp · {{ formatMb(totalBytes) }} / {{ MAX_UPLOAD_MB }} MB
+            </p>
+            <p class="text-[12px] text-[var(--mds-text-secondary)]">
+              PowerPoint (.pptx), Word (.docx), PDF (kể cả bản scan — AI tự nhận dạng chữ), văn bản (.txt, .md), ảnh (AI đọc cả chữ trong ảnh) hoặc ghi âm MP3/M4A/WAV/OGG/FLAC/AAC/WebM (AI chuyển thể lời nói thành tư liệu). Ảnh trong tài liệu được giữ lại để dùng trên slide.
+            </p>
             <p v-if="errors.file" class="text-[12px] text-[var(--mds-danger)]">{{ errors.file }}</p>
           </div>
 
@@ -66,9 +77,21 @@ async function onSubmit() {
           <FormField label="Tỷ lệ khung hình" group>
             <RatioPicker v-model="form.ratio" />
           </FormField>
-          <div class="grid grid-cols-1 gap-4 md:grid-cols-[160px_1fr]">
-            <FormField label="Số trang mong muốn" hint="3–40 trang">
-              <MInput v-model.number="form.slideCount" type="number" inputmode="numeric" min="3" max="40" :error="errors.slideCount" />
+          <FormField label="Tông màu nền" group hint="AI chọn bảng màu trong tông này; nền sáng luôn dùng chữ và hình hoạ màu đậm, tương phản cao.">
+            <TonePicker v-model="form.tone" />
+          </FormField>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FormField
+              label="Số trang mong muốn"
+              group
+              :hint="form.slideMode === 'auto' ? `AI chọn theo lượng nội dung, tối đa ${AUTO_MAX_SLIDES} trang` : 'Từ 3 đến 40 trang, kể cả trang bìa và trang kết'"
+            >
+              <div class="flex min-h-8 flex-wrap items-center gap-x-4 gap-y-2">
+                <MRadioGroup v-model="form.slideMode" :options="SLIDE_MODES" />
+                <div v-if="form.slideMode === 'custom'" class="w-[96px]">
+                  <MInput v-model.number="form.slideCount" type="number" inputmode="numeric" min="3" max="40" aria-label="Số trang" :error="errors.slideCount" />
+                </div>
+              </div>
             </FormField>
             <FormField label="Tên bài (tuỳ chọn)" hint="Để trống: lấy theo tên tệp hoặc do AI đặt">
               <MInput v-model="form.title" :error="errors.title" />
@@ -82,6 +105,9 @@ async function onSubmit() {
 
       <div class="sticky bottom-0 z-10 border-t border-[var(--mds-border)] bg-[var(--mds-bg)]">
         <div class="mx-auto flex w-full max-w-[880px] items-center justify-end gap-2 px-6 py-3">
+          <span v-if="progress !== null" class="mr-auto text-[13px] text-[var(--mds-text-secondary)]" role="status">
+            {{ progress < 100 ? `Đang tải tư liệu lên… ${progress}%` : 'Đã tải lên, đang khởi tạo…' }}
+          </span>
           <MButton variant="outline" @click="router.back()">Hủy</MButton>
           <MButton variant="primary" type="submit" :loading="submitting">
             <template #icon><MIcon name="send" :size="16" /></template>

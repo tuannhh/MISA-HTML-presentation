@@ -14,13 +14,17 @@ async function main() {
 
   const container = await createContainer(config, pool);
   await container.services.presentations.recoverStale();
+  await container.storage.cleanupUploads(0);
 
   const app = createApp({ config, pool, ...container });
   const server = app.listen(config.port, () => logger.info('server_listening', { port: config.port }));
   server.requestTimeout = 10 * 60 * 1000; // xuất PDF bài dài có thể mất vài phút
   server.headersTimeout = 65 * 1000;
 
-  const tempTimer = setInterval(() => container.storage.cleanupTemp().catch(() => {}), 15 * 60 * 1000);
+  const tempTimer = setInterval(() => {
+    container.storage.cleanupTemp().catch(() => {});
+    container.storage.cleanupUploads(12 * 3600 * 1000).catch(() => {});
+  }, 15 * 60 * 1000);
   tempTimer.unref();
 
   let stopping = false;

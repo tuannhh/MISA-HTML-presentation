@@ -1,17 +1,21 @@
-// Thu thập nội dung nguồn cho AI: tệp tải lên, đường link tài liệu (kể cả Google Slides/Docs/Sheets/Drive) hoặc văn bản nhập tay.
-// Kết quả: { sourceKind, sourceLabel, text, pdf?, images: [{buffer,name,hint}] } — ảnh chưa chuẩn hoá.
+// Thu thập nội dung nguồn cho AI: nhiều tệp tải lên (tổng ≤ MAX_UPLOAD_MB), đường link tài liệu
+// (kể cả Google Slides/Docs/Sheets/Drive) hoặc văn bản nhập tay.
+// Kết quả: { pieces: [{label,text}], media: [{kind:'pdf'|'audio', name, size, mime, path?|buffer?}], images: [{buffer,name,hint}] }
+//   pieces = văn bản đọc được ngay; media = PDF/ghi âm để Gemini đọc (OCR) / nghe; ảnh chưa chuẩn hoá.
 // An toàn: nhận diện loại tệp bằng magic bytes; giới hạn zip-bomb; mọi link đi qua safeFetch (chặn SSRF).
+import { open, readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
-import { sniff, IMAGE_TYPES } from '../lib/fileType.js';
+import { sniff, IMAGE_TYPES, AUDIO_TYPES, AUDIO_MIME } from '../lib/fileType.js';
 import { safeFetch, assertPublicUrl } from '../lib/safeFetch.js';
 import { badRequest, tooLarge, unprocessable, HttpError } from '../lib/httpError.js';
 
 const MAX_ZIP_ENTRIES = 5000;
 const MAX_ZIP_UNCOMPRESSED = 400 * 1048576;
-const MAX_PDF_FOR_MODEL = 18 * 1048576;
 const MEDIA_RE = /\.(png|jpe?g|gif|webp)$/i;
+const SUPPORTED_KINDS = new Set(['pdf', 'zip', 'text', ...IMAGE_TYPES, ...AUDIO_TYPES]);
 
-const unsupported = () => new HttpError(415, 'UNSUPPORTED_FILE', 'Định dạng chưa hỗ trợ. Dùng PPTX, DOCX, PDF, TXT/MD hoặc ảnh PNG/JPEG/WebP.');
+const unsupported = (name) =>
+  new HttpError(415, 'UNSUPPORTED_FILE', `${name ? `Tệp "${name}": định dạng` : 'Định dạng'} chưa hỗ trợ. Dùng PPTX, DOCX, PDF, TXT/MD, ảnh PNG/JPEG/WebP hoặc ghi âm MP3/M4A/WAV/OGG/FLAC/AAC/WebM.`);
 
 function decodeXml(s) {
   return s
@@ -117,26 +121,53 @@ function clip(text, max) {
   return text.length > max ? `${text.slice(0, max)}\n…(đã cắt bớt phần cuối do tài liệu quá dài)` : text;
 }
 
-/** Đọc 1 tệp (từ upload hoặc tải về từ link). */
-export async function readDocument(buffer, filename, limits) {
-  const kind = sniff(buffer);
-  if (kind === 'pdf') {
-    if (buffer.length > MAX_PDF_FOR_MODEL) throw tooLarge('PDF quá lớn để AI đọc (tối đa 18 MB). Hãy tách nhỏ tài liệu.');
-    return { text: '', pdf: buffer, images: [] };
-  }
+/** Đọc 1 tệp đã nằm trong bộ nhớ (từ link, hoặc tệp tải lên sau khi đọc vào RAM). */
+export async function readBuffer(buffer, name, limits, kind = sniff(buffer)) {
+  const label = name || 'tài liệu';
+  if (kind === 'pdf') return { pieces: [], images: [], media: [{ kind: 'pdf', name: label, size: buffer.length, mime: 'application/pdf', buffer }] };
+  if (AUDIO_TYPES.has(kind)) return { pieces: [], images: [], media: [{ kind: 'audio', name: label, size: buffer.length, mime: AUDIO_MIME[kind], buffer }] };
   if (kind === 'zip') {
     const zip = await openZip(buffer);
-    if (zip.file('ppt/presentation.xml')) return readPptx(zip);
-    if (zip.file('word/document.xml')) return readDocx(zip);
-    throw unsupported();
+    let doc;
+    if (zip.file('ppt/presentation.xml')) doc = await readPptx(zip);
+    else if (zip.file('word/document.xml')) doc = await readDocx(zip);
+    else throw unsupported(name);
+    return { pieces: doc.text ? [{ label, text: doc.text }] : [], images: doc.images.map((im) => ({ ...im, hint: `${im.hint} (${label})` })), media: [] };
   }
-  if (IMAGE_TYPES.has(kind)) return { text: '', images: [{ name: filename || 'image', hint: 'ảnh người dùng tải lên', buffer }] };
+  if (IMAGE_TYPES.has(kind)) return { pieces: [], media: [], images: [{ name: label, hint: `ảnh tải lên "${label}"`, buffer }] };
   if (kind === 'text') {
     const raw = buffer.toString('utf8');
-    if (/^\s*<(!doctype html|html)/i.test(raw)) return { text: clip(htmlToText(raw).text, limits.maxTextChars), images: [] };
-    return { text: clip(raw, limits.maxTextChars), images: [] };
+    const text = /^\s*<(!doctype html|html)/i.test(raw) ? htmlToText(raw).text : raw;
+    return { pieces: text.trim() ? [{ label, text: clip(text, limits.maxTextChars) }] : [], images: [], media: [] };
   }
-  throw unsupported();
+  throw unsupported(name);
+}
+
+const EMPTY = () => ({ pieces: [], media: [], images: [] });
+function merge(into, part) {
+  into.pieces.push(...part.pieces);
+  into.media.push(...part.media);
+  into.images.push(...part.images);
+  return into;
+}
+
+async function readHead(path) {
+  const fh = await open(path, 'r');
+  try {
+    const buf = Buffer.alloc(16384);
+    const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
+  }
+}
+
+/** Tệp tải lên (multer ghi ra đĩa): PDF/ghi âm giữ trên đĩa (gửi cho AI theo luồng), loại khác đọc vào RAM. */
+async function readUploaded(file, limits) {
+  if (file.kind === 'pdf' || AUDIO_TYPES.has(file.kind)) {
+    return { pieces: [], images: [], media: [{ kind: file.kind === 'pdf' ? 'pdf' : 'audio', name: file.name, size: file.size, mime: file.kind === 'pdf' ? 'application/pdf' : AUDIO_MIME[file.kind], path: file.path }] };
+  }
+  return readBuffer(await readFile(file.path), file.name, limits, file.kind);
 }
 
 /* ---------------- link ---------------- */
@@ -165,12 +196,21 @@ function googleCandidates(url, apiKey) {
   return null;
 }
 
+// Tên hiển thị cho tài liệu tải từ link (dùng làm nhãn tư liệu cho AI).
+const title0 = (url) => {
+  if (G_SLIDES.test(url)) return 'Google Slides';
+  if (G_DOCS.test(url)) return 'Google Docs';
+  if (G_SHEETS.test(url)) return 'Google Sheets';
+  return decodeURIComponent(new URL(url).pathname.split('/').pop() || '') || new URL(url).hostname;
+};
+
 async function fetchDocument(url, limits, googleApiKey) {
   const candidates = googleCandidates(url, googleApiKey) || [url];
   let lastErr = null;
   for (const candidate of candidates) {
     try {
-      const res = await safeFetch(candidate, { timeoutMs: 45000, maxBytes: limits.maxUploadMb * 1048576 });
+      // Cùng trần tổng tư liệu với tệp tải lên (Google Slides nhiều ảnh xuất PPTX dễ vượt 50 MB); xuất tệp lớn có thể chậm.
+      const res = await safeFetch(candidate, { timeoutMs: 300000, maxBytes: limits.maxUploadMb * 1048576 });
       if (res.status >= 400) {
         lastErr = res.status === 401 || res.status === 403 || res.status === 404
           ? unprocessable('Không truy cập được tài liệu. Hãy đặt chia sẻ "Bất kỳ ai có đường liên kết" rồi thử lại.', 'SOURCE_FORBIDDEN')
@@ -186,9 +226,9 @@ async function fetchDocument(url, limits, googleApiKey) {
       if (ct.includes('text/html')) {
         const { title, text } = htmlToText(res.body.toString('utf8'));
         if (text.length < 40) throw unprocessable('Trang web không có đủ nội dung văn bản để tạo bài trình bày', 'SOURCE_EMPTY');
-        return { title, text: clip(text, limits.maxTextChars), images: [] };
+        return { pieces: [{ label: title || url, text: clip(text, limits.maxTextChars) }], media: [], images: [] };
       }
-      return await readDocument(res.body, '', limits);
+      return await readBuffer(res.body, title0(url), limits);
     } catch (err) {
       if (err instanceof HttpError && err.code !== 'SOURCE_FORBIDDEN' && err.code !== 'SOURCE_ERROR') throw err;
       lastErr = err instanceof HttpError ? err : unprocessable('Không tải được tài liệu từ đường link', 'SOURCE_FETCH_FAILED');
@@ -197,14 +237,29 @@ async function fetchDocument(url, limits, googleApiKey) {
   throw lastErr || unprocessable('Không tải được tài liệu từ đường link', 'SOURCE_FETCH_FAILED');
 }
 
-/** Kiểm tra nhanh đầu vào (đồng bộ, trước khi trả 202) — lỗi rõ ràng trả ngay cho người dùng. */
-export function precheckSource({ file, url, text }, limits) {
-  const given = [file, url, text].filter((v) => v !== undefined && v !== null && v !== '').length;
-  if (given !== 1) throw badRequest('Chọn đúng 1 nguồn: tệp tài liệu, đường link hoặc nội dung nhập tay', 'SOURCE_REQUIRED');
-  if (file) {
-    const kind = sniff(file.buffer);
-    if (!['pdf', 'zip', 'text'].includes(kind) && !IMAGE_TYPES.has(kind)) throw unsupported();
-    return { sourceKind: 'file', sourceLabel: String(file.originalname || 'tệp tải lên').slice(0, 300) };
+/**
+ * Kiểm tra nhanh đầu vào (trước khi trả 202) — lỗi rõ ràng trả ngay cho người dùng.
+ * files: tệp multer trên đĩa ({ path, originalname, size }). Trả thêm `files` đã nhận diện loại để job dùng lại.
+ */
+export async function precheckSource({ files, url, text }, limits) {
+  const list = Array.isArray(files) ? files : [];
+  const given = [list.length ? list : null, url, text].filter((v) => v !== undefined && v !== null && v !== '').length;
+  if (given !== 1) throw badRequest('Chọn đúng 1 loại nguồn: tệp tài liệu, đường link hoặc nội dung nhập tay', 'SOURCE_REQUIRED');
+  if (list.length) {
+    if (list.length > limits.maxUploadFiles) throw badRequest(`Tối đa ${limits.maxUploadFiles} tệp mỗi lần tạo`, 'TOO_MANY_FILES');
+    const total = list.reduce((n, f) => n + (f.size || 0), 0);
+    if (total > limits.maxUploadMb * 1048576) throw tooLarge(`Tổng dung lượng tệp tối đa ${limits.maxUploadMb} MB`, 'UPLOAD_TOO_LARGE');
+    const checked = [];
+    for (const f of list) {
+      const name = String(f.originalname || 'tệp tải lên').slice(0, 200);
+      if (!f.size) throw badRequest(`Tệp "${name}" rỗng`, 'EMPTY_FILE');
+      const kind = sniff(await readHead(f.path));
+      if (!SUPPORTED_KINDS.has(kind)) throw unsupported(name);
+      checked.push({ path: f.path, name, size: f.size, kind });
+    }
+    const names = checked.map((f) => f.name);
+    const label = names.length === 1 ? names[0] : `${names.length} tệp: ${names.join(', ')}`;
+    return { sourceKind: 'file', sourceLabel: label.slice(0, 300), files: checked };
   }
   if (url) {
     const u = assertPublicUrl(String(url).trim());
@@ -216,9 +271,41 @@ export function precheckSource({ file, url, text }, limits) {
   return { sourceKind: 'text', sourceLabel: t.slice(0, 80).replace(/\s+/g, ' ') };
 }
 
-/** Thu thập nội dung đầy đủ (chạy nền). */
-export async function ingestSource({ file, url, text }, { limits, googleApiKey }) {
-  if (file) return readDocument(file.buffer, file.originalname, limits);
+/** Thu thập nội dung đầy đủ (chạy nền). files = kết quả `precheckSource().files`. */
+export async function ingestSource({ files, url, text }, { limits, googleApiKey }) {
+  if (files?.length) {
+    const out = EMPTY();
+    for (const f of files) merge(out, await readUploaded(f, limits));
+    return out;
+  }
   if (url) return fetchDocument(assertPublicUrl(String(url).trim()).toString(), limits, googleApiKey);
-  return { text: clip(String(text).trim(), limits.maxTextChars), images: [] };
+  return { pieces: [{ label: 'Nội dung nhập tay', text: clip(String(text).trim(), limits.maxTextChars) }], media: [], images: [] };
+}
+
+/**
+ * Ghép nhiều tư liệu văn bản trong giới hạn `max` ký tự, chia công bằng (water-filling):
+ * tư liệu ngắn giữ nguyên, phần dư dồn cho tư liệu dài — không để 1 tệp dài "nuốt" hết tệp khác.
+ */
+export function fitPieces(pieces, max) {
+  const list = pieces.filter((p) => p.text && p.text.trim());
+  if (!list.length) return '';
+  const CUT = '\n…(đã cắt bớt phần cuối do tổng tư liệu quá dài)';
+  const header = (p, i) => (list.length > 1 ? `=== Tư liệu ${i + 1}: ${p.label} ===\n` : '');
+  // Trừ trước phần đầu mục + ghi chú cắt để tổng không vượt max.
+  let left = Math.max(0, max - list.reduce((n, p, i) => n + header(p, i).length + CUT.length + 2, 0));
+  const alloc = list.map(() => 0);
+  let open = list.map((_, i) => i);
+  // Mỗi vòng chia đều phần còn lại cho các tư liệu chưa đủ; mỗi vòng `left` giảm hoặc `open` co lại → luôn dừng.
+  while (open.length && left > 0) {
+    const share = Math.max(1, Math.floor(left / open.length));
+    const next = [];
+    for (const i of open) {
+      const give = Math.min(list[i].text.length - alloc[i], share, left);
+      alloc[i] += give;
+      left -= give;
+      if (alloc[i] < list[i].text.length) next.push(i);
+    }
+    open = next;
+  }
+  return list.map((p, i) => header(p, i) + (alloc[i] < p.text.length ? p.text.slice(0, alloc[i]) + CUT : p.text)).join('\n\n');
 }

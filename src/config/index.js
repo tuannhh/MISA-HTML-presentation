@@ -61,6 +61,8 @@ export function loadConfig() {
       apiKey: str('GEMINI_API_KEY'),
       model: str('GEMINI_MODEL', 'gemini-3.8-flash'),
       timeoutMs: int('GEMINI_TIMEOUT_MS', 240000, { min: 10000, max: 900000 }),
+      // Chuyển thể ghi âm dài / đọc PDF lớn chậm hơn nhiều so với dựng bài.
+      mediaTimeoutMs: int('GEMINI_MEDIA_TIMEOUT_MS', 900000, { min: 60000, max: 1800000 }),
       baseUrl: str('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
     }),
     google: Object.freeze({
@@ -76,9 +78,15 @@ export function loadConfig() {
       privateDir: path.join(storageDir, 'private'),
       tempDir: path.join(storageDir, 'temp'),
       tempTtlMinutes: int('TEMP_TTL_MINUTES', 60, { min: 5, max: 24 * 60 }),
+      // Tệp nguồn tải lên nằm đây tới khi AI xử lý xong (ngoài tempDir vì job có thể chờ hàng đợi lâu hơn TTL tạm).
+      uploadDir: path.join(storageDir, 'uploads'),
     }),
     limits: Object.freeze({
-      maxUploadMb: int('MAX_UPLOAD_MB', 50, { min: 1, max: 200 }),
+      // Tổng dung lượng mọi tệp nguồn của 1 lần tạo (không giới hạn riêng từng tệp).
+      maxUploadMb: int('MAX_UPLOAD_MB', 300, { min: 1, max: 2000 }),
+      maxUploadFiles: int('MAX_UPLOAD_FILES', 20, { min: 1, max: 50 }),
+      // Tổng ký tự tư liệu (văn bản + bản chuyển thể ghi âm/PDF) gửi cho AI ở bước dựng bài.
+      maxSourceChars: int('MAX_SOURCE_CHARS', 400000, { min: 10000, max: 3000000 }),
       maxImageUploadMb: int('MAX_IMAGE_UPLOAD_MB', 15, { min: 1, max: 50 }),
       maxTextChars: int('MAX_TEXT_CHARS', 200000, { min: 1000, max: 2000000 }),
       maxImagesPerDeck: int('MAX_IMAGES_PER_DECK', 60, { min: 0, max: 300 }),

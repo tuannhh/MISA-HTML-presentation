@@ -47,7 +47,7 @@ export async function normalizeExtractedImages(list, { max, minSide = 96 }) {
   return out;
 }
 
-// Bản thu nhỏ gửi cho AI xem (tiết kiệm token).
-export async function previewForModel(buffer) {
-  return sharp(buffer).resize({ width: 640, height: 640, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer();
+// Bản thu nhỏ gửi cho AI xem: đủ lớn để đọc chữ trong ảnh chụp tài liệu (OCR) nhưng vẫn tiết kiệm token.
+export async function previewForModel(buffer, { side = 640 } = {}) {
+  return sharp(buffer).resize({ width: side, height: side, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 72 }).toBuffer();
 }

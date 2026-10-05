@@ -1,11 +1,14 @@
 // Nghiệp vụ bài trình bày: tạo bằng AI (chạy nền), sửa có khoá lạc quan, chia sẻ, nhân bản, ảnh, xem trước, xuất HTML/PDF.
 // Cách ly tenant: mọi thao tác ghi dùng *Owned(tenantId,…); đọc dùng findReadable (của tôi hoặc công khai).
 import { randomUUID } from 'node:crypto';
+import { rm } from 'node:fs/promises';
 import { logger } from '../lib/logger.js';
 import { Semaphore } from '../lib/semaphore.js';
 import { badRequest, conflict, notFound, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
-import { normalizeSpec, collectAssetIds, dropForeignAssets } from './specService.js';
-import { precheckSource, ingestSource } from './ingestService.js';
+import { normalizeSpec, collectAssetIds, dropForeignAssets, capSlides, themeForTone } from './specService.js';
+import { precheckSource, ingestSource, fitPieces } from './ingestService.js';
+import { prepareMedia } from './mediaService.js';
+import { TONE_THEMES } from '../../shared/deck/render.js';
 import { normalizeImage, normalizeExtractedImages, previewForModel } from './imageService.js';
 import { mapModelDeck } from './geminiService.js';
 import { renderDeck, deckSize } from './renderService.js';
@@ -13,7 +16,15 @@ import { assetKey, presentationPrefix } from './storageService.js';
 import sharp from 'sharp';
 
 const MAX_PENDING_JOBS = 20;
-const MODEL_IMAGE_PREVIEWS = 24;
+// Ảnh xem trước gửi AI đủ lớn để đọc chữ trong ảnh (OCR), có trần tổng dung lượng để request không vượt ~20 MB.
+const MODEL_IMAGE_PREVIEWS = 30;
+const MODEL_PREVIEW_SIDE = 1280;
+const MODEL_PREVIEW_BYTES = 6 * 1048576;
+// "Tự động": AI tự chọn số trang theo lượng nội dung, không vượt mức này.
+export const AUTO_MAX_SLIDES = 25;
+
+// Tệp nguồn tải lên chỉ cần tới khi AI xử lý xong.
+const removeUploads = (files) => Promise.all((files || []).map((f) => rm(f.path, { force: true }).catch(() => {})));
 
 export function createPresentationService({ config, repos, storage, gemini, browser, signer, audit }) {
   const { presentations, assets } = repos;
@@ -21,22 +32,39 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   const thumbTimers = new Map();
 
   /* ---------------- tạo bằng AI ---------------- */
+  // input.files: tệp multer trên đĩa — từ đây service chịu trách nhiệm xoá (lỗi kiểm tra → xoá ngay; job xong → xoá).
   async function create(user, input, ip) {
     const ratio = config.ratios.includes(input.ratio) ? input.ratio : '16:9';
-    const slideCount = Math.min(40, Math.max(3, Number.parseInt(input.slideCount, 10) || 12));
+    const autoSlides = String(input.slideCount ?? 'auto').trim().toLowerCase() === 'auto';
+    const slideCount = autoSlides ? null : Math.min(40, Math.max(3, Number.parseInt(input.slideCount, 10) || 12));
+    const tone = input.tone === 'light' ? 'light' : 'dark';
     const instructions = String(input.instructions || '').trim().slice(0, 2000);
-    const src = precheckSource({ file: input.file, url: input.url, text: input.text }, config.limits);
-    if (genQueue.pending >= MAX_PENDING_JOBS) throw unavailable('Hệ thống đang xử lý nhiều yêu cầu, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
+    let src;
+    try {
+      src = await precheckSource({ files: input.files, url: input.url, text: input.text }, config.limits);
+      if (genQueue.pending >= MAX_PENDING_JOBS) throw unavailable('Hệ thống đang xử lý nhiều yêu cầu, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
+    } catch (err) {
+      await removeUploads(input.files);
+      throw err;
+    }
 
     const id = randomUUID();
-    const title = String(input.title || '').trim().slice(0, 200) || (src.sourceKind === 'file' ? src.sourceLabel.replace(/\.[a-z0-9]+$/i, '') : 'Bài trình bày mới');
-    await presentations.createForTenant(user.id, { id, title, ratio, sourceKind: src.sourceKind, sourceLabel: src.sourceLabel, instructions, status: 'generating' });
-    await audit.record({ actorId: user.id, action: 'presentation.create', targetType: 'presentation', targetId: id, ip, meta: { source: src.sourceKind, ratio, slideCount } });
+    const firstName = src.files?.length === 1 ? src.files[0].name.replace(/\.[a-z0-9]+$/i, '') : '';
+    const title = String(input.title || '').trim().slice(0, 200) || firstName || 'Bài trình bày mới';
+    try {
+      await presentations.createForTenant(user.id, { id, title, ratio, sourceKind: src.sourceKind, sourceLabel: src.sourceLabel, instructions, status: 'generating' });
+      await audit.record({ actorId: user.id, action: 'presentation.create', targetType: 'presentation', targetId: id, ip, meta: { source: src.sourceKind, files: src.files?.length || 0, ratio, slideCount: slideCount ?? 'auto', tone } });
+    } catch (err) {
+      await removeUploads(input.files);
+      throw err;
+    }
 
     // Chạy nền; client theo dõi trạng thái bằng GET /api/presentations/:id.
+    const job = { url: input.url, text: input.text, files: src.files, title: input.title, ratio, slideCount, autoSlides, tone, instructions, sourceLabel: src.sourceLabel };
     genQueue
-      .run(() => generate(user.id, id, { ...input, ratio, slideCount, instructions, sourceLabel: src.sourceLabel }))
-      .catch((err) => logger.error('generation_unhandled', { id, err }));
+      .run(() => generate(user.id, id, job))
+      .catch((err) => logger.error('generation_unhandled', { id, err }))
+      .finally(() => removeUploads(src.files));
     return { id, status: 'generating' };
   }
 
@@ -44,7 +72,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const started = Date.now();
     try {
       const source = await ingestSource(input, { limits: config.limits, googleApiKey: config.google.apiKey });
-      if (!source.text && !source.pdf && !source.images.length) throw unprocessable('Không tìm thấy nội dung trong tài liệu', 'SOURCE_EMPTY');
+      if (!source.pieces.length && !source.media.length && !source.images.length) throw unprocessable('Không tìm thấy nội dung trong tài liệu', 'SOURCE_EMPTY');
       const images = await normalizeExtractedImages(source.images, { max: config.limits.maxImagesPerDeck });
       const assetIds = [];
       for (const img of images) {
@@ -55,12 +83,31 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         assetIds.push(assetId);
       }
       const modelImages = [];
+      let previewBytes = 0;
       for (const [i, img] of images.entries()) {
-        modelImages.push({ hint: img.hint, width: img.width, height: img.height, preview: i < MODEL_IMAGE_PREVIEWS ? await previewForModel(img.buffer) : null });
+        let preview = null;
+        if (i < MODEL_IMAGE_PREVIEWS && previewBytes < MODEL_PREVIEW_BYTES) {
+          preview = await previewForModel(img.buffer, { side: MODEL_PREVIEW_SIDE });
+          previewBytes += preview.length;
+        }
+        modelImages.push({ hint: img.hint, width: img.width, height: img.height, preview });
       }
-      const raw = await gemini.generateDeck({ text: source.text, pdf: source.pdf, images: modelImages, slideCount: input.slideCount, instructions: input.instructions, ratio: input.ratio, sourceLabel: input.sourceLabel });
+      // PDF/ghi âm: đính kèm trực tiếp hoặc chuyển thành văn bản trước (tư liệu lớn) — xem mediaService.
+      const media = await prepareMedia(source.media, { gemini });
+      let raw;
+      try {
+        const text = fitPieces([...source.pieces, ...media.pieces], config.limits.maxSourceChars);
+        raw = await gemini.generateDeck({
+          text, media: media.direct, images: modelImages, slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: AUTO_MAX_SLIDES,
+          tone: input.tone, instructions: input.instructions, ratio: input.ratio, sourceLabel: input.sourceLabel,
+        });
+      } finally {
+        await media.cleanup();
+      }
       const { spec } = normalizeSpec(mapModelDeck(raw, assetIds));
       if (!spec.slides.length) throw unprocessable('AI không tạo được trang nào từ tài liệu này', 'AI_EMPTY');
+      capSlides(spec, input.autoSlides ? AUTO_MAX_SLIDES : input.slideCount);
+      spec.theme = themeForTone(spec.theme, input.tone, TONE_THEMES);
       dropForeignAssets(spec, new Set(assetIds));
       await presentations.setGenerationResult(tenantId, id, { status: 'ready', spec, title: input.title ? null : spec.title });
       logger.info('generation_ready', { id, slides: spec.slides.length, images: assetIds.length, ms: Date.now() - started });

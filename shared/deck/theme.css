@@ -8,12 +8,14 @@
   --gridline: rgba(150, 185, 255, .06);
   --panel-a: rgba(22, 40, 80, .80); --panel-b: rgba(9, 18, 40, .82);
   --line: rgba(150, 185, 255, .16); --line-2: rgba(150, 185, 255, .30);
-  --text: #EEF3FF; --soft: #C8D3EC; --muted: #95A5C6; --dim: #5F7096;
+  --text: #EEF3FF; --soft: #C8D3EC; --muted: #95A5C6; --dim: #7383A8;
   --cyan: #2EE6D6; --blue: #4D8DFF; --amber: #FFB547; --coral: #FF6B6B; --mint: #5BE49B; --violet: #A285FF;
   --accent: var(--cyan); --accent-2: var(--blue); --on-accent: #06122A;
   --chip-bg: rgba(14, 27, 54, .8);
   --shadow: 0 40px 100px rgba(0, 0, 0, .38);
   --node: 160, 220, 255; --edge: 46, 230, 214;
+  /* Tâm hình minh hoạ trang bìa + màu icon đặt trên đó (phải tương phản với nhau ở mọi theme). */
+  --core: #FFFFFF; --core-ink: var(--on-accent);
   color-scheme: dark;
 }
 [data-deck-theme="aurora"] {
@@ -22,7 +24,7 @@
   --gridline: rgba(200, 170, 255, .06);
   --panel-a: rgba(44, 26, 78, .80); --panel-b: rgba(22, 12, 40, .84);
   --line: rgba(200, 170, 255, .18); --line-2: rgba(200, 170, 255, .32);
-  --text: #F6F0FF; --soft: #DCCFF2; --muted: #A796C6; --dim: #6E5F92;
+  --text: #F6F0FF; --soft: #DCCFF2; --muted: #A796C6; --dim: #8676AC;
   --cyan: #5EEAD4; --blue: #8B9CFF; --amber: #FFC66B; --coral: #FF7AA8; --mint: #7BE8A7; --violet: #B79BFF;
   --accent: var(--violet); --accent-2: var(--coral); --on-accent: #160A2A;
   --chip-bg: rgba(40, 22, 70, .8);
@@ -34,26 +36,51 @@
   --gridline: rgba(120, 180, 255, .07);
   --panel-a: rgba(10, 52, 104, .78); --panel-b: rgba(4, 28, 62, .84);
   --line: rgba(120, 180, 255, .18); --line-2: rgba(120, 180, 255, .34);
-  --text: #F0F7FF; --soft: #CFE2FA; --muted: #8FB0D6; --dim: #5B7DA6;
+  --text: #F0F7FF; --soft: #CFE2FA; --muted: #8FB0D6; --dim: #6F90B8;
   --cyan: #3CD3FF; --blue: #2F8CFF; --amber: #FFBE4D; --coral: #FF7468; --mint: #4FDFA0; --violet: #9A8CFF;
   --accent: var(--blue); --accent-2: var(--cyan); --on-accent: #FFFFFF;
   --chip-bg: rgba(6, 40, 84, .8);
   --node: 150, 200, 255; --edge: 47, 140, 255;
+  --core-ink: #06244A;
 }
+/* ---------- Tông SÁNG: chữ và hình hoạ đậm, tương phản cao (≥ 4.5:1 trên nền) ----------
+   Không dùng vàng/xám nhạt cho chữ: bảng màu nhấn (--cyan…--coral) đều là màu đậm, --muted/--dim là xám đậm. */
 [data-deck-theme="paper"] {
-  --bg1: #F4F6FB; --bg2: #E9EEF8;
-  --glow-a: rgba(47, 107, 255, .10); --glow-b: rgba(14, 159, 148, .08);
-  --gridline: rgba(30, 50, 100, .05);
-  --panel-a: rgba(255, 255, 255, .96); --panel-b: rgba(250, 251, 255, .96);
-  --line: rgba(30, 50, 100, .12); --line-2: rgba(30, 50, 100, .22);
-  --text: #0E1630; --soft: #2B3756; --muted: #56627F; --dim: #8A94AD;
-  --cyan: #0E9F94; --blue: #2F6BFF; --amber: #C77700; --coral: #D9434A; --mint: #16955A; --violet: #6B4FE0;
-  --accent: var(--blue); --accent-2: var(--cyan); --on-accent: #FFFFFF;
-  --chip-bg: rgba(255, 255, 255, .9);
-  --shadow: 0 30px 70px rgba(20, 40, 90, .12);
-  --node: 47, 107, 255; --edge: 47, 107, 255;
+  /* Xanh dương – đen */
+  --bg1: #F7F9FC; --bg2: #EDF1F8;
+  --glow-a: rgba(29, 78, 216, .10); --glow-b: rgba(15, 23, 42, .06);
+  --gridline: rgba(15, 23, 42, .06);
+  --panel-a: #FFFFFF; --panel-b: #FBFCFE;
+  --line: rgba(15, 23, 42, .16); --line-2: rgba(15, 23, 42, .32);
+  --text: #0B1220; --soft: #1E293B; --muted: #334155; --dim: #475569;
+  --cyan: #0F172A; --blue: #1D4ED8; --amber: #1E3A8A; --coral: #B91C1C; --mint: #047857; --violet: #4338CA;
+  --accent: var(--blue); --accent-2: #0F172A; --on-accent: #FFFFFF;
+  --chip-bg: #FFFFFF;
+  --shadow: 0 24px 60px rgba(15, 23, 42, .10);
+  --node: 29, 78, 216; --edge: 15, 23, 42;
+  --core: var(--accent); --core-ink: #FFFFFF;
   color-scheme: light;
 }
+[data-deck-theme="ember"] {
+  /* Cam – đen */
+  --bg1: #FBF8F3; --bg2: #F3EDE4;
+  --glow-a: rgba(234, 88, 12, .10); --glow-b: rgba(28, 25, 23, .06);
+  --gridline: rgba(28, 25, 23, .06);
+  --panel-a: #FFFFFF; --panel-b: #FFFCF8;
+  --line: rgba(28, 25, 23, .16); --line-2: rgba(28, 25, 23, .32);
+  --text: #111111; --soft: #1C1917; --muted: #3F3A36; --dim: #57534E;
+  --cyan: #1C1917; --blue: #B83A0B; --amber: #9A3412; --coral: #B91C1C; --mint: #166534; --violet: #7C2D12;
+  --accent: var(--blue); --accent-2: #1C1917; --on-accent: #FFFFFF;
+  --chip-bg: #FFFFFF;
+  --shadow: 0 24px 60px rgba(28, 25, 23, .10);
+  --node: 184, 58, 11; --edge: 28, 25, 23;
+  --core: var(--accent); --core-ink: #FFFFFF;
+  color-scheme: light;
+}
+/* Nền sáng: quầng sáng màu đậm thành vệt bẩn → bỏ glow của vạch số liệu, giảm glow icon. */
+:is([data-deck-theme="paper"], [data-deck-theme="ember"]) .stat::before { box-shadow: none; }
+:is([data-deck-theme="paper"], [data-deck-theme="ember"]) .ib { box-shadow: none; background: color-mix(in srgb, var(--c) 9%, #fff); border-width: 2px; }
+:is([data-deck-theme="paper"], [data-deck-theme="ember"]) .glow { opacity: .10; }
 
 html, body { height: 100%; margin: 0; background: var(--bg1); color: var(--text); overflow: hidden; }
 body { font-family: var(--f-sans); -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }
@@ -162,7 +189,7 @@ h3, h4, p { margin: 0; }
 .cv-cap { font: 600 var(--t-xs)/1.4 var(--f-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .cv-art { position: relative; height: 100%; max-height: 1100px; aspect-ratio: 1; justify-self: center; max-width: 100%; }
 .cv-art svg { width: 100%; height: 100%; overflow: visible; }
-.cv-ico { position: absolute; left: 50%; top: 50%; width: 22%; aspect-ratio: 1; transform: translate(-50%, -50%); color: var(--on-accent); display: grid; place-items: center; }
+.cv-ico { position: absolute; left: 50%; top: 50%; width: 22%; aspect-ratio: 1; transform: translate(-50%, -50%); color: var(--core-ink); display: grid; place-items: center; }
 .cv-ico .ic { width: 100%; height: 100%; }
 .cv-ico .ic svg { stroke-width: 2.2; }
 

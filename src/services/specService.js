@@ -192,3 +192,17 @@ export function dropForeignAssets(spec, allowedIds) {
   }
   return spec;
 }
+
+// Áp trần số trang cho kết quả AI (schema đã khoá, đây là lưới an toàn): giữ trang đầu và trang kết (closing).
+export function capSlides(spec, max) {
+  if (!Number.isInteger(max) || max < 1 || spec.slides.length <= max) return spec;
+  const last = spec.slides[spec.slides.length - 1];
+  spec.slides = last.layout === 'closing' && max >= 2 ? [...spec.slides.slice(0, max - 1), last] : spec.slides.slice(0, max);
+  return spec;
+}
+
+// Đưa theme về đúng tông người dùng chọn khi AI chọn lệch (theme đầu nhóm = mặc định của tông).
+export function themeForTone(theme, tone, toneThemes) {
+  const allowed = toneThemes[tone];
+  return allowed && !allowed.includes(theme) ? allowed[0] : theme;
+}

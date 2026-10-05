@@ -38,7 +38,7 @@ Mật khẩu: 10–128 ký tự, có cả chữ và số. `user` trả về: `{ 
 | Method | Path | Mô tả |
 |---|---|---|
 | GET | `/?scope=mine\|public&q=&page=&pageSize=` | `mine`: bài của tôi (mọi trạng thái). `public`: bài công khai **đã ready** của mọi người, kèm `authorName`. pageSize tối đa 48 |
-| POST | `/` (multipart) | Tạo bằng AI. Trường: `file` **hoặc** `url` **hoặc** `text` (đúng 1 nguồn), `ratio`, `slideCount` (3–40, mặc định 12), `instructions` (≤ 2000), `title` (≤ 200). → **202** `{ id, status:'generating' }` |
+| POST | `/` (multipart) | Tạo bằng AI. Nguồn (đúng 1 loại): `files` (nhiều tệp, ≤ `MAX_UPLOAD_FILES`, **tổng** ≤ `MAX_UPLOAD_MB` — không giới hạn riêng từng tệp; `file` 1 tệp vẫn nhận cho client cũ) **hoặc** `url` **hoặc** `text`. Tệp: pptx/docx/pdf (cả bản scan)/txt/md/ảnh/ghi âm mp3·m4a·mp4·wav·ogg·flac·aac·aiff·webm (nhận diện magic bytes). `ratio`, `tone` (`dark`\|`light`, mặc định `dark`), `slideCount` (`auto` = AI chọn ≤ 25 trang — mặc định; hoặc 3–40 = đúng số trang), `instructions` (≤ 2000), `title` (≤ 200). → **202** `{ id, status:'generating' }`. Lỗi: 413 `UPLOAD_TOO_LARGE` (chặn sớm theo Content-Length), 400 `TOO_MANY_FILES`/`EMPTY_FILE`/`SOURCE_REQUIRED`, 415 `UNSUPPORTED_FILE` (nêu tên tệp). |
 | GET | `/:id` | Chi tiết + `spec`. Chủ sở hữu có thêm `assets[]` (URL ký). Người khác chỉ đọc được nếu bài `public` + `ready`; nếu không → 404 |
 | PATCH | `/:id` | Chủ sở hữu. Body: `title`, `ratio`, `visibility`, `spec` + `specVersion` (bắt buộc đi kèm spec). Spec được chuẩn hoá **strict** → 400 với `details: string[]` nếu sai. Version lệch → 409 `VERSION_CONFLICT`. Không sửa được khi chưa `ready` |
 | DELETE | `/:id` | Chủ sở hữu. Xoá DB (cascade asset) + thư mục tệp |

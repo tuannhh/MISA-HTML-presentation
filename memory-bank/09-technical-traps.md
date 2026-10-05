@@ -30,6 +30,16 @@
 - Kết quả AI dùng **lenient** (cắt ngắn, hạ layout). Lưu của người dùng dùng **strict** (báo lỗi, không tự sửa). Đừng đổi lưu sang lenient — người dùng sẽ mất chữ mà không biết. Unit test đã có cho cả hai.
 - Lenient hạ `image`/`gallery` không có ảnh thật → khi viết test với fixture có layout ảnh, dùng strict hoặc gắn asset id.
 
+### `minItems`/`maxItems` trên mảng slides → 400 INVALID_ARGUMENT
+- Với item phức tạp như slide, Gemini từ chối schema có `maxItems` ≥ ~5 ("Request contains an invalid argument", không nói rõ lý do). Đã kiểm chứng: 3 qua, 5 trở lên lỗi. Số trang khống chế bằng prompt + `description` của mảng + `capSlides()` phía server. Unit test chặn việc thêm lại.
+
+### Dữ liệu inline ~20 MB / request
+- Request `generateContent` có giới hạn tổng ~20 MB, base64 phình ~33%. Tệp lớn đi qua **Files API** (`mediaService`): upload resumable (`x-goog-upload-url`), chờ `state=ACTIVE`, dùng `fileData.fileUri`, **luôn DELETE** sau khi dùng (tệp tự hết hạn 48 giờ nếu sót). PDF tối đa ~50 MB/1000 trang mỗi tệp → cắt cụm bằng pdf-lib.
+- Định dạng ghi âm đã thử với API thật (inline + Files API): mp3, m4a (`audio/mp4`), wav, ogg, webm, flac, aac, aiff.
+
+### Logger che trường có chữ "key/token"
+- `redactConfig`/logger che mọi trường tên khớp `/secret|password|key|token/i` → field log như `estTokens` thành `***`. Đặt tên khác (`estimate`).
+
 ## Giao diện
 
 ### Bản sao MDS có vá cục bộ (phải giữ khi cập nhật MDS)
@@ -37,6 +47,7 @@
 |---|---|---|
 | `MInput.vue`, `MTextarea.vue` | `defineOptions({ inheritAttrs: false })` + `useAttrs()`: `class`/`style` ở wrapper, mọi attr khác (`id`, `name`, `autocomplete`, `aria-*`, `maxlength`, `inputmode`…) chuyển xuống thẻ input/textarea thật | Bản gốc gắn attr lên `div` bọc ngoài → mất autocomplete, label `for` không liên kết, trình đọc màn hình không đọc nhãn |
 | `MDataTable.vue` | Prop `hideTools: ('refresh'\|'export'\|'columns'\|'filter')[]`; hàng hiện nút thao tác cả khi `group-focus-within` | Ẩn nút không có chức năng; dùng được bằng bàn phím |
+| `MUpload.vue` | Prop `block` (dropzone rộng hết khung, có icon + dòng `hint`), `sizeHint` (thay chú thích "Dung lượng tối đa…") | Form tạo bài 1 cột rộng; giới hạn theo **tổng** dung lượng nhiều tệp, không theo từng tệp |
 
 Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA Presentation]`).
 
@@ -57,6 +68,14 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 
 ### Thuộc tính rơi xuống `MSidebar`
 - Gắn class/attr trực tiếp lên MSidebar gây cảnh báo extraneous attrs (component nhiều root) → bọc trong `<div>`.
+
+### `class` trên `MInput` không giới hạn được bề rộng
+- MInput gắn `class` vào wrapper nhưng ô input bên trong vẫn `w-full` theo cha → muốn ô hẹp (vd. số trang 96px) phải bọc `<div class="w-[96px]">`.
+
+## Kiểm thử
+
+### `node --test <thư mục>` lỗi trên macOS/Linux
+- Node 22+ coi đối số là tệp/glob: `node --test test/unit/` báo `Cannot find module '.../test/unit'`. Dùng glob trong ngoặc kép (`"test/unit/**/*.test.js"`) — Node tự mở rộng glob, chạy được cả Windows lẫn macOS.
 
 ## Dữ liệu
 

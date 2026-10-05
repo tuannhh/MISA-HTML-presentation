@@ -12,7 +12,12 @@ export const RATIO_SIZES = Object.freeze({
 export const LAYOUTS = Object.freeze([
   'cover', 'section', 'agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'quote', 'comparison', 'closing',
 ]);
-export const THEMES = Object.freeze(['midnight', 'aurora', 'ocean', 'paper']);
+export const THEMES = Object.freeze(['midnight', 'aurora', 'ocean', 'paper', 'ember']);
+// Tông nền người dùng chọn khi tạo bài → AI chỉ được chọn theme trong nhóm tương ứng (phần tử đầu = mặc định).
+export const TONE_THEMES = Object.freeze({
+  dark: Object.freeze(['midnight', 'ocean', 'aurora']),
+  light: Object.freeze(['paper', 'ember']),
+});
 
 const ACC = ['cyan', 'blue', 'amber', 'mint', 'violet', 'coral'];
 const PAD_X = 160;
@@ -82,7 +87,7 @@ function itemText(it) {
 function coreArt(ctx, iconName) {
   const id = `g${ctx.index}`;
   return `<div class="cv-art" data-a="zoom" data-d="6"><svg viewBox="0 0 900 900" aria-hidden="true">
-<defs><radialGradient id="${id}c"><stop offset="0" style="stop-color:#fff"/><stop offset=".38" style="stop-color:var(--accent)"/><stop offset=".78" style="stop-color:var(--accent-2);stop-opacity:.5"/><stop offset="1" style="stop-color:var(--accent-2);stop-opacity:0"/></radialGradient></defs>
+<defs><radialGradient id="${id}c"><stop offset="0" style="stop-color:var(--core)"/><stop offset=".38" style="stop-color:var(--accent)"/><stop offset=".78" style="stop-color:var(--accent-2);stop-opacity:.5"/><stop offset="1" style="stop-color:var(--accent-2);stop-opacity:0"/></radialGradient></defs>
 <circle cx="450" cy="450" r="436" fill="none" style="stroke:var(--line-2)" stroke-width="2" stroke-dasharray="2 16" data-loop="spin" data-p="90"/>
 <circle cx="450" cy="450" r="352" fill="none" style="stroke:var(--accent-2)" stroke-opacity=".6" stroke-width="3" stroke-dasharray="190 40 10 40" data-loop="spin" data-p="40" data-dir="-1"/>
 <circle cx="450" cy="450" r="268" fill="none" style="stroke:var(--accent-2)" stroke-opacity=".45" stroke-width="2"/>

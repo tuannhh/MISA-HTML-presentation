@@ -15,7 +15,7 @@ frontend/src/
   router.js          # route + guard (session, guest, auth, mustChange, admin), safeNext()
   lib/               # api, session, surface, slideModel, deckActions, format
   composables/       # logic dùng chung 2 bề mặt: useDecks, useCreate, useEditor, useDeckFrame, useAuthForms, useAdminUsers
-  shared/            # component dùng chung: SlideFields, ImagePicker, DeckThumb, RatioPicker, FormField, FormAlert, TempPasswordBox
+  shared/            # component dùng chung: SlideFields, ImagePicker, DeckThumb, RatioPicker, TonePicker, FormField, FormAlert, TempPasswordBox
   desktop/           # composition desktop: DesktopShell (MHeaderBar + MSidebar) + các trang
   mobile/            # composition mobile mini-app: MobileShell (MMobileTopBar + MMobileBottomNav) + ActionSheet + các trang
   components/mds/    # bản sao MDS 2.0 (có vá cục bộ — xem 09)
@@ -42,7 +42,7 @@ Ký hiệu: ✅ hiển thị trang; ↪ chuyển hướng; 🚫 trang 403 **tron
 | `/change-password` | Đổi mật khẩu (bắt buộc hoặc tự chọn) | ↪ `/login` | ✅ | ✅ | AuthLayout (forced) / DesktopShell | MobileShell, footer sticky |
 | `/decks` | Bài của tôi | ↪ `/login?next=` | ✅ | ✅ | Lưới thẻ + tab + tìm kiếm + phân trang | Danh sách hàng + ActionSheet; bottom nav "Bài của tôi" |
 | `/public` | Thư viện công khai | ↪ login | ✅ | ✅ | như trên (menu chỉ đọc) | như trên; bottom nav "Công khai" |
-| `/create` | Tạo bằng AI | ↪ login | ✅ | ✅ | Tab nguồn, RatioPicker, footer sticky | Back → `/decks`, không bottom nav, footer Hủy/Tạo |
+| `/create` | Tạo bằng AI | ↪ login | ✅ | ✅ | Tab nguồn, MUpload `block` nhiều tệp (tổng ≤ 300MB, tiến trình tải lên qua `uploadForm` XHR), RatioPicker, TonePicker, số trang Tự động/Tuỳ chỉnh (MRadioGroup), footer sticky | Back → `/decks`, không bottom nav, footer Hủy/Tạo, TonePicker `compact` |
 | `/p/:id/edit` | Trình soạn thảo | ↪ login | ✅ chủ sở hữu (không phải chủ → thông báo + nút Xem) | như user | 3 cột: danh sách trang · preview · panel sửa | Preview trên, dải trang ngang, form dưới, màn con "Thiết lập bài" |
 | `/p/:id/view` | Trình chiếu | ↪ login | ✅ chủ sở hữu hoặc bài public | như user | Toolbar Prev/Next, toàn màn hình, tải xuống | Footer Prev/Next/Chỉnh sửa hoặc Nhân bản |
 | `/account` | Tài khoản | ↪ login | ✅ | ✅ (+ lối vào Quản trị) | DesktopShell | Bottom nav "Tài khoản"; link đổi mật khẩu, quản trị, đăng xuất |
