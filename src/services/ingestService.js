@@ -5,7 +5,7 @@
 // An toàn: nhận diện loại tệp bằng magic bytes; giới hạn zip-bomb; mọi link đi qua safeFetch (chặn SSRF).
 import { open, readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
-import { sniff, decodeText, IMAGE_TYPES, AUDIO_TYPES, AUDIO_MIME } from '../lib/fileType.js';
+import { sniff, sniffVideo, decodeText, IMAGE_TYPES, AUDIO_TYPES, AUDIO_MIME } from '../lib/fileType.js';
 import { safeFetch, assertPublicUrl } from '../lib/safeFetch.js';
 import { badRequest, tooLarge, unprocessable, HttpError } from '../lib/httpError.js';
 
@@ -420,6 +420,45 @@ export async function precheckSource({ files, url, text }, limits) {
   if (t.length < 20) throw badRequest('Nội dung quá ngắn — nhập ít nhất 20 ký tự', 'TEXT_TOO_SHORT');
   if (t.length > limits.maxTextChars) throw tooLarge(`Nội dung tối đa ${limits.maxTextChars.toLocaleString('vi-VN')} ký tự`);
   return { sourceKind: 'text', sourceLabel: t.slice(0, 80).replace(/\s+/g, ' ') };
+}
+
+/**
+ * Ảnh/video người dùng gửi kèm khi tạo bài — KHÔNG phải tư liệu để đọc mà là media BẮT BUỘC đưa vào bài.
+ * Kiểm tra loại (magic bytes), kích thước từng tệp, số lượng; ghép ảnh bìa video (tên "poster-<vị trí trong media>.jpg",
+ * do trình duyệt chụp — không có thì bỏ qua).
+ * @returns {{ images: Array<{path,name,size}>, videos: Array<{path,name,size,type,poster:string|null}> }}
+ */
+export async function precheckMedia(media, posters, limits) {
+  const list = Array.isArray(media) ? media : [];
+  const out = { images: [], videos: [] };
+  if (!list.length) return out;
+  if (list.length > limits.maxCreateMedia) throw badRequest(`Tối đa ${limits.maxCreateMedia} ảnh/video gửi kèm mỗi lần tạo`, 'TOO_MANY_FILES');
+  const posterAt = new Map();
+  for (const p of Array.isArray(posters) ? posters : []) {
+    const m = /^poster-(\d{1,3})\.jpe?g$/i.exec(String(p.originalname || ''));
+    if (m && p.size && p.size <= limits.maxImageUploadMb * 1048576) posterAt.set(Number(m[1]), p.path);
+  }
+  for (const [i, f] of list.entries()) {
+    const name = String(f.originalname || 'tệp media').normalize('NFC').slice(0, 200);
+    if (!f.size) throw badRequest(`Tệp "${name}" rỗng`, 'EMPTY_FILE');
+    const head = await readHead(f.path);
+    const kind = sniff(head);
+    if (IMAGE_TYPES.has(kind)) {
+      if (f.size > limits.maxImageUploadMb * 1048576) throw tooLarge(`Ảnh "${name}" vượt ${limits.maxImageUploadMb} MB`, 'FILE_TOO_LARGE');
+      out.images.push({ path: f.path, name, size: f.size });
+      continue;
+    }
+    const video = sniffVideo(head);
+    if (video) {
+      if (f.size > limits.maxVideoMb * 1048576) throw tooLarge(`Video "${name}" vượt ${limits.maxVideoMb} MB`, 'FILE_TOO_LARGE');
+      out.videos.push({ path: f.path, name, size: f.size, type: video, poster: posterAt.get(i) || null });
+      continue;
+    }
+    if (kind === 'heic') throw unsupported(name, kind);
+    throw new HttpError(415, 'UNSUPPORTED_FILE', `"${name}": chỉ gửi kèm ảnh (PNG, JPEG, WebP, GIF, AVIF) hoặc video (MP4, MOV, WebM)`);
+  }
+  if (out.videos.length > limits.maxVideosPerDeck) throw badRequest(`Tối đa ${limits.maxVideosPerDeck} video mỗi bài trình bày`, 'TOO_MANY_FILES');
+  return out;
 }
 
 /** Thu thập nội dung đầy đủ (chạy nền). files = kết quả `precheckSource().files`. */

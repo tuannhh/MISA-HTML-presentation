@@ -82,9 +82,14 @@ function onDrop(e) {
       <span class="text-[12px] text-[var(--mds-text-secondary)]">{{ sizeHint || `Dung lượng tối đa ${maxSizeMB}MB` }}</span>
     </div>
 
-    <!-- Dropzone: click hoặc kéo-thả để chọn file -->
-    <label
-      class="flex w-full items-center justify-center rounded-lg border-[1.5px] border-dashed text-center text-[12px] transition-colors"
+    <!-- Dropzone: click hoặc kéo-thả để chọn file.
+         [MISA Presentation] Trước đây là <label @click.prevent> BỌC <input type=file>: input.click() nổi bọt lên label và bị
+         preventDefault → trình duyệt huỷ hộp chọn tệp (bấm không mở cửa sổ). Nay là div role=button, input nằm ngoài. -->
+    <div
+      role="button"
+      :tabindex="disabled ? -1 : 0"
+      :aria-disabled="disabled ? 'true' : undefined"
+      class="flex w-full items-center justify-center rounded-lg border-[1.5px] border-dashed text-center text-[12px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mds-brand-600)]"
       :class="[
         block ? 'min-h-[96px] flex-col gap-1 px-4 py-4' : 'h-[60px] max-w-[420px]',
         disabled
@@ -92,7 +97,9 @@ function onDrop(e) {
           : 'cursor-pointer text-[var(--mds-text-secondary)] hover:border-[var(--mds-brand-600)] hover:bg-[var(--mds-brand-50)]',
         isDragOver && !disabled ? 'border-[var(--mds-brand-600)] bg-[var(--mds-brand-50)]' : 'border-[var(--mds-border)]',
       ]"
-      @click.prevent="openBrowse"
+      @click="openBrowse"
+      @keydown.enter.prevent="openBrowse"
+      @keydown.space.prevent="openBrowse"
       @dragover.prevent="!disabled && (isDragOver = true)"
       @dragleave.prevent="isDragOver = false"
       @drop.prevent="onDrop"
@@ -101,16 +108,16 @@ function onDrop(e) {
       <MIcon v-if="block" name="upload" :size="20" class="text-[var(--mds-icon-neutral)]" />
       <span :class="block ? 'text-[13px] font-medium text-[var(--mds-text)]' : ''">Kéo/thả tệp vào đây hoặc bấm vào đây</span>
       <span v-if="block && hint" class="text-[12px] text-[var(--mds-text-secondary)]">{{ hint }}</span>
-      <input
-        ref="inputRef"
-        type="file"
-        class="hidden"
-        :accept="accept"
-        :multiple="multiple"
-        :disabled="disabled"
-        @change="onInputChange"
-      />
-    </label>
+    </div>
+    <input
+      ref="inputRef"
+      type="file"
+      class="hidden"
+      :accept="accept"
+      :multiple="multiple"
+      :disabled="disabled"
+      @change="onInputChange"
+    />
 
     <!-- Danh sách file đã chọn/đang tải -->
     <ul v-if="modelValue.length" class="flex flex-col gap-1">

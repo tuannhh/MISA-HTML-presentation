@@ -1,9 +1,11 @@
 // Logic form "Tạo bài trình bày" dùng chung desktop/mobile: nguồn (nhiều tệp/link/văn bản), tỷ lệ, tông màu
 // (nền tối/sáng + Tự động / mẫu / tuỳ chỉnh 2 màu), số trang (tự động/tuỳ chỉnh), yêu cầu thêm.
-// Giới hạn khớp server (MAX_UPLOAD_MB, MAX_UPLOAD_FILES, AUTO_MAX_SLIDES). Tạo xong → bước duyệt dàn ý.
-import { reactive, ref, computed } from 'vue';
+// Nhập nội dung: chữ là cơ sở nội dung, ảnh/video gửi kèm (media) là thứ BẮT BUỘC đưa vào bài — AI đặt vào trang hợp nội dung.
+// Giới hạn khớp server (MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_CREATE_MEDIA, AUTO_MAX_SLIDES). Tạo xong → bước duyệt dàn ý.
+import { reactive, ref, computed, onBeforeUnmount } from 'vue';
 import { uploadForm } from '@/lib/api.js';
-import { SOURCE_ACCEPT, sourceProblem, heicToJpeg } from '@/lib/fileKinds.js';
+import { SOURCE_ACCEPT, sourceProblem, heicToJpeg, isImageFile, IMAGE_ACCEPT } from '@/lib/fileKinds.js';
+import { capturePoster, MAX_IMAGE_MB, MAX_VIDEO_MB, VIDEO_ACCEPT } from '@/composables/useMedia.js';
 
 // Tổng dung lượng mọi tệp nguồn (không giới hạn riêng từng tệp).
 export const MAX_UPLOAD_MB = 300;
@@ -11,6 +13,11 @@ export const MAX_UPLOAD_FILES = 20;
 export const MAX_TEXT_CHARS = 200000;
 export const AUTO_MAX_SLIDES = 25;
 export const ACCEPT = SOURCE_ACCEPT;
+// Ảnh/video gửi kèm khi nhập nội dung.
+export const MAX_CREATE_MEDIA = 20;
+export const MAX_CREATE_VIDEOS = 10;
+export const MEDIA_ACCEPT = `${IMAGE_ACCEPT},${VIDEO_ACCEPT}`;
+const isVideoFile = (f) => /^video\//.test(f.type || '') || /\.(mp4|webm|mov|m4v)$/i.test(f.name || '');
 
 const MB = 1048576;
 export const formatMb = (bytes) => `${(bytes / MB).toLocaleString('vi-VN', { maximumFractionDigits: bytes < 10 * MB ? 1 : 0 })} MB`;
@@ -19,7 +26,7 @@ let seq = 0;
 
 export function useCreate() {
   const form = reactive({
-    mode: 'file', files: [], url: '', text: '', ratio: '16:9', tone: 'dark', theme: 'auto', primary: '', secondary: '',
+    mode: 'file', files: [], media: [], url: '', text: '', ratio: '16:9', tone: 'dark', theme: 'auto', primary: '', secondary: '',
     slideMode: 'auto', slideCount: 12, instructions: '', title: '',
   });
   const errors = reactive({});
@@ -28,6 +35,12 @@ export function useCreate() {
   const submitError = ref(null);
 
   const totalBytes = computed(() => form.files.reduce((n, f) => n + f.file.size, 0));
+  const mediaBytes = computed(() => form.media.reduce((n, m) => n + m.file.size, 0));
+  const mediaSummary = computed(() => {
+    const img = form.media.filter((m) => m.kind === 'image').length;
+    const vid = form.media.length - img;
+    return [img ? `${img} ảnh` : '', vid ? `${vid} video` : '', form.media.length ? formatMb(mediaBytes.value) : ''].filter(Boolean).join(' · ');
+  });
 
   function validate() {
     for (const k of Object.keys(errors)) delete errors[k];
@@ -43,6 +56,7 @@ export function useCreate() {
     }
     if (form.mode === 'text' && form.text.trim().length < 20) errors.text = 'Nhập ít nhất 20 ký tự';
     if (form.mode === 'text' && form.text.length > MAX_TEXT_CHARS) errors.text = `Tối đa ${MAX_TEXT_CHARS.toLocaleString('vi-VN')} ký tự`;
+    if (form.mode === 'text' && mediaBytes.value > MAX_UPLOAD_MB * MB) errors.media = `Tổng dung lượng ảnh/video tối đa ${MAX_UPLOAD_MB} MB`;
     if (form.title.length > 200) errors.title = 'Tên bài tối đa 200 ký tự';
     if (form.slideMode === 'custom') {
       const n = Number(form.slideCount);
@@ -62,7 +76,14 @@ export function useCreate() {
       const fd = new FormData();
       if (form.mode === 'file') for (const f of form.files) fd.append('files', f.file, f.file.name);
       if (form.mode === 'url') fd.set('url', form.url.trim());
-      if (form.mode === 'text') fd.set('text', form.text.trim());
+      if (form.mode === 'text') {
+        fd.set('text', form.text.trim());
+        // Ảnh bìa video gắn theo vị trí của video trong danh sách media (server ghép "poster-<vị trí>.jpg").
+        form.media.forEach((m, i) => {
+          fd.append('media', m.file, m.file.name);
+          if (m.poster) fd.append('posters', m.poster, `poster-${i}.jpg`);
+        });
+      }
       fd.set('ratio', form.ratio);
       fd.set('tone', form.tone);
       fd.set('theme', form.theme);
@@ -73,7 +94,7 @@ export function useCreate() {
       fd.set('slideCount', form.slideMode === 'auto' ? 'auto' : String(form.slideCount));
       if (form.instructions.trim()) fd.set('instructions', form.instructions.trim());
       if (form.title.trim()) fd.set('title', form.title.trim());
-      progress.value = form.mode === 'file' ? 0 : null;
+      progress.value = form.mode === 'file' || (form.mode === 'text' && form.media.length) ? 0 : null;
       return (await uploadForm('/api/presentations', fd, { onProgress: (p) => (progress.value = p) })).data;
     } catch (err) {
       submitError.value = err;
@@ -136,7 +157,52 @@ export function useCreate() {
     delete errors.file;
   }
 
-  return { form, errors, submitting, progress, submitError, totalBytes, validate, submit, fileList, onSelectFiles, onOversized, removeFile };
+  // Ảnh/video gửi kèm: kiểm tra loại + dung lượng ngay khi chọn, HEIC → JPEG, video chụp sẵn ảnh bìa (trình duyệt giải mã được).
+  const addingMedia = ref(0);
+  async function addMedia(files) {
+    delete errors.media;
+    const problems = [];
+    for (const picked of files) {
+      if (form.media.length >= MAX_CREATE_MEDIA) {
+        problems.push(`Tối đa ${MAX_CREATE_MEDIA} ảnh/video`);
+        break;
+      }
+      const video = isVideoFile(picked);
+      if (!video && !isImageFile(picked)) {
+        problems.push(`"${picked.name}": chỉ nhận ảnh (PNG, JPEG, WebP, GIF, AVIF, HEIC) hoặc video (MP4, MOV, WebM)`);
+        continue;
+      }
+      addingMedia.value += 1;
+      try {
+        const file = video ? picked : await heicToJpeg(picked);
+        const limit = video ? MAX_VIDEO_MB : MAX_IMAGE_MB;
+        if (file.size > limit * MB) throw new Error(`"${file.name}": ${video ? 'video' : 'ảnh'} tối đa ${limit} MB`);
+        if (video && form.media.filter((m) => m.kind === 'video').length >= MAX_CREATE_VIDEOS) throw new Error(`Tối đa ${MAX_CREATE_VIDEOS} video`);
+        if (mediaBytes.value + file.size > MAX_UPLOAD_MB * MB) throw new Error(`"${file.name}": vượt tổng ${MAX_UPLOAD_MB} MB`);
+        if (form.media.some((m) => m.file.name === file.name && m.file.size === file.size)) continue;
+        const poster = video ? await capturePoster(file) : null;
+        const thumb = video ? poster : file;
+        form.media.push({ id: `m${++seq}`, kind: video ? 'video' : 'image', file, poster, url: thumb ? URL.createObjectURL(thumb) : '' });
+      } catch (err) {
+        problems.push(err.message);
+      } finally {
+        addingMedia.value -= 1;
+      }
+    }
+    if (problems.length) errors.media = problems.length > 3 ? `${problems.slice(0, 3).join(' · ')} · và ${problems.length - 3} tệp khác chưa thêm được` : problems.join(' · ');
+  }
+  function removeMedia(id) {
+    const m = form.media.find((x) => x.id === id);
+    if (m?.url) URL.revokeObjectURL(m.url);
+    form.media = form.media.filter((x) => x.id !== id);
+    delete errors.media;
+  }
+  onBeforeUnmount(() => form.media.forEach((m) => m.url && URL.revokeObjectURL(m.url)));
+
+  return {
+    form, errors, submitting, progress, submitError, totalBytes, validate, submit, fileList, onSelectFiles, onOversized, removeFile,
+    mediaSummary, addingMedia, addMedia, removeMedia,
+  };
 }
 
 export const SOURCE_MODES = [

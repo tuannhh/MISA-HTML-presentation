@@ -129,15 +129,17 @@ export const IMAGE_KINDS = Object.freeze([
 // Bản chất tư liệu nguồn (AI tự nhận định trước khi lập dàn ý — quyết định cách tái cấu trúc nội dung).
 export const SOURCE_TYPES = Object.freeze(['designed_deck', 'document', 'raw_notes', 'data_table', 'transcript', 'mixed']);
 
-export function outlineResponseSchema({ tone = 'dark', slidesHint = '' } = {}) {
+// hasVideos: người dùng gửi kèm video → mỗi trang có trường video (mã VIDn hoặc rỗng). Không có video thì giữ schema gọn.
+export function outlineResponseSchema({ tone = 'dark', slidesHint = '', hasVideos = false } = {}) {
+  const slideProps = ['layout', 'title', 'subtitle', 'points', 'images', ...(hasVideos ? ['video'] : []), 'notes'];
   return {
     type: 'OBJECT',
     properties: {
       sourceType: { type: 'STRING', enum: SOURCE_TYPES },
       imageKinds: {
         type: 'ARRAY',
-        description: 'phân loại MỌI ảnh IMGn được cung cấp, mỗi ảnh đúng 1 phần tử; không có ảnh thì []',
-        items: { type: 'OBJECT', properties: { ref: S('mã ảnh IMGn'), kind: { type: 'STRING', enum: IMAGE_KINDS } }, required: ['ref', 'kind'] },
+        description: 'phân loại MỌI ảnh IMGn và UIMGn được cung cấp, mỗi ảnh đúng 1 phần tử; không có ảnh thì []',
+        items: { type: 'OBJECT', properties: { ref: S('mã ảnh IMGn hoặc UIMGn'), kind: { type: 'STRING', enum: IMAGE_KINDS } }, required: ['ref', 'kind'] },
       },
       title: S('tên bài trình bày'),
       theme: { type: 'STRING', enum: TONE_THEMES[tone] || TONE_THEMES.dark },
@@ -153,10 +155,11 @@ export function outlineResponseSchema({ tone = 'dark', slidesHint = '' } = {}) {
             subtitle: S('1 câu mô tả ngắn, có thể rỗng'),
             points: { type: 'ARRAY', items: S('1 dòng nội dung sẽ hiển thị trên trang') },
             notes: S('gợi ý lời nói cho người thuyết trình'),
-            images: { type: 'ARRAY', items: { type: 'OBJECT', properties: { ref: S('mã ảnh IMGn — chỉ ảnh loại photo'), caption: S() }, required: ['ref'] } },
+            images: { type: 'ARRAY', items: { type: 'OBJECT', properties: { ref: S('mã ảnh: IMGn loại photo, hoặc UIMGn (ảnh người dùng gửi kèm — mọi loại)'), caption: S() }, required: ['ref'] } },
+            ...(hasVideos ? { video: S('mã video VIDn người dùng gửi kèm đặt ở trang này, hoặc rỗng') } : {}),
           },
-          required: ['layout', 'title', 'subtitle', 'points', 'notes', 'images'],
-          propertyOrdering: ['layout', 'title', 'subtitle', 'points', 'images', 'notes'],
+          required: slideProps,
+          propertyOrdering: slideProps,
         },
       },
     },
@@ -198,8 +201,17 @@ mạch kể chuyện mới: bối cảnh/vấn đề → nội dung chính theo 
 CHỈ gắn ảnh loại photo vào trang (images). Mọi loại khác là TƯ LIỆU: đọc kỹ chữ, số liệu trong ảnh và đưa vào nội dung (thường thành
 stats/timeline/process/comparison/cards) — tuyệt đối không gắn vào trang. Không có ảnh photo phù hợp thì để images rỗng.
 
+MEDIA NGƯỜI DÙNG GỬI KÈM (UIMGn = ảnh, VIDn = video — chỉ có khi được liệt kê):
+- Đây là media BẮT BUỘC đưa vào bài: mỗi UIMGn và mỗi VIDn xuất hiện ĐÚNG 1 lần, đặt ở trang có nội dung liên quan nhất.
+  Phần chữ người dùng nhập là cơ sở nội dung; media minh hoạ cho nội dung đó.
+- UIMGn được gắn kể cả khi không phải photo (người dùng đã chọn); vẫn phân loại vào imageKinds. Ảnh có chữ/số liệu (infographic,
+  biểu đồ, bảng) thì đặt ở trang image và tóm tắt ý chính của ảnh vào points — không bịa số liệu không đọc được.
+- Nhiều ảnh cùng chủ đề → 1 trang gallery (2–6 ảnh). Một trang chỉ có ảnh HOẶC 1 video, không cả hai.
+- VIDn: đặt vào trường video của trang (layout image, bullets, section, quote hoặc cover); trang có video thì images rỗng.
+- Không có trang phù hợp thì lập trang mới cho media (image/gallery) với tiêu đề, nội dung gắn với chủ đề bài — vẫn tuân thủ số trang.
+
 Bố cục (layout) dự kiến — chọn phù hợp nội dung; cách viết points tương ứng:
-- cover: trang bìa. subtitle = thông điệp chính; points = người trình bày / đơn vị / ngày (nếu có).
+- cover: trang bìa. subtitle = thông điệp chính; points = người trình bày / đơn vị / ngày — CHỈ khi nguồn có, không có thì để rỗng.
 - section: mở đầu một phần lớn. points rỗng hoặc 1 dòng.
 - agenda: mục lục 3–8 dòng, mỗi dòng "Tên phần: mô tả ngắn".
 - bullets: 2–6 ý chính, mỗi dòng "Tiêu đề ngắn: diễn giải ≤ 25 từ".
@@ -210,15 +222,17 @@ Bố cục (layout) dự kiến — chọn phù hợp nội dung; cách viết p
 - process: 3–6 bước tuần tự, mỗi dòng "Tên bước: mô tả".
 - quote: dòng 1 = nguyên văn trích dẫn, dòng 2 = "Tên người — chức danh". Chỉ dùng khi nguồn có câu nói thật.
 - comparison: 2–3 cột, mỗi dòng "<Tên cột>: <ý>" (các ý cùng cột dùng chung tên cột), ví dụ "Cách cũ: nhập liệu thủ công".
-- closing: trang kết. title = lời cảm ơn / kêu gọi hành động; points = thông tin liên hệ (nếu có).
+- closing: trang kết. title = lời cảm ơn / kêu gọi hành động; points = thông tin liên hệ CHỈ khi nguồn có nguyên văn, không có thì
+  points là 1–2 thông điệp/hành động tiếp theo rút từ nội dung (không tạo hotline, email, website, địa chỉ).
 Nhịp trình bày: xen kẽ bố cục chữ (bullets, cards, agenda) với bố cục hình/số (stats, timeline, process, comparison, quote, image);
 không quá 2 trang chữ liên tiếp; bài từ 10 trang trở lên dùng section để chia phần.
 
 Quy tắc:
 1. Viết bằng ngôn ngữ của tài liệu nguồn (mặc định tiếng Việt có dấu chuẩn), văn phong chuyên nghiệp, câu ngắn, không lặp ý.
 2. Trang đầu là cover, trang cuối là closing. Không dùng cùng một layout cho quá 2 trang liên tiếp.
-3. Chỉ dùng số liệu, tên người, khách hàng, trích dẫn có trong tài liệu nguồn (hoặc tính chính xác từ số liệu nguồn) — KHÔNG bịa.
-4. Ảnh: chỉ dùng mã IMGn loại photo có trong danh sách ảnh, gắn vào trang phù hợp (images).
+3. Chỉ dùng số liệu, tên người, khách hàng, trích dẫn, tên công ty, hotline/email/website/địa chỉ có trong tài liệu nguồn (hoặc tính
+   chính xác từ số liệu nguồn) — KHÔNG bịa, không suy diễn thêm (vd. không tự đặt tên vùng, tên pháp nhân đầy đủ khi nguồn không ghi).
+4. Ảnh: chỉ dùng mã IMGn loại photo có trong danh sách ảnh, gắn vào trang phù hợp (images); UIMGn/VIDn: luôn dùng, mỗi mã 1 lần.
 5. notes: 1–3 câu gợi ý lời nói cho người thuyết trình.
 6. ${THEME_HINTS[tone] || THEME_HINTS.dark}
 7. Số trang: tuân thủ đúng yêu cầu số trang trong phần mô tả.`;
@@ -270,7 +284,7 @@ function outlineForModel(outline) {
     .join('\n\n');
 }
 
-function buildUserParts({ text, media = [], images, slideCount, autoSlides, maxSlides, instructions, ratio, sourceLabel }) {
+function buildUserParts({ text, media = [], images, userImages = [], userVideos = [], slideCount, autoSlides, maxSlides, instructions, ratio, sourceLabel }) {
   const parts = [];
   const brief = [
     autoSlides
@@ -292,8 +306,19 @@ function buildUserParts({ text, media = [], images, slideCount, autoSlides, maxS
       parts.push({ text: `IMG${i + 1}: ${im.hint || 'ảnh'} (${im.width}×${im.height})${im.preview ? '' : ' — không kèm hình xem trước'}` });
       if (im.preview) parts.push({ inlineData: { mimeType: 'image/jpeg', data: im.preview.toString('base64') } });
     });
-  } else {
-    parts.push({ text: 'Không có ảnh nào được cung cấp.' });
+  } else if (!userImages.length) {
+    parts.push({ text: 'Không có ảnh nào trong tư liệu.' });
+  }
+  if (userImages.length || userVideos.length) {
+    parts.push({ text: `MEDIA NGƯỜI DÙNG GỬI KÈM — bắt buộc đưa vào bài, mỗi mã đúng 1 lần (${userImages.length} ảnh, ${userVideos.length} video):` });
+    userImages.forEach((im, i) => {
+      parts.push({ text: `UIMG${i + 1}: ảnh "${im.name || 'ảnh'}" (${im.width}×${im.height})${im.preview ? '' : ' — không kèm hình xem trước'}` });
+      if (im.preview) parts.push({ inlineData: { mimeType: 'image/jpeg', data: im.preview.toString('base64') } });
+    });
+    userVideos.forEach((v, i) => {
+      parts.push({ text: `VID${i + 1}: video "${v.name || 'video'}"${v.preview ? ' — ảnh bìa (khung hình đầu video):' : ''}` });
+      if (v.preview) parts.push({ inlineData: { mimeType: 'image/jpeg', data: v.preview.toString('base64') } });
+    });
   }
   return parts;
 }
@@ -447,7 +472,7 @@ export function createGeminiService({ apiKey, model, baseUrl, timeoutMs, mediaTi
         contents: [{ role: 'user', parts: buildUserParts(input) }],
         generationConfig: {
           responseMimeType: 'application/json',
-          responseSchema: outlineResponseSchema({ tone, slidesHint: input.autoSlides ? `tối đa ${input.maxSlides} trang` : `đúng ${input.slideCount} trang` }),
+          responseSchema: outlineResponseSchema({ tone, slidesHint: input.autoSlides ? `tối đa ${input.maxSlides} trang` : `đúng ${input.slideCount} trang`, hasVideos: !!input.userVideos?.length }),
           temperature: 0.6,
           maxOutputTokens: 65536,
         },

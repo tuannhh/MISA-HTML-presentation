@@ -13,10 +13,11 @@ import MUpload from '@/components/mds/MUpload.vue'
 import MInput from '@/components/mds/MInput.vue'
 import MTextarea from '@/components/mds/MTextarea.vue'
 import MButton from '@/components/mds/MButton.vue'
-import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
+import CreateMediaPicker from '@/shared/CreateMediaPicker.vue'
+import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
 
 const router = useRouter()
-const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile } = useCreate()
+const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia } = useCreate()
 const SLIDE_MODES_M = SLIDE_MODES.map((m) => ({ ...m, label: m.value === 'auto' ? 'Tự động' : m.label }))
 const SHORT = { file: 'Tệp', url: 'Link', text: 'Văn bản' }
 const MODES = SOURCE_MODES.map((m) => ({ ...m, label: SHORT[m.key] }))
@@ -57,9 +58,23 @@ async function onSubmit() {
       <FormField v-else-if="form.mode === 'url'" label="Đường link tài liệu" required hint="Google Slides/Docs/Drive đã chia sẻ công khai hoặc trang web.">
         <MInput v-model="form.url" type="url" inputmode="url" enterkeyhint="next" placeholder="https://…" :error="errors.url" clearable />
       </FormField>
-      <FormField v-else label="Nội dung" required :hint="`${form.text.length.toLocaleString('vi-VN')} ký tự`">
-        <MTextarea v-model="form.text" :rows="8" placeholder="Dán dàn ý, báo cáo, biên bản họp…" :error="errors.text" />
-      </FormField>
+      <template v-else>
+        <FormField label="Nội dung" required :hint="`${form.text.length.toLocaleString('vi-VN')} ký tự · AI dùng làm cơ sở viết bài`">
+          <MTextarea v-model="form.text" :rows="8" placeholder="Dán dàn ý, báo cáo, biên bản họp…" :error="errors.text" />
+        </FormField>
+        <CreateMediaPicker
+          :items="form.media"
+          :accept="MEDIA_ACCEPT"
+          :max="MAX_CREATE_MEDIA"
+          :summary="mediaSummary"
+          :busy="addingMedia > 0"
+          :disabled="submitting"
+          :error="errors.media"
+          touch
+          @add="addMedia"
+          @remove="removeMedia"
+        />
+      </template>
 
       <hr class="border-[var(--mds-border-light)]" />
       <h2 class="text-[16px] font-semibold leading-6">Tuỳ chọn</h2>
@@ -91,7 +106,7 @@ async function onSubmit() {
         <MButton variant="primary" type="submit" form="create-form" class="flex-1" :loading="submitting">Lập dàn ý bằng AI</MButton>
       </div>
       <p v-if="progress !== null" class="mt-2 text-center text-[13px] text-[var(--mds-text-secondary)]" role="status">
-        {{ progress < 100 ? `Đang tải tư liệu lên… ${progress}%` : 'Đã tải lên, đang khởi tạo…' }}
+        {{ progress < 100 ? `Đang tải ${form.mode === 'text' ? 'ảnh, video' : 'tư liệu'} lên… ${progress}%` : 'Đã tải lên, đang khởi tạo…' }}
       </p>
     </template>
   </MobileShell>

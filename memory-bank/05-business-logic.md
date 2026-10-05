@@ -96,7 +96,7 @@ POST /api/presentations (multipart)
                                   trong ảnh và gắn ảnh đúng trang (tham chiếu IMGn → asset id)
         mỗi trang: tiêu đề + các DÒNG NỘI DUNG SẼ HIỂN THỊ (số liệu dạng "62% — nhãn", mốc "Q1/2026: …") + bố cục gợi ý + ghi chú
         + sourceType (designed_deck|document|raw_notes|data_table|transcript|mixed) + imageKinds [{ref, kind}] — §9
-      lọc ảnh: chỉ giữ ảnh "photo" (keepPhotoImages) — §9
+      lọc ảnh: chỉ giữ ảnh "photo" (keepPhotoImages) — §9; media người dùng gửi kèm luôn giữ + placeUserMedia — §10
       design mặc định: theme (auto → themeForTone theo gợi ý AI), nền `network`, phông Inter, chưa có logo
       → normalizeOutline (lenient) → capOutline (tự động ≤ 25 / tuỳ chỉnh = N, giữ trang kết) → setOutlineResult
       → status='outline', outline_version+1
@@ -216,3 +216,12 @@ Người dùng không chọn gì thêm — mọi thứ dưới đây tự độn
 - `artDirect(spec, {seed, ratio, style})`: chọn phong cách ngẫu nhiên đều; mỗi trang bốc thăm có trọng số = hợp dữ liệu × hợp phong cách (`AFFINITY`) × `0.2^(số lần đã dùng trong bài)`; trang liền kề trùng `layout:variant` ×0.05. Hạt giống = UUID mới mỗi lần dựng → dựng lại = bài khác; cùng hạt giống → cùng kết quả (test).
 - `resolveVariant` (renderer): người dùng sửa nội dung làm biến thể hết hợp (vd. đổi % thành "tỷ") → tự về mặc định, không vỡ trang. `normalizeSpec` bỏ variant/style lạ (style lạ → `neon`); bài cũ không có trường → giao diện như trước.
 - Soát giao diện: `tmp/variants-gallery.mjs <out> [theme] [style] [ratio] [only]` (tmp/ không commit) render mọi layout×biến thể ra ảnh tổng hợp, báo trang bị co chữ; `LONG=1` thử nội dung dài.
+
+## 10. Media gửi kèm khi tạo bài (2026-10-06)
+
+Tab **Nhập nội dung**: chữ người dùng nhập là **cơ sở nội dung**; ảnh/video gửi kèm là media **bắt buộc đưa vào bài** (khác ảnh nằm trong tư liệu — chỉ ảnh chụp thật mới được gắn, §9).
+- Trình duyệt (`useCreate.addMedia`, `CreateMediaPicker.vue`): kiểm loại/dung lượng ngay, HEIC → JPEG, chụp ảnh bìa video (`capturePoster`); gửi `media` + `posters` cùng yêu cầu tạo bài.
+- Server: `ingestService.precheckMedia` (magic bytes, kích thước từng tệp, số lượng, ghép ảnh bìa theo vị trí) → job `storeUserMedia`: ảnh → asset `image` (WebP), video → asset `video` + `poster` — lưu TRƯỚC khi gọi AI.
+- AI (`outlinePrompt` mục "MEDIA NGƯỜI DÙNG GỬI KÈM"): ảnh = `UIMGn` (kèm hình xem trước, được ưu tiên trong hạn mức 30 ảnh/6MB), video = `VIDn` (kèm ảnh bìa); mỗi mã đúng 1 lần ở trang hợp nội dung; ảnh có chữ → trang image + tóm tắt ý của ảnh; trang có video không kèm ảnh. Schema có trường `video` ở mỗi trang **chỉ khi** có video gửi kèm.
+- Ảnh gửi kèm luôn được giữ (bỏ qua bộ lọc photo); ảnh đồ hoạ (AI xếp loại khác `photo` hoặc `looksLikeGraphic`) → `fit: 'contain'` (dàn ý → spec) để hiển thị trọn khung; `variants.js` không chọn kiểu cắt ảnh (cover center, image full, mosaic, polaroid) cho ảnh contain.
+- `outlineService.placeUserMedia` (sau `capOutline`, chốt chặn xác định): bỏ trùng, trang có video thì bỏ ảnh, ≤ 6 ảnh/trang; media AI bỏ sót → video vào trang chữ chưa có media (ưu tiên image/gallery → bullets/auto → section/quote → cards → agenda → cover; trang số liệu/quy trình sau cùng); 1–2 ảnh → mỗi ảnh 1 trang chữ; nhiều hơn → gom bộ sưu tập (vào bộ sưu tập ảnh người dùng còn chỗ → thêm trang "Hình ảnh" trước trang kết nếu còn hạn mức trang → dồn vào trang trống). Không còn chỗ nào thì vẫn thêm trang — **không bao giờ bỏ media người dùng** (có thể vượt số trang tuỳ chỉnh trong trường hợp hiếm). Log `outline_ready`: `userImages`, `userVideos`, `mediaAddedSlides`, `mediaMoved`.

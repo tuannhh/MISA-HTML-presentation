@@ -62,7 +62,11 @@ function cleanOutlineSlide(c, v, i, seen) {
           const x = c.obj(im);
           const asset = typeof x.asset === 'string' && isUuid(x.asset) ? x.asset.toLowerCase() : null;
           if (!asset && c.strict) c.errors.push(`${p}.images[${k}]: mã ảnh không hợp lệ`);
-          return asset ? { asset, caption: c.str(x.caption, SPEC_LIMITS.caption, `${p}.images[${k}].caption`) } : null;
+          if (!asset) return null;
+          const img = { asset, caption: c.str(x.caption, SPEC_LIMITS.caption, `${p}.images[${k}].caption`) };
+          // Ảnh đồ hoạ người dùng gửi kèm (infographic, sơ đồ…) hiển thị trọn khung, không cắt.
+          if (x.fit === 'contain') img.fit = 'contain';
+          return img;
         })
         .filter(Boolean);
   const slide = {
@@ -120,6 +124,87 @@ export function keepPhotoImages(slides, isPhoto) {
     if (kept.length === 1 && s.layout === 'gallery') s.layout = 'image';
   }
   return dropped;
+}
+
+/**
+ * Media người dùng gửi kèm khi tạo bài là BẮT BUỘC: mỗi ảnh/video xuất hiện đúng 1 lần trong dàn ý.
+ * AI đặt trước (theo nội dung); hàm này sửa lại cho chắc chắn — bỏ trùng, trang có video thì không kèm ảnh, mỗi trang ≤ 6 ảnh,
+ * rồi đặt phần còn thiếu: ưu tiên trang chưa có media (trang chữ trước, trang số liệu/quy trình sau cùng), hết chỗ thì thêm
+ * trang ảnh/video trước trang kết (khi còn hạn mức trang), cuối cùng gom thêm vào trang ảnh sẵn có.
+ * @param {Array} slides  trang dàn ý đã chuẩn hoá (images: [{asset, caption, fit?}], video)
+ * @param {{ images: Array<{asset:string, fit?:string}>, videos: Array<object> }} required  video = đối tượng video dàn ý
+ * @param {{ room?: number }} o  số trang còn được thêm (0 = giữ đúng số trang)
+ * @returns {{ added: number, moved: number }}
+ */
+export function placeUserMedia(slides, required, { room = 0 } = {}) {
+  const imgs = new Map((required.images || []).map((im) => [im.asset, im]));
+  const vids = new Map((required.videos || []).map((v) => [v.asset, v]));
+  if (!imgs.size && !vids.size) return { added: 0, moved: 0 };
+  const seenImg = new Set();
+  const seenVid = new Set();
+  let moved = 0;
+  for (const s of slides) {
+    if (s.video?.provider === 'file' && vids.has(s.video.asset)) {
+      if (seenVid.has(s.video.asset)) s.video = null;
+      else seenVid.add(s.video.asset);
+    }
+    const kept = [];
+    for (const im of s.images || []) {
+      if (!imgs.has(im.asset)) {
+        kept.push(im);
+        continue;
+      }
+      // trùng, hoặc trang đã có video (1 trang chỉ 1 loại media), hoặc vượt 6 ảnh → đặt lại ở bước sau
+      if (seenImg.has(im.asset) || s.video || kept.length >= SPEC_LIMITS.images) {
+        if (!seenImg.has(im.asset)) moved += 1;
+        continue;
+      }
+      seenImg.add(im.asset);
+      kept.push({ ...im, ...(imgs.get(im.asset).fit === 'contain' ? { fit: 'contain' } : {}) });
+    }
+    s.images = s.video ? [] : kept;
+  }
+  const leftVids = [...vids.values()].filter((v) => !seenVid.has(v.asset));
+  const leftImgs = [...imgs.values()].filter((im) => !seenImg.has(im.asset)).map((im) => ({ asset: im.asset, caption: '', ...(im.fit === 'contain' ? { fit: 'contain' } : {}) }));
+  if (!leftVids.length && !leftImgs.length) return { added: 0, moved };
+
+  const RANK = { image: 0, gallery: 0, auto: 1, bullets: 1, section: 2, quote: 2, cards: 3, agenda: 4, cover: 5 };
+  const closingAt = () => (slides.length > 1 && slides[slides.length - 1].layout === 'closing' ? slides.length - 1 : slides.length);
+  const free = () =>
+    slides
+      .map((s, i) => ({ s, i }))
+      .filter(({ s, i }) => i < closingAt() && !s.video && !(s.images || []).length)
+      .sort((a, b) => (RANK[a.s.layout] ?? 6) - (RANK[b.s.layout] ?? 6) || a.i - b.i)
+      .map(({ s }) => s);
+  let added = 0;
+  const insert = (slide) => {
+    slides.splice(closingAt(), 0, { id: `s-${randomUUID().slice(0, 8)}`, subtitle: '', points: [], notes: '', images: [], video: null, ...slide });
+    added += 1;
+    room -= 1;
+  };
+  for (const v of leftVids) {
+    const target = free()[0];
+    if (target) target.video = v;
+    else insert({ layout: 'image', title: v.title || 'Video', video: v }); // 1 trang chỉ phát 1 video → thiếu chỗ thì buộc thêm trang
+  }
+  while (leftImgs.length) {
+    const spots = free();
+    // Trang hợp để chèn ảnh: trang chữ / bìa (trang số liệu, quy trình… giữ nguyên cấu trúc, chỉ dùng khi hết cách).
+    const good = spots.filter((x) => (RANK[x.layout] ?? 6) <= 5);
+    // 1–2 ảnh: mỗi ảnh 1 trang chữ; nhiều hơn: gom thành bộ sưu tập (≤ 6 ảnh/trang).
+    if (leftImgs.length <= 2 && leftImgs.length <= good.length) {
+      for (const sp of good.slice(0, leftImgs.length)) sp.images = [leftImgs.shift()];
+      break;
+    }
+    const chunk = leftImgs.splice(0, SPEC_LIMITS.images);
+    const withRoom = slides.find((x) => !x.video && x.images.length && x.images.length + chunk.length <= SPEC_LIMITS.images && x.images.every((im) => imgs.has(im.asset)));
+    if (withRoom) withRoom.images.push(...chunk);
+    else if (room > 0) insert({ layout: chunk.length > 1 ? 'gallery' : 'image', title: 'Hình ảnh', images: chunk });
+    else if (good.length || spots.length) (good[0] || spots[0]).images = chunk;
+    else insert({ layout: chunk.length > 1 ? 'gallery' : 'image', title: 'Hình ảnh', images: chunk }); // không bỏ media người dùng
+  }
+  for (const s of slides) if ((s.images || []).length >= 2 && !s.video && s.layout !== 'gallery') s.layout = 'gallery';
+  return { added, moved };
 }
 
 /* ---------------- dàn ý → slide ---------------- */
@@ -203,11 +288,11 @@ export function applyOutlineMedia(slide, os) {
     slide.image = null;
     slide.images = [];
   } else if (imgs.length === 1) {
-    slide.image = { asset: imgs[0].asset, alt: imgs[0].caption || '', caption: imgs[0].caption || '', fit: 'cover' };
+    slide.image = { asset: imgs[0].asset, alt: imgs[0].caption || '', caption: imgs[0].caption || '', fit: imgs[0].fit === 'contain' ? 'contain' : 'cover' };
     slide.video = null;
   } else if (imgs.length >= 2) {
     slide.layout = 'gallery';
-    slide.images = imgs.map((im) => ({ asset: im.asset, alt: im.caption || '', caption: im.caption || '', fit: 'cover' }));
+    slide.images = imgs.map((im) => ({ asset: im.asset, alt: im.caption || '', caption: im.caption || '', fit: im.fit === 'contain' ? 'contain' : 'cover' }));
     slide.image = null;
     slide.video = null;
     return slide;

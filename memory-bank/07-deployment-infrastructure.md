@@ -35,6 +35,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `MAX_TEXT_CHARS` | | 200000 | |
 | `MAX_IMAGES_PER_DECK` | | 60 | Ảnh rút từ tài liệu nguồn |
 | `MAX_VIDEO_MB` / `MAX_VIDEOS_PER_DECK` | | 150 / 10 | Video tải lên chèn vào slide (MP4/MOV/WebM) — dung lượng 1 tệp / số video mỗi bài |
+| `MAX_CREATE_MEDIA` | | 20 | Số ảnh/video gửi kèm tối đa khi tạo bài (luôn được đưa vào bài) |
 | `EXPORT_VIDEO_MB` | | 200 | HTML xuất nhúng video tải lên (base64) khi **tổng** ≤ ngưỡng; vượt → khung ảnh bìa không phát. 0 = không nhúng |
 | `ORT_DISABLE_TELEMETRY` | | `1` (Dockerfile) | onnxruntime-node (tách nền logo) bản Linux gửi telemetry về Microsoft → luôn tắt. `cutoutService` cũng tự đặt nếu thiếu |
 | `GENERATION_CONCURRENCY` / `RENDER_CONCURRENCY` | | 2 / 2 | Song song AI / Chromium |

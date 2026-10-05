@@ -93,6 +93,8 @@ export function loadConfig() {
       // Video tải lên gắn vào slide (mỗi tệp) và số video tối đa/bài.
       maxVideoMb: int('MAX_VIDEO_MB', 150, { min: 1, max: 2000 }),
       maxVideosPerDeck: int('MAX_VIDEOS_PER_DECK', 10, { min: 0, max: 50 }),
+      // Ảnh/video người dùng gửi kèm khi tạo bài (bắt buộc đưa vào bài) — số tệp tối đa mỗi lần tạo (video còn theo MAX_VIDEOS_PER_DECK).
+      maxCreateMedia: int('MAX_CREATE_MEDIA', 20, { min: 0, max: 60 }),
       // Tệp HTML xuất ra nhúng luôn video tải lên khi tổng dung lượng video không vượt mức này (vượt → chỉ có ảnh bìa).
       exportVideoMb: int('EXPORT_VIDEO_MB', 200, { min: 0, max: 2000 }),
       generationConcurrency: int('GENERATION_CONCURRENCY', 2, { min: 1, max: 8 }),

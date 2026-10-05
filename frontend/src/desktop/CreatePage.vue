@@ -14,10 +14,11 @@ import MInput from '@/components/mds/MInput.vue'
 import MTextarea from '@/components/mds/MTextarea.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
-import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
+import CreateMediaPicker from '@/shared/CreateMediaPicker.vue'
+import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
 
 const router = useRouter()
-const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile } = useCreate()
+const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia } = useCreate()
 
 async function onSubmit() {
   const res = await submit()
@@ -68,9 +69,22 @@ async function onSubmit() {
             <MInput v-model="form.url" type="url" inputmode="url" placeholder="https://docs.google.com/presentation/d/…" :error="errors.url" clearable />
           </FormField>
 
-          <FormField v-else label="Nội dung" required :hint="`${form.text.length.toLocaleString('vi-VN')} ký tự — dán dàn ý, báo cáo, biên bản họp…`">
-            <MTextarea v-model="form.text" :rows="12" placeholder="Ví dụ: Kế hoạch triển khai AMIS cho công ty… (mục tiêu, hiện trạng, giải pháp, lộ trình, chi phí)" :error="errors.text" />
-          </FormField>
+          <template v-else>
+            <FormField label="Nội dung" required :hint="`${form.text.length.toLocaleString('vi-VN')} ký tự — dán dàn ý, báo cáo, biên bản họp… AI dùng làm cơ sở để viết từng trang.`">
+              <MTextarea v-model="form.text" :rows="12" placeholder="Ví dụ: Kế hoạch triển khai AMIS cho công ty… (mục tiêu, hiện trạng, giải pháp, lộ trình, chi phí)" :error="errors.text" />
+            </FormField>
+            <CreateMediaPicker
+              :items="form.media"
+              :accept="MEDIA_ACCEPT"
+              :max="MAX_CREATE_MEDIA"
+              :summary="mediaSummary"
+              :busy="addingMedia > 0"
+              :disabled="submitting"
+              :error="errors.media"
+              @add="addMedia"
+              @remove="removeMedia"
+            />
+          </template>
         </section>
 
         <section class="flex flex-col gap-4 rounded-lg bg-[var(--mds-bg)] p-6 shadow-[var(--mds-shadow-card)]">
@@ -108,7 +122,7 @@ async function onSubmit() {
       <div class="sticky bottom-0 z-10 border-t border-[var(--mds-border)] bg-[var(--mds-bg)]">
         <div class="mx-auto flex w-full max-w-[880px] items-center justify-end gap-2 px-6 py-3">
           <span v-if="progress !== null" class="mr-auto text-[13px] text-[var(--mds-text-secondary)]" role="status">
-            {{ progress < 100 ? `Đang tải tư liệu lên… ${progress}%` : 'Đã tải lên, đang khởi tạo…' }}
+            {{ progress < 100 ? `Đang tải ${form.mode === 'text' ? 'ảnh, video' : 'tư liệu'} lên… ${progress}%` : 'Đã tải lên, đang khởi tạo…' }}
           </span>
           <MButton variant="outline" @click="router.back()">Hủy</MButton>
           <MButton variant="primary" type="submit" :loading="submitting">

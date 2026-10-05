@@ -8,11 +8,11 @@ import { randomUUID } from 'node:crypto';
 import { open, readFile, rm } from 'node:fs/promises';
 import { logger } from '../lib/logger.js';
 import { Semaphore } from '../lib/semaphore.js';
-import { badRequest, conflict, notFound, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
+import { badRequest, conflict, notFound, tooLarge, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
 import { sniffVideo, VIDEO_MIME } from '../lib/fileType.js';
 import { normalizeSpec, collectAssetIds, dropForeignAssets, remapAssetIds, themeForTone } from './specService.js';
-import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages } from './outlineService.js';
-import { precheckSource, ingestSource, fitPieces } from './ingestService.js';
+import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia } from './outlineService.js';
+import { precheckSource, precheckMedia, ingestSource, fitPieces } from './ingestService.js';
 import { prepareMedia } from './mediaService.js';
 import { TONE_THEMES } from '../../shared/deck/render.js';
 import { THEME_PRESETS, CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
@@ -84,14 +84,20 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const autoSlides = String(input.slideCount ?? 'auto').trim().toLowerCase() === 'auto';
     const slideCount = autoSlides ? null : Math.min(40, Math.max(3, Number.parseInt(input.slideCount, 10) || 12));
     const instructions = String(input.instructions || '').trim().slice(0, 2000);
+    // Tệp multer: tư liệu (files) + media gửi kèm (media, ảnh bìa video posters) — xoá hết khi lỗi hoặc job xong.
+    const uploads = [...(input.files || []), ...(input.media || []), ...(input.posters || [])];
     let src;
+    let userMedia;
     let choice;
     try {
       choice = parseThemeChoice(input);
       src = await precheckSource({ files: input.files, url: input.url, text: input.text }, config.limits);
+      userMedia = await precheckMedia(input.media, input.posters, config.limits);
+      const total = [...(input.files || []), ...(input.media || [])].reduce((n, f) => n + (f.size || 0), 0);
+      if (total > config.limits.maxUploadMb * 1048576) throw tooLarge(`Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB`, 'UPLOAD_TOO_LARGE');
       if (genQueue.pending >= MAX_PENDING_JOBS) throw unavailable('Hệ thống đang xử lý nhiều yêu cầu, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
     } catch (err) {
-      await removeUploads(input.files);
+      await removeUploads(uploads);
       throw err;
     }
     const { tone } = choice;
@@ -101,19 +107,52 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const title = String(input.title || '').trim().slice(0, 200) || firstName || 'Bài trình bày mới';
     try {
       await presentations.createForTenant(user.id, { id, title, ratio, sourceKind: src.sourceKind, sourceLabel: src.sourceLabel, instructions, status: 'outlining' });
-      await audit.record({ actorId: user.id, action: 'presentation.create', targetType: 'presentation', targetId: id, ip, meta: { source: src.sourceKind, files: src.files?.length || 0, ratio, slideCount: slideCount ?? 'auto', tone, theme: choice.theme } });
+      await audit.record({ actorId: user.id, action: 'presentation.create', targetType: 'presentation', targetId: id, ip, meta: { source: src.sourceKind, files: src.files?.length || 0, mediaImages: userMedia.images.length, mediaVideos: userMedia.videos.length, ratio, slideCount: slideCount ?? 'auto', tone, theme: choice.theme } });
     } catch (err) {
-      await removeUploads(input.files);
+      await removeUploads(uploads);
       throw err;
     }
 
     // Chạy nền; client theo dõi trạng thái bằng GET /api/presentations/:id.
-    const job = { url: input.url, text: input.text, files: src.files, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel };
+    const job = { url: input.url, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel };
     genQueue
       .run(() => generateOutline(user.id, id, job))
       .catch((err) => logger.error('outline_unhandled', { id, err }))
-      .finally(() => removeUploads(src.files));
+      .finally(() => removeUploads(uploads));
     return { id, status: 'outlining' };
+  }
+
+  // Lưu media gửi kèm thành asset của bài (ảnh → WebP ≤1920px; video giữ nguyên tệp + ảnh bìa trình duyệt chụp) và chuẩn bị
+  // hình xem trước cho AI (ảnh + ảnh bìa video được ưu tiên trong hạn mức xem trước vì là media bắt buộc).
+  async function storeUserMedia(tenantId, id, userMedia) {
+    const owner = { id: tenantId };
+    const out = { images: [], videos: [], previewBytes: 0 };
+    const preview = async (buffer) => {
+      if (out.images.length + out.videos.length >= MODEL_IMAGE_PREVIEWS || out.previewBytes >= MODEL_PREVIEW_BYTES) return null;
+      const p = await previewForModel(buffer, { side: MODEL_PREVIEW_SIDE }).catch(() => null);
+      if (p) out.previewBytes += p.length;
+      return p;
+    };
+    for (const f of userMedia?.images || []) {
+      const img = await normalizeImage(await readFile(f.path));
+      const a = await storeImage(owner, id, 'image', img, f.name);
+      out.images.push({ asset: a.id, name: f.name, width: img.width, height: img.height, preview: await preview(img.buffer), traits: await imageTraits(img.buffer).catch(() => null) });
+    }
+    for (const f of userMedia?.videos || []) {
+      let poster = null;
+      let posterImg = null;
+      if (f.poster) {
+        posterImg = await normalizeImage(await readFile(f.poster), { maxSide: 1280 }).catch(() => null);
+        if (posterImg) poster = await storeImage(owner, id, 'poster', posterImg, null);
+      }
+      const assetId = randomUUID();
+      const key = assetKey(tenantId, id, assetId, f.type);
+      await storage.putFile(key, f.path);
+      await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[f.type], bytes: f.size, width: null, height: null, storageKey: key, originalName: f.name });
+      const title = f.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 200);
+      out.videos.push({ name: f.name, preview: posterImg ? await preview(posterImg.buffer) : null, video: { provider: 'file', asset: assetId, poster: poster?.id || null, title, caption: '' } });
+    }
+    return out;
   }
 
   async function generateOutline(tenantId, id, input) {
@@ -121,6 +160,9 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     try {
       const source = await ingestSource(input, { limits: config.limits, googleApiKey: config.google.apiKey });
       if (!source.pieces.length && !source.media.length && !source.images.length) throw unprocessable('Không tìm thấy nội dung trong tài liệu', 'SOURCE_EMPTY');
+      // Media người dùng gửi kèm: lưu thành asset của bài trước khi gọi AI (AI xem để đặt đúng trang).
+      const user = await storeUserMedia(tenantId, id, input.userMedia);
+      let previewBytes = user.previewBytes;
       const images = await normalizeExtractedImages(source.images, { max: config.limits.maxImagesPerDeck });
       const assetIds = [];
       for (const img of images) {
@@ -132,10 +174,9 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       }
       const modelImages = [];
       const traits = [];
-      let previewBytes = 0;
       for (const [i, img] of images.entries()) {
         let preview = null;
-        if (i < MODEL_IMAGE_PREVIEWS && previewBytes < MODEL_PREVIEW_BYTES) {
+        if (i + user.images.length < MODEL_IMAGE_PREVIEWS && previewBytes < MODEL_PREVIEW_BYTES) {
           preview = await previewForModel(img.buffer, { side: MODEL_PREVIEW_SIDE });
           previewBytes += preview.length;
         }
@@ -148,15 +189,24 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       try {
         const text = fitPieces([...source.pieces, ...media.pieces], config.limits.maxSourceChars);
         raw = await gemini.generateOutline({
-          text, media: media.direct, images: modelImages, slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: AUTO_MAX_SLIDES,
+          text, media: media.direct, images: modelImages, userImages: user.images, userVideos: user.videos,
+          slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: AUTO_MAX_SLIDES,
           tone: input.tone, instructions: input.instructions, ratio: input.ratio, sourceLabel: input.sourceLabel,
         });
       } finally {
         await media.cleanup();
       }
+      // IMGn = ảnh trong tư liệu, UIMGn = ảnh người dùng gửi kèm, VIDn = video gửi kèm.
       const mapRef = (ref) => {
-        const n = Number(String(ref || '').replace(/^IMG/i, ''));
-        return Number.isInteger(n) && n >= 1 ? assetIds[n - 1] || null : null;
+        const m = /^(U?)IMG(\d+)$/i.exec(String(ref || '').trim());
+        if (!m) return null;
+        const list = m[1] ? user.images : assetIds;
+        const x = list[Number(m[2]) - 1];
+        return (m[1] ? x?.asset : x) || null;
+      };
+      const mapVideo = (ref) => {
+        const m = /^VID(\d+)$/i.exec(String(ref || '').trim());
+        return m ? user.videos[Number(m[1]) - 1]?.video || null : null;
       };
       const { choice } = input;
       const theme = choice.theme === 'auto' ? themeForTone(raw?.theme, input.tone, TONE_THEMES) : choice.theme;
@@ -171,6 +221,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
           points: s?.points,
           notes: s?.notes,
           images: (Array.isArray(s?.images) ? s.images : []).map((im) => ({ asset: mapRef(im?.ref), caption: im?.caption })).filter((im) => im.asset),
+          video: mapVideo(s?.video),
         })),
       };
       // Chỉ ảnh chụp thật được tự gắn vào trang: AI (đã xem ảnh) phân loại là chính; ảnh AI không được xem → chỉ nhận khi
@@ -179,14 +230,19 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const photo = new Set(
         assetIds.filter((aid, i) => (modelImages[i].preview ? kindOf.get(aid) === 'photo' && !looksLikeGraphic(traits[i]) : looksLikePhoto(traits[i]))),
       );
-      const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid));
+      // Ảnh người dùng gửi kèm luôn được giữ (bất kể loại); ảnh đồ hoạ thì hiển thị trọn khung (contain), không cắt.
+      const required = user.images.map((u) => ({ asset: u.asset, fit: (kindOf.get(u.asset) && kindOf.get(u.asset) !== 'photo') || looksLikeGraphic(u.traits) ? 'contain' : 'cover' }));
+      const userImageIds = new Set(required.map((u) => u.asset));
+      const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid) || userImageIds.has(aid));
       const { outline } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: input.autoSlides, slideCount: input.slideCount } });
       if (!outline.slides.length) throw unprocessable('AI không lập được dàn ý từ tài liệu này', 'AI_EMPTY');
-      capOutline(outline, input.autoSlides ? AUTO_MAX_SLIDES : input.slideCount);
+      const maxSlides = input.autoSlides ? AUTO_MAX_SLIDES : input.slideCount;
+      capOutline(outline, maxSlides);
+      const placed = placeUserMedia(outline.slides, { images: required, videos: user.videos.map((v) => v.video) }, { room: Math.max(0, maxSlides - outline.slides.length) });
       await presentations.setOutlineResult(tenantId, id, { outline, title: input.title ? null : outline.title });
       const kinds = {};
       for (const k of kindOf.values()) if (k) kinds[k] = (kinds[k] || 0) + 1;
-      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, droppedImages, kinds, sourceType: raw?.sourceType, ms: Date.now() - started });
+      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, droppedImages, kinds, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi lập dàn ý. Vui lòng thử lại.';
       if (!(err instanceof HttpError)) logger.error('outline_failed', { id, err });

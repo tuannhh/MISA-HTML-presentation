@@ -94,3 +94,4 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 - `SOURCE_ACCEPT` liệt kê cả .doc/.xls/.ppt/.key/.pages/.numbers để người dùng chọn được và nhận hướng dẫn ngay (`sourceProblem`), thay vì tệp bị làm mờ không rõ lý do. Nhiều tệp lỗi → gộp tối đa 3 lý do + "và N tệp khác".
 - `heicToJpeg`: ảnh HEIC → JPEG ≤ 2560px trên trình duyệt (Safari); trình duyệt không giải mã được → lỗi `HEIC_UNSUPPORTED` kèm cách đổi. Dùng ở tư liệu (`useCreate`), ảnh trang + logo (`useMedia`).
 - `OutlineMedia.vue`: kéo-thả nhiều ảnh vào khung media của trang (desktop).
+- `CreateMediaPicker.vue` (trang Tạo bài, tab Nhập nội dung — desktop + mobile `touch`): ảnh/video gửi kèm, lưới ảnh thu nhỏ (video hiện ảnh bìa + nhãn Video), nút bỏ 32px/44px, kéo-thả (desktop), tóm tắt "2 ảnh · 1 video · 1,3 MB"; logic ở `useCreate` (`addMedia`/`removeMedia`, giới hạn `MAX_CREATE_MEDIA` 20, video 10).

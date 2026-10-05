@@ -27,12 +27,14 @@ const n = (a) => (Array.isArray(a) ? a.length : 0);
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 const hasMedia = (s) => !!(s.video || s.image?.asset);
 const photos = (s) => (Array.isArray(s.images) ? s.images.filter((im) => im && im.asset).length : 0);
+// Ảnh đồ hoạ (infographic, sơ đồ…) hiển thị trọn khung (fit contain) → không dùng kiểu cắt ảnh tràn trang / xoay / ghép mảng.
+const contain = (s) => s.image?.fit === 'contain' || (Array.isArray(s.images) && s.images.some((im) => im?.fit === 'contain'));
 const unit = (st) => String(st.suffix || '').trim().toLowerCase();
 const longest = (list, key) => Math.max(0, ...(list || []).map((x) => String(x?.[key] || '').length));
 
 // Điều kiện để biến thể hiển thị đẹp với nội dung hiện có (r = rộng/cao của khung). Biến thể mặc định luôn hợp.
 const FITS = {
-  cover: { mirror: () => true, center: (s) => !s.video, bottom: () => true },
+  cover: { mirror: () => true, center: (s) => !s.video && !contain(s), bottom: () => true },
   section: { center: (s) => !hasMedia(s), band: (s) => !hasMedia(s), ghost: (s) => !hasMedia(s) },
   agenda: {
     tiles: (s) => n(s.items) >= 2 && n(s.items) <= 8,
@@ -58,8 +60,8 @@ const FITS = {
     rings: (s) => n(s.stats) >= 1 && n(s.stats) <= 4 && s.stats.every((x) => isNum(x.value) && x.value > 0 && x.value <= 100 && unit(x) === '%'),
     plain: (s) => n(s.stats) >= 2 && n(s.stats) <= 4,
   },
-  image: { right: (s) => n(s.items) > 0, full: (s) => !!s.image?.asset && !s.video && n(s.items) <= 3 },
-  gallery: { mosaic: (s) => [3, 5].includes(photos(s)), polaroid: (s) => photos(s) >= 2 && photos(s) <= 4 },
+  image: { right: (s) => n(s.items) > 0, full: (s) => !!s.image?.asset && !s.video && !contain(s) && n(s.items) <= 3 },
+  gallery: { mosaic: (s) => [3, 5].includes(photos(s)) && !contain(s), polaroid: (s) => photos(s) >= 2 && photos(s) <= 4 && !contain(s) },
   timeline: {
     vertical: (s) => n(s.steps) >= 2 && n(s.steps) <= 5,
     zigzag: (s, r) => n(s.steps) >= 4 && n(s.steps) <= (r >= 1.7 ? 7 : 5),

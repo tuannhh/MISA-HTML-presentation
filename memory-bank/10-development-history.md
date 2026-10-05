@@ -1,5 +1,26 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-06 — Sửa: tab "Tải tệp lên" bấm không mở cửa sổ chọn tệp
+
+- Nguyên nhân: `MUpload.vue` (bản sao MDS) dùng `<label @click.prevent>` bọc `<input type=file>`; `openBrowse()` gọi `input.click()`, sự kiện nổi bọt lên label và bị `preventDefault` → trình duyệt huỷ hộp chọn tệp. Kéo-thả vẫn chạy nên lỗi chỉ lộ khi bấm. Đây là gốc của lỗi "không upload được file" người dùng báo trước đó.
+- Sửa: dropzone thành `div role="button"` (Tab + Enter/Space, viền focus), input ra ngoài dropzone (`09` — vá MDS).
+- Kiểm chứng: `tmp/ui-filechooser.mjs` (bấm thật + `waitForFileChooser`) — bản cũ ✗ desktop/mobile, bản sửa ✓ bấm chuột, ✓ phím Enter, ✓ mobile; chọn 2 tệp hiện đúng danh sách.
+
+## 2026-10-06 — Ảnh/video gửi kèm khi nhập nội dung (bắt buộc đưa vào bài)
+
+### Yêu cầu
+Ở tab Nhập nội dung, cho tải thêm ảnh/video: chữ là cơ sở gợi ý nội dung, media tải lên là thứ cần đưa vào bài; các quy tắc trước giữ nguyên.
+
+### Thay đổi
+- API tạo bài nhận thêm `media` + `posters` (`04`); `MAX_CREATE_MEDIA`=20 (`.env.example`). `precheckMedia`, `storeUserMedia`, prompt + schema `UIMGn`/`VIDn`, `placeUserMedia`, ảnh đồ hoạ `fit: contain` (`05` §10).
+- Prompt: cấm bịa thông tin liên hệ / tên pháp nhân / tên vùng (trang bìa, trang kết chỉ ghi khi nguồn có) — lần thử đầu AI tự tạo hotline + email.
+- Giao diện: `CreateMediaPicker` desktop + mobile (`06`).
+
+### Đã kiểm chứng
+- Unit 70/70 (mới `user-media.test.js`: đặt media đủ/trùng/thiếu chỗ/số trang cố định/buộc thêm trang, fit contain, precheckMedia, schema video).
+- Gemini thật (nội dung nhập tay + 2 ảnh chụp + 1 infographic + 1 video, 8 trang): mọi media xuất hiện đúng 1 lần — video ở trang khai mạc, 2 ảnh chụp thành bộ sưu tập, infographic ở trang image `contain` kèm số liệu AI đọc từ ảnh; đúng 8 trang; không còn bịa liên hệ; dựng bài `gallery:polaroid`, `image:right` (ảnh contain không bị chọn kiểu tràn trang).
+- Chrome headless trên Docker: desktop 1440 + mobile 390 — thêm ảnh/video (ảnh bìa video hiện đúng), HEIC trên Chrome + CSV báo lỗi rõ, nút bỏ 44px mobile, không tràn ngang; gửi thật → dàn ý có đủ 3 media. Smoke TẤT CẢ ĐẠT.
+
 ## 2026-10-06 — Sửa khoảng trống lớn dưới footer (cả trang bị cuộn)
 
 ### Yêu cầu

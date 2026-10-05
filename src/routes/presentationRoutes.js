@@ -24,8 +24,14 @@ export function presentationRoutes({ service, config, limits }) {
   const upload = multer({
     ...UTF8_NAMES,
     storage: multer.diskStorage({ destination: config.storage.uploadDir, filename: (_req, _file, cb) => cb(null, randomUUID()) }),
-    limits: { fileSize: maxSourceBytes, files: config.limits.maxUploadFiles, fields: 20, fieldSize: config.limits.maxTextChars * 4 },
-  }).fields([{ name: 'files', maxCount: config.limits.maxUploadFiles }, { name: 'file', maxCount: 1 }]);
+    limits: { fileSize: maxSourceBytes, files: config.limits.maxUploadFiles + config.limits.maxCreateMedia + config.limits.maxVideosPerDeck, fields: 20, fieldSize: config.limits.maxTextChars * 4 },
+  }).fields([
+    { name: 'files', maxCount: config.limits.maxUploadFiles },
+    { name: 'file', maxCount: 1 },
+    // Ảnh/video gửi kèm (bắt buộc đưa vào bài) + ảnh bìa video do trình duyệt chụp ("poster-<vị trí>.jpg").
+    { name: 'media', maxCount: config.limits.maxCreateMedia },
+    { name: 'posters', maxCount: config.limits.maxVideosPerDeck },
+  ]);
   // Chặn sớm theo Content-Length (trước khi nhận dữ liệu) — multer chỉ giới hạn được từng tệp, không giới hạn tổng.
   // Phần dư 4 MB cho ranh giới multipart + các trường văn bản.
   const capSourceBody = (req, _res, next) => {
@@ -60,7 +66,7 @@ export function presentationRoutes({ service, config, limits }) {
     const body = pick(req.body, ['url', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title']);
     // 'file' (1 tệp) giữ cho client cũ; giao diện mới gửi 'files' (nhiều tệp).
     const files = [...(req.files?.files || []), ...(req.files?.file || [])];
-    const result = await service.create(req.user, { ...body, files }, req.ip);
+    const result = await service.create(req.user, { ...body, files, media: req.files?.media || [], posters: req.files?.posters || [] }, req.ip);
     ok(res, result, null, 202);
   });
 

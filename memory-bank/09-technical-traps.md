@@ -63,6 +63,7 @@
 | `MDataTable.vue` | Prop `hideTools: ('refresh'\|'export'\|'columns'\|'filter')[]`; hàng hiện nút thao tác cả khi `group-focus-within` | Ẩn nút không có chức năng; dùng được bằng bàn phím |
 | `iconRegistry.generated.js` | Thêm icon `video`, `player-play`, `brand-youtube`, `scissors`, `palette`, `typography` (Tabler, nối trước `export const ICON_NAMES`) | MDS chưa có icon cho video/tách nền/thiết kế; sinh lại registry sẽ mất |
 | `MUpload.vue` | Prop `block` (dropzone rộng hết khung, có icon + dòng `hint`), `sizeHint` (thay chú thích "Dung lượng tối đa…") | Form tạo bài 1 cột rộng; giới hạn theo **tổng** dung lượng nhiều tệp, không theo từng tệp |
+| `MUpload.vue` | Dropzone là `div role=button` (tabindex, Enter/Space), `<input type=file>` đặt NGOÀI dropzone, bỏ `@click.prevent` | Bản gốc: `<label @click.prevent>` bọc input → `input.click()` nổi bọt lên label bị `preventDefault` → trình duyệt huỷ hộp chọn tệp, bấm không mở cửa sổ (lỗi "không tải được tệp" ở tab Tải tệp lên) |
 
 Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA Presentation]`).
 
@@ -117,6 +118,9 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - `overflow-wrap:anywhere` cắt "T12/2026" thành "T12/202 / 6" ở tỷ lệ 4:3. Đã đổi: thẻ là container (`container-type: inline-size`), cỡ chữ `min(64px·k, 150cqi / --vl)` với `--vl` = độ dài từ dài nhất (renderer tính).
 
 ## Kiểm thử
+
+### `uploadFile` của puppeteer không phát hiện lỗi mở hộp chọn tệp
+- `elementHandle.uploadFile()` gán tệp thẳng vào input, bỏ qua bước bấm → test vẫn đạt dù người dùng bấm không mở được cửa sổ chọn tệp. Kiểm tra vùng chọn tệp bằng `page.waitForFileChooser()` + bấm thật (`tmp/ui-filechooser.mjs`).
 
 ### `node --test <thư mục>` lỗi trên macOS/Linux
 - Node 22+ coi đối số là tệp/glob: `node --test test/unit/` báo `Cannot find module '.../test/unit'`. Dùng glob trong ngoặc kép (`"test/unit/**/*.test.js"`) — Node tự mở rộng glob, chạy được cả Windows lẫn macOS.
