@@ -86,7 +86,7 @@ function pick(a) {
     </template>
 
     <MDialog v-model="libraryOpen" title="Chọn ảnh trong bài trình bày" width="720px">
-      <div class="grid max-h-[60vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
+      <div class="relative grid max-h-[60vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
         <button
           v-for="a in assets"
           :key="a.id"

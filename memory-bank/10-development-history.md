@@ -1,5 +1,19 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-06 — Sửa khoảng trống lớn dưới footer (cả trang bị cuộn)
+
+### Yêu cầu
+Màn Dàn ý (và các màn dài khác) cuộn xuống thấy footer "Hủy thay đổi / Lưu nháp / Dựng bài" trôi lên, bên dưới là mảng nền xám trống lớn.
+
+### Thay đổi
+- Nguyên nhân (`09` §Giao diện): vùng cuộn `overflow-y-auto` không `relative` → `sr-only` "Bố cục: …" và bộ đếm ký tự textarea (`absolute`) neo vào `<body>`, kéo tài liệu cao 2065px trong khi shell 900px.
+- Thêm `relative` cho mọi vùng cuộn: `DesktopShell` (gốc thêm `overflow-hidden`), `OutlinePage`/`EditorPage` desktop, `MobileShell` (gốc thêm `overflow-hidden`), `ActionSheet`, khung lỗi lưu ở `OutlinePage`/`EditorPage` mobile, `ImagePicker`, `MediaLibrary`.
+- Bản sao MDS (`MDataTable`, `MSidebar`, `MDialog`, `MDrawer`; popover `MSelect`/`MCombobox`/`MDropdownMenu` thêm class `fixed`) — **đồng bộ đúng bản vá ở skill MDS gốc** (2026-10-05), không phải vá cục bộ.
+
+### Đã kiểm chứng
+- Unit 62/62; Docker build lại. Desktop 1440×900: `/decks /public /account /create /p/:id/outline /p/:id/edit /p/:id/view /admin/users` đều `scrollHeight = 900`, 0 phần tử `absolute` thoát ra `<body>` (trước: màn Dàn ý 2065px). Mobile 390×844: outline/decks/create/edit/account đều 844/844. Dàn ý dài (3306px) cuộn trong vùng nội dung, footer sát đáy.
+- Chưa sửa `AuthLayout`/`NotFoundPage` (`min-h-screen`, trang đứng riêng ngoài shell, nội dung ngắn — không gây lỗi này).
+
 ## 2026-10-06 — Đa dạng bố cục chạy ngầm, chỉ chèn ảnh thật, tư liệu thô, sửa lỗi tải tệp
 
 ### Yêu cầu

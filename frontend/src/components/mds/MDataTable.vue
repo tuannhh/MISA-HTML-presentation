@@ -277,7 +277,7 @@ function changePageSize(e) {
     </div>
 
     <!-- Vùng bảng: scroll dọc + ngang, header sticky -->
-    <div class="min-h-0 flex-1 overflow-auto">
+    <div class="relative min-h-0 flex-1 overflow-auto">
       <table
         class="w-full table-fixed border-collapse text-[13px] leading-[18px] text-[var(--mds-text)]"
         :style="{ minWidth: minTableWidth + 'px' }"

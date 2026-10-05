@@ -48,7 +48,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
         role="dialog"
         aria-modal="true"
         :aria-label="title || 'Thao tác'"
-        class="max-h-[80dvh] overflow-y-auto rounded-t-xl bg-[var(--mds-bg)] pt-2"
+        class="relative max-h-[80dvh] overflow-y-auto rounded-t-xl bg-[var(--mds-bg)] pt-2"
         :style="{ paddingBottom: 'calc(8px + var(--mds-mobile-safe-bottom))' }"
       >
         <div class="mx-auto mb-2 h-1 w-10 rounded-full bg-[var(--mds-border)]" aria-hidden="true" />

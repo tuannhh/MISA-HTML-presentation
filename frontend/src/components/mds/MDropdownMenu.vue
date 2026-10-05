@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
       role="menu"
       tabindex="-1"
       :style="menuStyle"
-      class="z-[1000] max-h-[320px] min-w-[180px] overflow-y-auto rounded-xl border border-[var(--mds-border)] bg-[var(--mds-bg)] py-1 shadow-lg outline-none"
+      class="fixed z-[1000] max-h-[320px] min-w-[180px] overflow-y-auto rounded-xl border border-[var(--mds-border)] bg-[var(--mds-bg)] py-1 shadow-lg outline-none"
       @keydown="onMenuKeydown"
     >
       <template v-for="(item, i) in items" :key="item.key ?? i">

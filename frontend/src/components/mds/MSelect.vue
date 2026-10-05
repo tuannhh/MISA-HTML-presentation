@@ -228,7 +228,7 @@ onBeforeUnmount(() => {
         ref="popoverRef"
         role="listbox"
         :style="popoverStyle"
-        class="z-[1000] max-h-[264px] w-max max-w-[min(480px,calc(100vw-16px))] overflow-y-auto rounded-xl border border-[var(--mds-border)] bg-[var(--mds-bg)] py-1 shadow-lg"
+        class="fixed z-[1000] max-h-[264px] w-max max-w-[min(480px,calc(100vw-16px))] overflow-y-auto rounded-xl border border-[var(--mds-border)] bg-[var(--mds-bg)] py-1 shadow-lg"
       >
         <!-- Empty state trong popover -->
         <div

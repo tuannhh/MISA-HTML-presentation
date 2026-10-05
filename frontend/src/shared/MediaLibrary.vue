@@ -22,7 +22,7 @@ function pick(it) {
 <template>
   <MDialog :model-value="modelValue" :title="title" width="720px" @update:model-value="(v) => emit('update:modelValue', v)">
     <p v-if="!list.length" class="py-6 text-center text-[13px] text-[var(--mds-text-secondary)]">Chưa có mục nào.</p>
-    <div v-else class="grid max-h-[60vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
+    <div v-else class="relative grid max-h-[60vh] grid-cols-2 gap-3 overflow-y-auto sm:grid-cols-3">
       <button
         v-for="it in list"
         :key="it.key"

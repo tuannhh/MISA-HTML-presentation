@@ -118,7 +118,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Body -->
-          <div class="overflow-y-auto px-5 py-2 text-[13px] leading-[18px] text-[var(--mds-text)]">
+          <div class="relative overflow-y-auto px-5 py-2 text-[13px] leading-[18px] text-[var(--mds-text)]">
             <slot />
           </div>
 

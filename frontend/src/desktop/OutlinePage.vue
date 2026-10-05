@@ -147,7 +147,7 @@ onMounted(ol.load)
 
       <div class="flex min-h-0 flex-1">
         <!-- Dàn ý -->
-        <section class="min-w-0 flex-1 overflow-y-auto bg-[var(--mds-bg-page)]" aria-label="Dàn ý">
+        <section class="relative min-w-0 flex-1 overflow-y-auto bg-[var(--mds-bg-page)]" aria-label="Dàn ý">
           <div class="mx-auto flex w-full max-w-[860px] flex-col gap-3 p-4">
             <FormAlert v-if="deck.errorMessage" tone="danger">{{ deck.errorMessage }}</FormAlert>
             <FormAlert tone="info">
@@ -173,7 +173,7 @@ onMounted(ol.load)
 
         <!-- Thiết kế -->
         <aside class="flex w-[420px] shrink-0 flex-col border-l border-[var(--mds-border)] bg-[var(--mds-bg)]" aria-label="Thiết kế">
-          <div class="flex-1 overflow-y-auto p-4">
+          <div class="relative flex-1 overflow-y-auto p-4">
             <h2 class="mb-3 text-[16px] font-semibold leading-6">Thiết kế</h2>
             <DesignPanel v-model:footer="draft.footer" :design="draft.design" :media="media" :title="draft.title" :subtitle="slides[0]?.subtitle || ''" :ratio="deck.ratio" />
           </div>

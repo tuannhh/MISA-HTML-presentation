@@ -66,7 +66,7 @@ async function onUserMenu(key) {
 </script>
 
 <template>
-  <div class="flex h-screen min-h-0 flex-col bg-[var(--mds-bg-page)]">
+  <div class="relative flex h-screen min-h-0 flex-col overflow-hidden bg-[var(--mds-bg-page)]">
     <MHeaderBar
       variant="brand"
       app-name="MISA Presentation"
@@ -118,7 +118,7 @@ async function onUserMenu(key) {
         </div>
       </div>
 
-      <main class="min-w-0 flex-1" :class="full ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto'">
+      <main class="relative min-w-0 flex-1" :class="full ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto'">
         <slot />
       </main>
     </div>

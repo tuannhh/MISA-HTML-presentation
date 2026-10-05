@@ -34,11 +34,11 @@ async function goBack() {
 </script>
 
 <template>
-  <div class="mds-mobile-app flex h-[100dvh] flex-col bg-[var(--mds-bg-page)] text-[var(--mds-text)]">
+  <div class="mds-mobile-app relative flex h-[100dvh] flex-col overflow-hidden bg-[var(--mds-bg-page)] text-[var(--mds-text)]">
     <MMobileTopBar :title="title" :show-back="back !== null" :show-more="showMore" :back-label="back === 'host' ? 'Quay lại MISA AMIS' : 'Quay lại'" @back="goBack" @more="emit('more')">
       <template v-if="$slots.actions" #actions><slot name="actions" /></template>
     </MMobileTopBar>
-    <main class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+    <main class="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <slot />
     </main>
     <div v-if="$slots.footer" class="shrink-0 border-t border-[var(--mds-border-light)] bg-[var(--mds-bg)] px-4 py-2" :style="{ paddingBottom: nav ? undefined : 'calc(8px + var(--mds-mobile-safe-bottom))' }">

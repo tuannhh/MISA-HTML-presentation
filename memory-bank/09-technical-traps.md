@@ -66,6 +66,10 @@
 
 Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA Presentation]`).
 
+### Khoảng trống lớn dưới footer = cả trang bị cuộn
+- Vùng `overflow-y-auto` thiếu `relative` → phần tử `absolute` bên trong (`sr-only`, bộ đếm ký tự `MTextarea`) neo vào `<body>`, không bị cắt, kéo tài liệu dài ra → `<body>` cuộn, lộ nền xám dưới footer. `overflow-hidden` trên shell không chặn nếu shell không `relative`.
+- Quy tắc: shell `relative … overflow-hidden`; mọi vùng cuộn `relative min-h-0 flex-1 overflow-y-auto`; footer là anh em `shrink-0` của vùng cuộn. Kiểm: `document.documentElement.scrollHeight === innerHeight` (theo MDS `layout-patterns.md` "Khóa chiều cao khung app").
+
 ### `MButton` cứng `type="button"`
 - Truyền `type="submit"` qua fallthrough vẫn đè được, nhưng nút submit nằm ở footer sticky ngoài `<form>` → dùng thuộc tính `form="<id form>"`.
 

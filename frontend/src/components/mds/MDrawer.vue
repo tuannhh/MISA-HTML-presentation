@@ -120,7 +120,7 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Body: cuộn được, chiếm phần còn lại -->
-        <div class="flex-1 overflow-y-auto px-5 py-4 text-[13px] leading-[18px] text-[var(--mds-text)]">
+        <div class="relative flex-1 overflow-y-auto px-5 py-4 text-[13px] leading-[18px] text-[var(--mds-text)]">
           <slot />
         </div>
 

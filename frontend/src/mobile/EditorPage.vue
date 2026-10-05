@@ -269,7 +269,7 @@ onMounted(ed.load)
     </template>
 
     <template v-if="draft && deck?.status === 'ready' && deck.isOwner" #footer>
-      <FormAlert v-if="saveError" class="mb-2 max-h-[30dvh] overflow-y-auto">
+      <FormAlert v-if="saveError" class="relative mb-2 max-h-[30dvh] overflow-y-auto">
         <span class="mds-mobile-readable">{{ saveError.message }}</span>
         <ul v-if="saveDetails.length" class="mt-1 list-disc pl-4">
           <li v-for="(d, k) in saveDetails" :key="k" class="mds-mobile-readable">{{ d.message || d }}</li>
