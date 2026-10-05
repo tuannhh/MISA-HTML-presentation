@@ -1,7 +1,7 @@
 <script setup>
 // Form nội dung 1 slide (trường hiển thị theo layout). Sửa trực tiếp vào object slide của bản nháp;
 // bấm Lưu ở trang cha mới gửi lên server và render lại.
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import MInput from '@/components/mds/MInput.vue'
 import MTextarea from '@/components/mds/MTextarea.vue'
 import MSelect from '@/components/mds/MSelect.vue'
@@ -10,16 +10,36 @@ import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import FormField from './FormField.vue'
 import ImagePicker from './ImagePicker.vue'
+import VideoPicker from './VideoPicker.vue'
+import MTabs from '@/components/mds/MTabs.vue'
 import { LAYOUTS, LAYOUT_FIELDS, ICON_OPTIONS, TONE_OPTIONS, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
 
 const props = defineProps({
   slide: { type: Object, required: true },
   assets: { type: Array, default: () => [] },
   upload: { type: Function, required: true },
+  // useMedia() — có thì ô media nhận cả video (tải lên / YouTube).
+  media: { type: Object, default: null },
+  videoLibrary: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['change-layout'])
 
 const s = computed(() => props.slide)
+// Ô ảnh chỉ nhận ảnh (asset cũ không có kind = ảnh).
+const imageAssets = computed(() => props.assets.filter((a) => !a.kind || a.kind === 'image'))
+const mediaTab = ref(props.slide.video ? 'video' : 'image')
+const MEDIA_TABS = [
+  { key: 'image', label: 'Ảnh' },
+  { key: 'video', label: 'Video' },
+]
+function setImage(v) {
+  s.value.image = v
+  if (v?.asset) s.value.video = null
+}
+function setVideo(v) {
+  s.value.video = v
+  if (v) s.value.image = null
+}
 const has = (f) => LAYOUT_FIELDS[s.value.layout]?.includes(f)
 const tooLong = (v, max) => (String(v ?? '').length > max ? `Tối đa ${max} ký tự (hiện ${String(v).length})` : '')
 const layoutOptions = LAYOUTS.map((l) => ({ label: l.label, value: l.value }))
@@ -81,7 +101,7 @@ function setGalleryImage(i, v) {
     <FormField v-if="has('tags')" label="Nhãn (phân tách bằng dấu phẩy)" :hint="`Tối đa ${L.tags} nhãn`">
       <MInput v-model="tagsText" placeholder="AI First, ERP, Dữ liệu" />
     </FormField>
-    <FormField v-if="has('icon') && !s.image?.asset" label="Biểu tượng trung tâm">
+    <FormField v-if="has('icon') && !s.image?.asset && !s.video" label="Biểu tượng trung tâm">
       <MCombobox v-model="s.icon" :options="ICON_OPTIONS" />
     </FormField>
 
@@ -177,14 +197,18 @@ function setGalleryImage(i, v) {
       <MButton v-if="s.columns.length < L.columns" variant="outline" @click="s.columns.push(emptyColumn())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm cột</MButton>
     </section>
 
-    <!-- Ảnh -->
-    <FormField v-if="has('image')" label="Ảnh" group>
-      <ImagePicker :model-value="s.image" :assets="assets" :upload="upload" :with-caption="s.layout === 'image'" @update:model-value="(v) => (s.image = v)" />
+    <!-- Ảnh hoặc video (1 ô media) -->
+    <FormField v-if="has('image')" :label="media ? 'Ảnh / video' : 'Ảnh'" group :hint="media ? 'Video hiển thị ảnh bìa 16:9; khi trình chiếu bấm vào sẽ tự phát toàn màn hình' : ''">
+      <div class="flex min-w-0 flex-col gap-2">
+        <MTabs v-if="media" v-model="mediaTab" :tabs="MEDIA_TABS" variant="pill" />
+        <VideoPicker v-if="media && mediaTab === 'video'" :model-value="s.video" :media="media" :library="videoLibrary" :with-caption="s.layout === 'image'" @update:model-value="setVideo" />
+        <ImagePicker v-else :model-value="s.image" :assets="imageAssets" :upload="upload" :with-caption="s.layout === 'image'" @update:model-value="setImage" />
+      </div>
     </FormField>
     <section v-if="has('images')" class="flex flex-col gap-3">
       <h3 class="text-[14px] font-semibold">Ảnh ({{ s.images.length }}/{{ L.images }})</h3>
       <div v-for="(im, i) in s.images" :key="i" class="rounded-lg border border-[var(--mds-border)] p-3">
-        <ImagePicker :model-value="im" :assets="assets" :upload="upload" with-caption @update:model-value="(v) => setGalleryImage(i, v)" />
+        <ImagePicker :model-value="im" :assets="imageAssets" :upload="upload" with-caption @update:model-value="(v) => setGalleryImage(i, v)" />
       </div>
       <MButton v-if="s.images.length < L.images" variant="outline" @click="s.images.push({ asset: null, alt: '', caption: '', fit: 'cover' })"><template #icon><MIcon name="plus" :size="16" /></template>Thêm ô ảnh</MButton>
     </section>

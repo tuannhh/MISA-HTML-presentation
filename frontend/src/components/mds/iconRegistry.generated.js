@@ -2455,6 +2455,199 @@ export const ICON_REGISTRY = Object.freeze({
         "children": []
       }
     ]
+  },
+  // [MISA Presentation] Bổ sung icon Tabler Icons (MIT, stroke 1.5) cho video/YouTube/thiết kế bài trình bày.
+  "video": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M15 10l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -1.447 .894l-4.553 -2.276v-4z"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M3 8a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2z"
+        },
+        "children": []
+      }
+    ]
+  },
+  "player-play": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M7 4v16l13 -8z"
+        },
+        "children": []
+      }
+    ]
+  },
+  "brand-youtube": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M2 8a4 4 0 0 1 4 -4h12a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-12a4 4 0 0 1 -4 -4v-8z"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M10 9l5 3l-5 3z"
+        },
+        "children": []
+      }
+    ]
+  },
+  "scissors": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M3 7a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M3 17a3 3 0 1 0 6 0a3 3 0 1 0 -6 0"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M8.6 8.6l10.4 10.4"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M8.6 15.4l10.4 -10.4"
+        },
+        "children": []
+      }
+    ]
+  },
+  "palette": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M12 21a9 9 0 0 1 0 -18c4.97 0 9 3.582 9 8c0 1.06 -.474 2.078 -1.318 2.828c-.844 .75 -1.989 1.172 -3.182 1.172h-2.5a2 2 0 0 0 -1 3.75a1.3 1.3 0 0 1 -1 2.25"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M7.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M11.5 7.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M15.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"
+        },
+        "children": []
+      }
+    ]
+  },
+  "typography": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M4 20l3 0"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M14 20l7 0"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M6.9 15l6.9 0"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M10.2 6.3l5.8 13.7"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M5 20l6 -16l2 0l7 16"
+        },
+        "children": []
+      }
+    ]
   }
 })
 

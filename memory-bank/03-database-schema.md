@@ -29,11 +29,13 @@ Mỗi người dùng đồng thời là **một tenant** (`presentations.tenant_
 | title | VARCHAR(200) | NOT NULL | Tên bài (hiển thị danh sách) |
 | ratio | ENUM('16:9','4:3','2:1','3:1') | default '16:9' | Đổi được bất kỳ lúc nào (không cần render lại spec) |
 | visibility | ENUM('private','public') | default 'private' | |
-| status | ENUM('generating','ready','failed') | | `generating` quá hạn khi khởi động lại → `failed` (`failStaleGenerating`) |
+| status | ENUM('outlining','outline','generating','ready','failed') | | `outlining` AI lập dàn ý → `outline` chờ người dùng duyệt → `generating` AI dựng bài → `ready`. Dựng lỗi → quay về `outline` (kèm `error_message`). Khởi động lại: `generating` còn dàn ý → `outline`; `generating`/`outlining` không có dàn ý → `failed` (`failStaleGenerating`) |
 | source_kind | ENUM('file','url','text','copy') | | `copy` = bản nhân bản |
 | source_label | VARCHAR(300) | NULL | Tên tệp/URL nguồn (không lưu nội dung nguồn) |
 | instructions | VARCHAR(2000) | NULL | Yêu cầu thêm cho AI |
-| spec | JSON | NULL | **Đặc tả bài trình bày — nguồn sự thật duy nhất** để render |
+| spec | JSON | NULL | **Đặc tả bài trình bày — nguồn sự thật duy nhất** để render (NULL khi chưa dựng) |
+| outline | JSON | NULL | Dàn ý: nội dung từng trang (`points[]`), media (`images[]`/`video`), `design` (theme, palette, background, font, logo). Giữ lại sau khi dựng; tuỳ chọn tạo bài (`tone`, `autoSlides`, `slideCount`) do server giữ |
+| outline_version | INT UNSIGNED | default 0 | Khoá lạc quan riêng cho dàn ý; `PUT /outline`, `POST /build` phải gửi đúng version |
 | spec_version | INT UNSIGNED | default 0 | Khoá lạc quan: lưu với version cũ → 409 |
 | slide_count | SMALLINT UNSIGNED | | |
 | thumbnail_asset_id | CHAR(36) | NULL | Ảnh bìa (asset kind `thumbnail`) |
@@ -46,11 +48,11 @@ Chỉ mục: `(tenant_id, updated_at)` cho "Bài của tôi"; `(visibility, stat
 
 | Cột | Kiểu | Ràng buộc | Ý nghĩa |
 |---|---|---|---|
-| id | CHAR(36) | PK | Được tham chiếu trong spec (`image.asset`) |
+| id | CHAR(36) | PK | Được tham chiếu trong spec/dàn ý (`image.asset`, `video.asset`, `video.poster`, `logo.asset`, `logo.cutout`) |
 | tenant_id | CHAR(36) | FK → users ON DELETE CASCADE | |
 | presentation_id | CHAR(36) | FK → presentations ON DELETE CASCADE | Ảnh thuộc đúng 1 bài |
-| kind | ENUM('image','thumbnail') | | |
-| mime, bytes, width, height | | | Luôn `image/webp` sau chuẩn hoá |
+| kind | ENUM('image','thumbnail','video','logo','poster') | | `logo` gồm cả bản tách nền; `poster` = ảnh bìa video tải lên / YouTube |
+| mime, bytes, width, height | | | Ảnh luôn `image/webp` sau chuẩn hoá; video `video/mp4`·`quicktime`·`webm` (width/height NULL) |
 | storage_key | VARCHAR(255) | | Đường dẫn tương đối do server sinh, không lấy từ tên client |
 | original_name | VARCHAR(255) | NULL | Chỉ để hiển thị |
 
@@ -76,3 +78,4 @@ users 1 ──< presentations 1 ──< assets
 ## Lịch sử thay đổi lược đồ đáng chú ý
 
 - 2026-10-05: baseline đầu tiên.
+- 2026-10-05 (`changelog_database_20261005_170000.sql`, idempotent): trạng thái `outlining`/`outline`, cột `outline` + `outline_version`, asset kind `video`/`logo`/`poster`. Baseline `schema.sql` đã gồm sẵn.

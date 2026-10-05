@@ -70,7 +70,7 @@ async function act(kind) {
     </div>
     <div v-else class="flex min-h-full flex-col justify-center bg-[#05070F]">
       <div class="relative w-full" :style="{ aspectRatio: ratioCss(deck.ratio) }">
-        <iframe ref="frame" :src="src" title="Trình chiếu" sandbox="allow-scripts allow-popups" allow="fullscreen" class="absolute inset-0 h-full w-full border-0" />
+        <iframe ref="frame" data-deck-frame :src="src" title="Trình chiếu" sandbox="allow-scripts allow-popups" allow="fullscreen" class="absolute inset-0 h-full w-full border-0" />
       </div>
       <p class="px-4 py-3 text-center text-[13px] text-[#C8D3EC]">{{ deck.isOwner ? 'Bài của bạn' : deck.authorName }} · Vuốt ngang hoặc dùng nút bên dưới để chuyển trang</p>
     </div>

@@ -34,6 +34,9 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `MAX_SOURCE_CHARS` | | 400000 | Tổng ký tự tư liệu (văn bản + bản chuyển thể) gửi bước dựng bài |
 | `MAX_TEXT_CHARS` | | 200000 | |
 | `MAX_IMAGES_PER_DECK` | | 60 | Ảnh rút từ tài liệu nguồn |
+| `MAX_VIDEO_MB` / `MAX_VIDEOS_PER_DECK` | | 150 / 10 | Video tải lên chèn vào slide (MP4/MOV/WebM) — dung lượng 1 tệp / số video mỗi bài |
+| `EXPORT_VIDEO_MB` | | 200 | HTML xuất nhúng video tải lên (base64) khi **tổng** ≤ ngưỡng; vượt → khung ảnh bìa không phát. 0 = không nhúng |
+| `ORT_DISABLE_TELEMETRY` | | `1` (Dockerfile) | onnxruntime-node (tách nền logo) bản Linux gửi telemetry về Microsoft → luôn tắt. `cutoutService` cũng tự đặt nếu thiếu |
 | `GENERATION_CONCURRENCY` / `RENDER_CONCURRENCY` | | 2 / 2 | Song song AI / Chromium |
 | `CHROME_PATH` | | (trống; Docker: `/usr/bin/chromium`) | Dev: trỏ tới Chrome/Edge trên máy |
 | `CHROME_NO_SANDBOX` | | false (`.env.example` Docker đặt true) | Xem `09` |
@@ -61,8 +64,11 @@ docker compose exec app node scripts/create-admin.js admin@misa.com.vn "Quản t
 ```
 
 - Image `Dockerfile`: `node:24-bookworm-slim` + `chromium` + font Noto/DejaVu + `tini`; build giao diện trong stage build; chạy user `node`; `shm_size: 512mb` cho Chromium.
+- onnxruntime-node đóng gói binary mọi nền tảng (~290 MB): Dockerfile xoá hết trừ `linux/<kiến trúc build>` (còn ~25 MB). Build image cho kiến trúc khác (vd. máy Mac arm64 → server amd64) phải `docker buildx build --platform linux/amd64` để `node -p process.arch` ra đúng kiến trúc đích.
+- `models/u2netp.onnx` (4.6 MB) được COPY vào image; thiếu tệp → tách nền tự lùi về theo màu nền.
 - MySQL 8.4: baseline `startup/database/schema.sql` được mount vào `docker-entrypoint-initdb.d` → **chỉ chạy ở lần tạo volume đầu tiên**. Thay đổi lược đồ sau đó: viết changelog trong `startup/database/changelogs/` và chạy thủ công.
-- App lúc khởi động: kiểm tra đủ bảng (`verifyTables`), đánh `failed` các bài `generating` dở dang, dọn phiên hết hạn định kỳ.
+- App lúc khởi động: kiểm tra đủ bảng (`verifyTables`), xử lý bài dở dang (`generating` còn dàn ý → về `outline`; `outlining`/`generating` không dàn ý → `failed`), dọn phiên hết hạn định kỳ.
+- **Nâng cấp từ bản trước 2026-10-05 (volume MySQL đã có):** chạy changelog `startup/database/changelogs/changelog_database_20261005_170000.sql` (idempotent) **trước** khi khởi động app mới — `docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' < startup/database/changelogs/changelog_database_20261005_170000.sql`.
 - Volume: `mysql-data` (DB), `app-data` → `/data` (tệp ảnh, thumbnail, tạm).
 - Health: `GET /api/health` (liveness), `GET /api/health/ready` (DB + hàng đợi).
 - Cổng: máy dev hiện tại dùng `APP_PORT=8088` vì 8080 đã bị project khác chiếm.
@@ -77,7 +83,7 @@ PROXY_PORT=80 docker compose --profile proxy up -d      # Nginx :PROXY_PORT → 
 
 | Thiết lập | Giá trị | Vì sao |
 |---|---|---|
-| `client_max_body_size` | `310m` (= `MAX_UPLOAD_MB` + 10) | Mặc định Nginx 1 MB → tệp tư liệu bị chặn 413 trước khi tới app. Đổi `MAX_UPLOAD_MB` phải đổi số này |
+| `client_max_body_size` | `310m` (= `MAX_UPLOAD_MB` + 10) | Mặc định Nginx 1 MB → tệp tư liệu bị chặn 413 trước khi tới app. Đổi `MAX_UPLOAD_MB` (hoặc `MAX_VIDEO_MB` lớn hơn) phải đổi số này |
 | `proxy_request_buffering off` | | Chuyển luồng upload thẳng tới app: app chặn sớm theo Content-Length, % tải lên trên giao diện đúng thực tế, Nginx không ghi tạm 300 MB ra đĩa |
 | `client_body_timeout` / `proxy_read_timeout` / `proxy_send_timeout` | 300s / 600s / 600s | Mạng chậm khi tải 300 MB; xuất PDF bài dài |
 | `proxy_set_header Host $http_host` | giữ cả cổng | App so Origin với `protocol://host` (CSRF) và dựng CSP trang xem trước |

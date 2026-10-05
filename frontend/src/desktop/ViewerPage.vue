@@ -100,7 +100,9 @@ function fullscreen() {
       </div>
       <div class="flex min-h-0 flex-1 items-center justify-center bg-[#05070F] p-4">
         <div class="relative max-h-full w-full" :style="{ aspectRatio: ratioCss(deck.ratio), maxWidth: `calc((100vh - 140px) * ${deck.ratio.split(':')[0] / deck.ratio.split(':')[1]})` }">
-          <iframe ref="frame" :src="src" title="Trình chiếu" sandbox="allow-scripts allow-popups" allow="fullscreen" class="absolute inset-0 h-full w-full border-0" />
+          <iframe
+            data-deck-frame
+            ref="frame" :src="src" title="Trình chiếu" sandbox="allow-scripts allow-popups" allow="fullscreen" class="absolute inset-0 h-full w-full border-0" />
         </div>
       </div>
     </template>

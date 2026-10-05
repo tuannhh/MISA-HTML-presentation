@@ -7,6 +7,7 @@ import { fitPieces } from '../../src/services/ingestService.js';
 import { capSlides, themeForTone } from '../../src/services/specService.js';
 import { deckResponseSchema } from '../../src/services/geminiService.js';
 import { THEMES, TONE_THEMES } from '../../shared/deck/render.js';
+import { CSS_THEMES, themeVarsCss } from '../../shared/deck/palette.js';
 
 const head = (ascii, at = 0, len = 16) => {
   const b = Buffer.alloc(len);
@@ -57,14 +58,18 @@ test('capSlides: cắt về trần, giữ trang kết; không đụng khi đủ'
   assert.equal(capSlides({ slides: slides.slice(0, 7) }, 7).slides.length, 7);
 });
 
-test('tông nền: AI chọn lệch tông → về theme mặc định của tông; mọi theme có CSS', () => {
+test('tông nền: AI chọn lệch tông → về theme mặc định của tông; theme viết tay có CSS, theme sinh tự động có bảng màu', () => {
   assert.equal(themeForTone('midnight', 'light', TONE_THEMES), 'paper');
   assert.equal(themeForTone('ember', 'light', TONE_THEMES), 'ember');
   assert.equal(themeForTone('paper', 'dark', TONE_THEMES), 'midnight');
   const css = readFileSync(new URL('../../shared/deck/theme.css', import.meta.url), 'utf8');
   for (const t of [...TONE_THEMES.dark, ...TONE_THEMES.light]) {
     assert.ok(THEMES.includes(t));
-    if (t !== 'midnight') assert.ok(css.includes(`[data-deck-theme="${t}"]`), `thiếu CSS cho ${t}`);
+    if (CSS_THEMES.includes(t)) {
+      if (t !== 'midnight') assert.ok(css.includes(`[data-deck-theme="${t}"]`), `thiếu CSS cho ${t}`);
+    } else {
+      assert.match(themeVarsCss(t), new RegExp(`\\[data-deck-theme="${t}"\\]\\{.*--bg1:`), `thiếu biến màu cho ${t}`);
+    }
   }
 });
 

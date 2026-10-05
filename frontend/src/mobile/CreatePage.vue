@@ -1,11 +1,12 @@
 <script setup>
-// Tạo bài (mobile): form một cột, footer sticky Hủy | Tạo bằng AI.
+// Tạo bài (mobile): form một cột, footer sticky Hủy | Lập dàn ý bằng AI.
+// AI lập dàn ý chạy nền → chuyển sang bước duyệt dàn ý để theo dõi tiến trình, sửa nội dung, gắn media, chọn thiết kế.
 import { useRouter } from 'vue-router'
 import MobileShell from './MobileShell.vue'
 import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
-import TonePicker from '@/shared/TonePicker.vue'
+import ThemePicker from '@/shared/ThemePicker.vue'
 import MRadioGroup from '@/components/mds/MRadioGroup.vue'
 import MTabs from '@/components/mds/MTabs.vue'
 import MUpload from '@/components/mds/MUpload.vue'
@@ -22,13 +23,14 @@ const MODES = SOURCE_MODES.map((m) => ({ ...m, label: SHORT[m.key] }))
 
 async function onSubmit() {
   const res = await submit()
-  if (res) router.push(`/p/${res.id}/edit`)
+  if (res) router.push(`/p/${res.id}/outline`)
 }
 </script>
 
 <template>
   <MobileShell title="Tạo bài trình bày" back="/decks">
     <form id="create-form" class="flex flex-col gap-4 bg-[var(--mds-bg)] p-4" novalidate @submit.prevent="onSubmit">
+      <p class="text-[14px] leading-5 text-[var(--mds-text-secondary)]">AI đọc nội dung nguồn và lập dàn ý từng trang. Bạn duyệt lại nội dung, gắn ảnh/video, chọn màu – nền – phông – logo, rồi AI mới dựng bài có hiệu ứng chuyển động.</p>
       <FormAlert v-if="submitError">{{ submitError.message }}</FormAlert>
       <h2 class="text-[16px] font-semibold leading-6">Nội dung nguồn</h2>
       <MTabs v-model="form.mode" :tabs="MODES" variant="pill" />
@@ -42,14 +44,14 @@ async function onSubmit() {
           :disabled="submitting"
           :max-size-m-b="MAX_UPLOAD_MB"
           :size-hint="`Tổng ≤ ${MAX_UPLOAD_MB}MB`"
-          hint="Tài liệu, PDF scan, ảnh, ghi âm"
+          hint="Tài liệu, bảng tính, PDF scan, ảnh, ghi âm"
           label="Tư liệu nguồn"
           @select-files="onSelectFiles"
           @oversized="onOversized"
           @remove="removeFile"
         />
         <p v-if="form.files.length" class="text-[13px] text-[var(--mds-text-secondary)]">{{ form.files.length }} tệp · {{ formatMb(totalBytes) }} / {{ MAX_UPLOAD_MB }} MB</p>
-        <p class="text-[13px] text-[var(--mds-text-secondary)]">.pptx, .docx, PDF (cả bản scan), .txt, .md, ảnh hoặc ghi âm (mp3, m4a, wav…) — tối đa {{ MAX_UPLOAD_FILES }} tệp.</p>
+        <p class="text-[13px] text-[var(--mds-text-secondary)]">.pptx, .docx, .xlsx, .csv, PDF (cả bản scan), .txt, .md, ảnh (cả HEIC) hoặc ghi âm (mp3, m4a, wav…) — tối đa {{ MAX_UPLOAD_FILES }} tệp. Tư liệu thô cũng được — AI tự phân tích và thiết kế lại.</p>
         <p v-if="errors.file" class="text-[13px] text-[var(--mds-danger)]">{{ errors.file }}</p>
       </div>
       <FormField v-else-if="form.mode === 'url'" label="Đường link tài liệu" required hint="Google Slides/Docs/Drive đã chia sẻ công khai hoặc trang web.">
@@ -64,8 +66,9 @@ async function onSubmit() {
       <FormField label="Tỷ lệ khung hình" group>
         <RatioPicker v-model="form.ratio" compact name="ratio-m" />
       </FormField>
-      <FormField label="Tông màu nền" group>
-        <TonePicker v-model="form.tone" name="tone-m" compact />
+      <FormField label="Tông màu" group hint="Đổi lại được ở bước duyệt dàn ý.">
+        <ThemePicker v-model:tone="form.tone" v-model:theme="form.theme" v-model:primary="form.primary" v-model:secondary="form.secondary" name="theme-m" compact allow-auto />
+        <p v-if="errors.theme" class="text-[13px] text-[var(--mds-danger)]">{{ errors.theme }}</p>
       </FormField>
       <FormField label="Số trang mong muốn" group :hint="form.slideMode === 'auto' ? `AI tự chọn, tối đa ${AUTO_MAX_SLIDES} trang` : '3–40 trang'">
         <div class="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2">
@@ -85,7 +88,7 @@ async function onSubmit() {
     <template #footer>
       <div class="flex gap-2">
         <MButton variant="outline" class="flex-1" @click="router.push('/decks')">Hủy</MButton>
-        <MButton variant="primary" type="submit" form="create-form" class="flex-1" :loading="submitting">Tạo bằng AI</MButton>
+        <MButton variant="primary" type="submit" form="create-form" class="flex-1" :loading="submitting">Lập dàn ý bằng AI</MButton>
       </div>
       <p v-if="progress !== null" class="mt-2 text-center text-[13px] text-[var(--mds-text-secondary)]" role="status">
         {{ progress < 100 ? `Đang tải tư liệu lên… ${progress}%` : 'Đã tải lên, đang khởi tạo…' }}

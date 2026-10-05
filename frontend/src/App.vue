@@ -3,6 +3,7 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import MToast from '@/components/mds/MToast.vue';
+import VideoOverlay from '@/shared/VideoOverlay.vue';
 import { surface } from '@/lib/surface.js';
 
 const route = useRoute();
@@ -14,4 +15,5 @@ const page = computed(() => route.meta?.[surface.value] || null);
     <component :is="page" v-if="page" :key="`${surface}:${r.path}`" />
   </RouterView>
   <MToast />
+  <VideoOverlay />
 </template>

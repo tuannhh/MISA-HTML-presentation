@@ -90,6 +90,11 @@ export function loadConfig() {
       maxImageUploadMb: int('MAX_IMAGE_UPLOAD_MB', 15, { min: 1, max: 50 }),
       maxTextChars: int('MAX_TEXT_CHARS', 200000, { min: 1000, max: 2000000 }),
       maxImagesPerDeck: int('MAX_IMAGES_PER_DECK', 60, { min: 0, max: 300 }),
+      // Video tải lên gắn vào slide (mỗi tệp) và số video tối đa/bài.
+      maxVideoMb: int('MAX_VIDEO_MB', 150, { min: 1, max: 2000 }),
+      maxVideosPerDeck: int('MAX_VIDEOS_PER_DECK', 10, { min: 0, max: 50 }),
+      // Tệp HTML xuất ra nhúng luôn video tải lên khi tổng dung lượng video không vượt mức này (vượt → chỉ có ảnh bìa).
+      exportVideoMb: int('EXPORT_VIDEO_MB', 200, { min: 0, max: 2000 }),
       generationConcurrency: int('GENERATION_CONCURRENCY', 2, { min: 1, max: 8 }),
       renderConcurrency: int('RENDER_CONCURRENCY', 2, { min: 1, max: 8 }),
     }),

@@ -7,6 +7,7 @@ import MInput from '@/components/mds/MInput.vue'
 import MSelect from '@/components/mds/MSelect.vue'
 import MDialog from '@/components/mds/MDialog.vue'
 import { useToast } from '@/components/mds/toast.js'
+import { IMAGE_ACCEPT } from '@/lib/fileKinds.js'
 
 const props = defineProps({
   modelValue: { type: Object, default: null }, // { asset, alt, caption, fit } | null
@@ -77,7 +78,7 @@ function pick(a) {
         Bỏ ảnh
       </MButton>
     </div>
-    <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="onFile" />
+    <input ref="fileInput" type="file" :accept="IMAGE_ACCEPT" class="hidden" @change="onFile" />
     <template v-if="current?.asset">
       <MSelect :model-value="current.fit || 'cover'" :options="FIT" @update:model-value="(v) => set({ fit: v })" />
       <MInput :model-value="current.alt || ''" placeholder="Mô tả ảnh (cho người dùng trình đọc màn hình)" @update:model-value="(v) => set({ alt: v })" />

@@ -5,7 +5,7 @@
 // An toàn: nhận diện loại tệp bằng magic bytes; giới hạn zip-bomb; mọi link đi qua safeFetch (chặn SSRF).
 import { open, readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
-import { sniff, IMAGE_TYPES, AUDIO_TYPES, AUDIO_MIME } from '../lib/fileType.js';
+import { sniff, decodeText, IMAGE_TYPES, AUDIO_TYPES, AUDIO_MIME } from '../lib/fileType.js';
 import { safeFetch, assertPublicUrl } from '../lib/safeFetch.js';
 import { badRequest, tooLarge, unprocessable, HttpError } from '../lib/httpError.js';
 
@@ -14,8 +14,18 @@ const MAX_ZIP_UNCOMPRESSED = 400 * 1048576;
 const MEDIA_RE = /\.(png|jpe?g|gif|webp)$/i;
 const SUPPORTED_KINDS = new Set(['pdf', 'zip', 'text', ...IMAGE_TYPES, ...AUDIO_TYPES]);
 
-const unsupported = (name) =>
-  new HttpError(415, 'UNSUPPORTED_FILE', `${name ? `Tệp "${name}": định dạng` : 'Định dạng'} chưa hỗ trợ. Dùng PPTX, DOCX, PDF, TXT/MD, ảnh PNG/JPEG/WebP hoặc ghi âm MP3/M4A/WAV/OGG/FLAC/AAC/WebM.`);
+const SUPPORTED_HINT = 'Dùng PPTX, DOCX, XLSX, PDF, CSV, TXT/MD, ảnh PNG/JPEG/WebP hoặc ghi âm MP3/M4A/WAV/OGG/FLAC/AAC/WebM.';
+// Loại tệp nhận ra được nhưng chưa đọc được → hướng dẫn cụ thể cách chuyển đổi.
+const KIND_HINT = {
+  ole: 'là định dạng Office đời cũ (.doc/.xls/.ppt). Mở bằng Word/Excel/PowerPoint, chọn Lưu thành .docx/.xlsx/.pptx rồi tải lại.',
+  heic: 'là ảnh HEIC (iPhone) chưa đọc được. Hãy chuyển sang JPEG/PNG (trên Mac: mở bằng Xem trước → Xuất → JPEG) rồi tải lại.',
+};
+const unsupported = (name, kind) =>
+  new HttpError(
+    415,
+    'UNSUPPORTED_FILE',
+    KIND_HINT[kind] ? `${name ? `Tệp "${name}"` : 'Tệp'} ${KIND_HINT[kind]}` : `${name ? `Tệp "${name}": định dạng` : 'Định dạng'} chưa hỗ trợ. ${SUPPORTED_HINT}`,
+  );
 
 function decodeXml(s) {
   return s
@@ -86,17 +96,153 @@ async function readPptx(zip) {
   return { text: parts.join('\n\n'), images };
 }
 
+// Bảng → hàng markdown "| a | b |" (giữ quan hệ hàng–cột của số liệu; tách từng đoạn thì AI mất cấu trúc bảng).
+const cell = (v) => String(v).replace(/\|/g, '/').replace(/\s+/g, ' ').trim().slice(0, 200);
+const mdRow = (cells) => `| ${cells.map(cell).join(' | ')} |`;
+
+function docxTable(xml) {
+  const rows = [];
+  for (const tr of xml.match(/<w:tr[\s>][\s\S]*?<\/w:tr>/g) || []) {
+    const cells = (tr.match(/<w:tc[\s>][\s\S]*?<\/w:tc>/g) || []).map((tc) => paragraphs(tc, 'w:p', 'w:t').map((p) => p.text).join(' / '));
+    if (cells.some(Boolean)) rows.push(mdRow(cells));
+  }
+  return rows.join('\n');
+}
+
 async function readDocx(zip) {
   const xml = await zip.file('word/document.xml').async('string');
-  const lines = paragraphs(xml, 'w:p', 'w:t').map((p) => {
+  const lines = [];
+  for (const block of xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>|<w:p[\s>][\s\S]*?<\/w:p>/g) || []) {
+    if (block.startsWith('<w:tbl>')) {
+      const t = docxTable(block);
+      if (t) lines.push(t);
+      continue;
+    }
+    const p = paragraphs(block, 'w:p', 'w:t')[0];
+    if (!p) continue;
     const style = (p.xml.match(/<w:pStyle w:val="([^"]+)"/) || [])[1] || '';
     const level = /heading\s*(\d)|^(?:Heading|Title)(\d?)$/i.exec(style);
-    if (/^title$/i.test(style)) return `# ${p.text}`;
-    if (level) return `${'#'.repeat(Math.min(4, Number(level[1] || level[2] || 1) + 1))} ${p.text}`;
-    return p.text;
-  });
+    if (/^title$/i.test(style)) lines.push(`# ${p.text}`);
+    else if (level) lines.push(`${'#'.repeat(Math.min(4, Number(level[1] || level[2] || 1) + 1))} ${p.text}`);
+    else lines.push(p.text);
+  }
   const images = [];
   for (const name of Object.keys(zip.files).filter((n) => /^word\/media\//.test(n) && MEDIA_RE.test(n)).sort()) {
+    images.push({ name: name.split('/').pop(), hint: 'ảnh trong tài liệu gốc', buffer: await zip.file(name).async('nodebuffer') });
+  }
+  return { text: lines.join('\n'), images };
+}
+
+/* ---------------- bảng tính (dữ liệu thô) ---------------- */
+const XLSX_MAX_ROWS = 400;
+const XLSX_MAX_COLS = 40;
+const attr = (tag, name) => decodeXml((tag.match(new RegExp(`\\s${name}="([^"]*)"`)) || [])[1] || '');
+const colIndex = (ref) => [...String(ref).replace(/\d+$/, '')].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+
+// Kiểu hiển thị của ô theo định dạng số (styles.xml): ngày → dd/mm/yyyy, phần trăm → 12,5% (AI đọc số thô dễ hiểu sai).
+function numberFormats(stylesXml) {
+  if (!stylesXml) return [];
+  const custom = new Map([...stylesXml.matchAll(/<numFmt\b[^>]*>/g)].map((m) => [Number(attr(m[0], 'numFmtId')), attr(m[0], 'formatCode')]));
+  const xfs = (stylesXml.match(/<cellXfs[\s\S]*?<\/cellXfs>/) || [''])[0];
+  return [...xfs.matchAll(/<xf\b[^>]*>/g)].map((m) => {
+    const id = Number(attr(m[0], 'numFmtId'));
+    const code = (custom.get(id) || '').replace(/"[^"]*"|\[[^\]]*\]|\\./g, '');
+    if (id === 9 || id === 10 || code.includes('%')) return 'pct';
+    if ((id >= 14 && id <= 22) || (id >= 45 && id <= 47) || /[dmyh]/i.test(code)) return 'date';
+    return '';
+  });
+}
+
+function formatCell(raw, kind) {
+  const n = Number(raw);
+  if (raw === '' || !Number.isFinite(n)) return raw;
+  if (kind === 'pct') return `${Number((n * 100).toPrecision(10)).toLocaleString('vi-VN')}%`;
+  if (kind === 'date' && n > 0 && n < 2958466) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(n * 86400000));
+    const p2 = (v) => String(v).padStart(2, '0');
+    const time = n % 1 ? ` ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}` : '';
+    return n < 1 ? time.trim() : `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}${time}`;
+  }
+  return String(Number(n.toPrecision(12)));
+}
+
+function tableText(title, rows) {
+  const width = Math.min(XLSX_MAX_COLS, Math.max(0, ...rows.map((r) => r.length)));
+  const kept = rows.slice(0, XLSX_MAX_ROWS).map((r) => mdRow(Array.from({ length: width }, (_, i) => r[i] ?? '')));
+  const more = rows.length > XLSX_MAX_ROWS ? `\n…(còn ${rows.length - XLSX_MAX_ROWS} dòng, đã lược)` : '';
+  return `## ${title} (${rows.length} dòng × ${width} cột)\n${kept.join('\n')}${more}`;
+}
+
+async function readXlsx(zip) {
+  const strings = [];
+  const ss = await zip.file('xl/sharedStrings.xml')?.async('string');
+  for (const si of ss?.match(/<si>[\s\S]*?<\/si>/g) || []) strings.push(decodeXml([...si.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map((m) => m[1]).join('')));
+  const formats = numberFormats(await zip.file('xl/styles.xml')?.async('string'));
+  const wb = await zip.file('xl/workbook.xml').async('string');
+  const rels = (await zip.file('xl/_rels/workbook.xml.rels')?.async('string')) || '';
+  const target = new Map([...rels.matchAll(/<Relationship\b[^>]*>/g)].map((m) => [attr(m[0], 'Id'), attr(m[0], 'Target')]));
+  const parts = [];
+  for (const m of wb.matchAll(/<sheet\b[^>]*>/g)) {
+    const t = target.get(attr(m[0], 'r:id')) || '';
+    const path = t.startsWith('/') ? t.slice(1) : `xl/${t.replace(/^\.\//, '')}`;
+    const xml = await zip.file(path)?.async('string');
+    if (!xml) continue;
+    const rows = [];
+    for (const row of xml.match(/<row\b[^>]*>[\s\S]*?<\/row>/g) || []) {
+      if (rows.length > XLSX_MAX_ROWS) {
+        rows.push([]);
+        continue;
+      }
+      const cells = [];
+      for (const c of row.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const tag = `<c${c[1]}>`;
+        const ref = attr(tag, 'r');
+        const col = ref ? colIndex(ref) : cells.length; // vài phần mềm bỏ thuộc tính r → ô liền kề
+        const type = attr(tag, 't');
+        const inner = c[2] || '';
+        const v = decodeXml((inner.match(/<v>([\s\S]*?)<\/v>/) || [])[1] || '');
+        let val;
+        if (type === 's') val = strings[Number(v)] ?? '';
+        else if (type === 'inlineStr') val = decodeXml([...inner.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map((x) => x[1]).join(''));
+        else if (type === 'b') val = v === '1' ? 'TRUE' : 'FALSE';
+        else if (type === 'str' || type === 'e') val = v;
+        else val = formatCell(v, formats[Number(attr(tag, 's')) || 0]);
+        if (col >= 0 && col < XLSX_MAX_COLS) cells[col] = String(val).trim();
+      }
+      if (cells.some(Boolean)) rows.push(Array.from(cells, (x) => x ?? ''));
+    }
+    if (rows.length) parts.push(tableText(`Bảng tính "${attr(m[0], 'name')}"${attr(m[0], 'state') === 'hidden' ? ' (ẩn)' : ''}`, rows));
+  }
+  return { text: parts.join('\n\n'), images: [] };
+}
+
+// OpenDocument (LibreOffice: .odt/.odp/.ods): chữ nằm trong content.xml; bảng tính → bảng markdown.
+async function readOdf(zip) {
+  const xml = (await zip.file('content.xml')?.async('string')) || '';
+  const text = (frag) => decodeXml(frag.replace(/<text:(?:s|tab|line-break)\b[^>]*\/>/g, ' ').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+  const mime = ((await zip.file('mimetype')?.async('string')) || '').trim();
+  if (mime.endsWith('spreadsheet')) {
+    const parts = [];
+    for (const tb of xml.match(/<table:table\b[\s\S]*?<\/table:table>/g) || []) {
+      const rows = [];
+      for (const tr of tb.match(/<table:table-row\b[\s\S]*?<\/table:table-row>/g) || []) {
+        if (rows.length > XLSX_MAX_ROWS) break;
+        const cells = [];
+        for (const tc of tr.matchAll(/<table:(?:covered-)?table-cell\b([^>]*?)(?:\/>|>([\s\S]*?)<\/table:(?:covered-)?table-cell>)/g)) {
+          const rep = Math.min(XLSX_MAX_COLS, Number(attr(`<c${tc[1]}>`, 'table:number-columns-repeated')) || 1);
+          const v = text(tc[2] || '');
+          for (let k = 0; k < rep && cells.length < XLSX_MAX_COLS; k += 1) cells.push(v);
+        }
+        while (cells.length && !cells[cells.length - 1]) cells.pop();
+        if (cells.some(Boolean)) rows.push(cells);
+      }
+      if (rows.length) parts.push(tableText(`Bảng tính "${attr(tb.slice(0, 300), 'table:name')}"`, rows));
+    }
+    return { text: parts.join('\n\n'), images: [] };
+  }
+  const lines = (xml.match(/<text:(?:p|h)\b[\s\S]*?<\/text:(?:p|h)>/g) || []).map((p) => (p.startsWith('<text:h') ? `## ${text(p)}` : text(p))).filter((l) => l.replace(/^## /, ''));
+  const images = [];
+  for (const name of Object.keys(zip.files).filter((n) => /^Pictures\//.test(n) && MEDIA_RE.test(n)).sort()) {
     images.push({ name: name.split('/').pop(), hint: 'ảnh trong tài liệu gốc', buffer: await zip.file(name).async('nodebuffer') });
   }
   return { text: lines.join('\n'), images };
@@ -131,16 +277,20 @@ export async function readBuffer(buffer, name, limits, kind = sniff(buffer)) {
     let doc;
     if (zip.file('ppt/presentation.xml')) doc = await readPptx(zip);
     else if (zip.file('word/document.xml')) doc = await readDocx(zip);
+    else if (zip.file('xl/workbook.xml')) doc = await readXlsx(zip);
+    else if (zip.file('content.xml') && zip.file('mimetype')) doc = await readOdf(zip);
     else throw unsupported(name);
     return { pieces: doc.text ? [{ label, text: doc.text }] : [], images: doc.images.map((im) => ({ ...im, hint: `${im.hint} (${label})` })), media: [] };
   }
   if (IMAGE_TYPES.has(kind)) return { pieces: [], media: [], images: [{ name: label, hint: `ảnh tải lên "${label}"`, buffer }] };
   if (kind === 'text') {
-    const raw = buffer.toString('utf8');
+    const raw = decodeText(buffer);
     const text = /^\s*<(!doctype html|html)/i.test(raw) ? htmlToText(raw).text : raw;
-    return { pieces: text.trim() ? [{ label, text: clip(text, limits.maxTextChars) }] : [], images: [], media: [] };
+    // CSV/TSV: báo cho AI đây là bảng dữ liệu thô (dòng đầu thường là tên cột) → phân tích, không chép nguyên.
+    const table = /\.(csv|tsv)$/i.test(label) || /csv/i.test(label) ? `${label} — bảng dữ liệu, dòng đầu là tên cột` : label;
+    return { pieces: text.trim() ? [{ label: table, text: clip(text, limits.maxTextChars) }] : [], images: [], media: [] };
   }
-  throw unsupported(name);
+  throw unsupported(name, kind);
 }
 
 const EMPTY = () => ({ pieces: [], media: [], images: [] });
@@ -179,7 +329,7 @@ const G_DRIVE = /^https:\/\/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^
 const DRIVE_MIME = {
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  csv: 'text/csv',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 
 function googleCandidates(url, apiKey) {
@@ -188,7 +338,8 @@ function googleCandidates(url, apiKey) {
     apiKey ? [`https://www.googleapis.com/drive/v3/files/${id}/export?mimeType=${encodeURIComponent(DRIVE_MIME[fmt])}&key=${encodeURIComponent(apiKey)}`] : [];
   if ((m = G_SLIDES.exec(url))) return [`https://docs.google.com/presentation/d/${m[1]}/export/pptx`, ...drive(m[1], 'pptx')];
   if ((m = G_DOCS.exec(url))) return [`https://docs.google.com/document/d/${m[1]}/export?format=docx`, ...drive(m[1], 'docx')];
-  if ((m = G_SHEETS.exec(url))) return [`https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv`, ...drive(m[1], 'csv')];
+  // xlsx giữ mọi trang tính (csv chỉ xuất trang đầu).
+  if ((m = G_SHEETS.exec(url))) return [`https://docs.google.com/spreadsheets/d/${m[1]}/export?format=xlsx`, ...drive(m[1], 'xlsx')];
   if ((m = G_DRIVE.exec(url))) {
     const alt = apiKey ? [`https://www.googleapis.com/drive/v3/files/${m[1]}?alt=media&key=${encodeURIComponent(apiKey)}`] : [];
     return [`https://drive.google.com/uc?export=download&id=${m[1]}`, ...alt];
@@ -251,10 +402,10 @@ export async function precheckSource({ files, url, text }, limits) {
     if (total > limits.maxUploadMb * 1048576) throw tooLarge(`Tổng dung lượng tệp tối đa ${limits.maxUploadMb} MB`, 'UPLOAD_TOO_LARGE');
     const checked = [];
     for (const f of list) {
-      const name = String(f.originalname || 'tệp tải lên').slice(0, 200);
+      const name = String(f.originalname || 'tệp tải lên').normalize('NFC').slice(0, 200); // tên tệp trên Mac thường ở dạng NFD
       if (!f.size) throw badRequest(`Tệp "${name}" rỗng`, 'EMPTY_FILE');
       const kind = sniff(await readHead(f.path));
-      if (!SUPPORTED_KINDS.has(kind)) throw unsupported(name);
+      if (!SUPPORTED_KINDS.has(kind)) throw unsupported(name, kind);
       checked.push({ path: f.path, name, size: f.size, kind });
     }
     const names = checked.map((f) => f.name);

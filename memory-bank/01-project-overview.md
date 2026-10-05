@@ -6,10 +6,12 @@
 
 Tính năng chính:
 - Nhập nguồn theo 3 cách: **tải tệp** (.pptx, .docx, .pdf, .txt, .md, ảnh), **dán link** (Google Slides/Docs/Sheets/Drive công khai hoặc trang web công khai), **nhập nội dung** trực tiếp.
-- AI chọn bố cục cho từng trang trong 13 layout (bìa, mở đầu phần, mục lục, ý chính, thẻ, con số, ảnh lớn, bộ sưu tập ảnh, dòng thời gian, quy trình, trích dẫn, so sánh, trang kết) và 4 giao diện màu (midnight, ocean, aurora, paper). Ảnh trong tài liệu nguồn được giữ lại và gắn vào slide phù hợp.
+- **Hai bước**: AI lập **dàn ý** (nội dung sẽ hiển thị trên từng trang) → người dùng duyệt/sửa, gắn **ảnh, video tải lên, link YouTube** cho từng trang, chọn thiết kế → AI **dựng bài** theo đúng dàn ý.
+- AI chọn bố cục cho từng trang trong 13 layout (bìa, mở đầu phần, mục lục, ý chính, thẻ, con số, ảnh/video lớn, bộ sưu tập ảnh, dòng thời gian, quy trình, trích dẫn, so sánh, trang kết). Ảnh trong tài liệu nguồn được giữ lại và gắn vào trang phù hợp.
+- **Thiết kế**: tông màu Tự động / 14 mẫu theo nền sáng-tối / tự nhập 2 màu; 10 nền động chủ đề công nghệ; 5 phông đóng gói sẵn (Inter, Montserrat, Barlow, Roboto, Google Sans); logo (vị trí, kích thước, tách nền). Video trong slide: khung 16:9, bấm → tự phát toàn màn hình.
 - 4 tỷ lệ khung: **16:9, 4:3, 2:1, 3:1** (3:1 cho màn LED/sân khấu).
 - **Trình soạn thảo**: sửa chữ, đổi/tải ảnh, đổi bố cục, thêm/xoá/sắp xếp/nhân bản trang, đổi giao diện & chân trang → bấm **Lưu** → server chuẩn hoá và render lại, khung xem trước tải lại.
-- **Xuất**: HTML một tệp (giữ chuyển động, ảnh + font nhúng base64, mở offline được) và PDF (không chuyển động, mỗi trang 1 slide đúng tỷ lệ).
+- **Xuất**: HTML một tệp (giữ chuyển động, ảnh + phông + video tải lên nhúng base64, mở offline được) và PDF (không chuyển động, mỗi trang 1 slide đúng tỷ lệ).
 - **Đa tenant**: mỗi người dùng là 1 tenant độc lập; bài **Riêng tư** chỉ chủ sở hữu thấy (kể cả admin không xem được). Bài **Công khai**: mọi người dùng của hệ thống xem/trình chiếu/tải/nhân bản được, nhưng không sửa được.
 - Đăng nhập: tự đăng ký **giới hạn theo tên miền email** (mặc định `misa.com.vn`) + admin cấp tài khoản (mật khẩu tạm, bắt buộc đổi ở lần đăng nhập đầu).
 - Giao diện theo **MISA Design System 2.0**, có composition **desktop** và **mobile mini-app** riêng cho mọi route.
@@ -40,8 +42,8 @@ Tính năng chính:
 ## Quy trình làm việc điển hình
 
 1. Đăng nhập (hoặc đăng ký bằng email công ty).
-2. **Tạo bài** → chọn nguồn (tệp/link/văn bản) → chọn tỷ lệ, số trang mong muốn, yêu cầu thêm → **Tạo bằng AI**.
-3. Chuyển sang trình soạn thảo, thấy trạng thái "AI đang dựng…" (30 giây – 2 phút). Có thể rời trang; danh sách tự cập nhật.
-4. Khi xong: xem trước có chuyển động, sửa chữ/ảnh từng trang → **Lưu**.
+2. **Tạo bài** → chọn nguồn (tệp/link/văn bản) → chọn tỷ lệ, tông màu, số trang mong muốn, yêu cầu thêm → **Lập dàn ý bằng AI** (30 giây – vài phút; có thể rời trang).
+3. **Duyệt dàn ý**: sửa tiêu đề/từng dòng nội dung, thêm/bớt/sắp xếp trang, gắn ảnh/video/YouTube, chọn màu – nền – phông – logo → **Dựng bài** (1–3 phút).
+4. Tự chuyển sang trình soạn thảo: xem trước có chuyển động, tinh chỉnh từng trang/thiết kế → **Lưu**.
 5. Trình chiếu toàn màn hình, hoặc **Tải xuống** HTML/PDF.
 6. Tuỳ chọn: bật **Công khai** để chia sẻ cho toàn hệ thống; người khác có thể **Nhân bản** về thành bản riêng tư để sửa.

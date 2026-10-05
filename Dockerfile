@@ -11,7 +11,9 @@ RUN npm run build
 
 # ---------- runtime ----------
 FROM node:24-bookworm-slim AS runtime
+# ORT_DISABLE_TELEMETRY: onnxruntime (tách nền logo bằng AI) bản Linux có gửi telemetry về Microsoft → tắt.
 ENV NODE_ENV=production \
+    ORT_DISABLE_TELEMETRY=1 \
     CHROME_PATH=/usr/bin/chromium \
     CHROME_NO_SANDBOX=true \
     STORAGE_DIR=/data/storage
@@ -22,9 +24,15 @@ RUN apt-get update \
 WORKDIR /app
 COPY package.json package-lock.json ./
 # sharp cần tải binary nền tảng qua optionalDependencies (không phải install script) → --ignore-scripts vẫn chạy được.
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+# onnxruntime-node đóng gói sẵn binary CPU mọi nền tảng (~290 MB) → chỉ giữ linux/<kiến trúc hiện tại> (~25–45 MB).
+RUN npm ci --omit=dev --ignore-scripts \
+ && find node_modules/onnxruntime-node/bin/napi-v6 -mindepth 1 -maxdepth 1 ! -name linux -exec rm -rf {} + \
+ && find node_modules/onnxruntime-node/bin/napi-v6/linux -mindepth 1 -maxdepth 1 ! -name "$(node -p process.arch)" -exec rm -rf {} + \
+ && npm cache clean --force
 COPY src ./src
 COPY shared ./shared
+# Mô hình U²-Net-p (Apache-2.0) tách nền logo nền phức tạp — thiếu thì tự lùi về tách theo màu nền.
+COPY models ./models
 COPY scripts/create-admin.js ./scripts/create-admin.js
 COPY startup ./startup
 COPY --from=web /app/dist ./dist

@@ -1,13 +1,18 @@
-// Logic trình soạn thảo dùng chung desktop/mobile: tải bài, bản nháp, lưu (khoá phiên bản), thao tác slide, ảnh, chia sẻ, xuất.
+// Logic trình soạn thảo dùng chung desktop/mobile: tải bài, bản nháp, lưu (khoá phiên bản), thao tác slide,
+// media (ảnh, video, YouTube, logo), thiết kế, chia sẻ, xuất.
 import { ref, computed, onBeforeUnmount } from 'vue';
-import { get, patch, postForm, del, post, download, ApiError } from '@/lib/api.js';
+import { get, patch, del, post, download, ApiError } from '@/lib/api.js';
 import { newSlide, duplicateSlide, ensureLayoutContent, prepareSpecForSave, clone, SPEC_LIMITS } from '@/lib/slideModel.js';
+import { useMedia } from '@/composables/useMedia.js';
+import { withDesignDefaults } from '@/lib/design.js';
 
 // Bản nháp chưa lưu được giữ tạm khi trang bị gỡ (vd. đổi bề mặt desktop ↔ mobile khi xoay/thu nhỏ cửa sổ).
 const pendingDrafts = new Map();
 
-export function useEditor(id) {
+export function useEditor(id, { onOutline } = {}) {
   const deck = ref(null);
+  const assets = ref([]);
+  const media = useMedia(id, assets);
   const draft = ref(null);
   const baseline = ref('');
   const loading = ref(true);
@@ -22,10 +27,20 @@ export function useEditor(id) {
   const slide = computed(() => draft.value?.spec?.slides?.[selected.value] || null);
   const previewUrl = computed(() => (deck.value?.status === 'ready' ? `/api/presentations/${id}/preview?v=${previewKey.value}` : ''));
 
+  // Video đã dùng trong bài + video tải lên chưa gắn trang nào (thư viện "Video trong bài").
+  const videoLibrary = computed(() => {
+    const out = new Map();
+    for (const s of draft.value?.spec?.slides || []) if (s.video) out.set(s.video.provider === 'youtube' ? `yt:${s.video.id}` : `f:${s.video.asset}`, { ...s.video });
+    for (const a of assets.value) if (a.kind === 'video' && !out.has(`f:${a.id}`)) out.set(`f:${a.id}`, { provider: 'file', asset: a.id, poster: null, title: (a.name || '').replace(/\.[a-z0-9]+$/i, ''), caption: '' });
+    return [...out.values()];
+  });
+
   function adopt(d) {
     deck.value = d;
+    assets.value = d.assets || [];
+    if (['outlining', 'outline'].includes(d.status) && d.isOwner) onOutline?.(d);
     if (d.status === 'ready' && d.spec) {
-      draft.value = { title: d.title, spec: clone(d.spec) };
+      draft.value = { title: d.title, spec: withDesignDefaults(clone(d.spec)) };
       baseline.value = JSON.stringify({ t: draft.value.title, s: draft.value.spec });
       if (selected.value >= d.spec.slides.length) selected.value = Math.max(0, d.spec.slides.length - 1);
     }
@@ -34,6 +49,7 @@ export function useEditor(id) {
   async function load() {
     loading.value = true;
     loadError.value = null;
+    saveError.value = null;
     try {
       adopt((await get(`/api/presentations/${id}`)).data);
       const kept = pendingDrafts.get(id);
@@ -127,15 +143,9 @@ export function useEditor(id) {
     ensureLayoutContent(slide.value);
   }
 
-  /* ---- ảnh ---- */
-  async function uploadImage(file) {
-    const form = new FormData();
-    form.set('file', file);
-    const res = await postForm(`/api/presentations/${id}/assets`, form);
-    deck.value.assets = [...(deck.value.assets || []), res.data];
-    return res.data;
-  }
-  const assetUrl = (assetId) => deck.value?.assets?.find((a) => a.id === assetId)?.url || '';
+  /* ---- media ---- */
+  const uploadImage = (file) => media.uploadImage(file);
+  const assetUrl = (assetId) => media.assetUrl(assetId);
 
   /* ---- khác ---- */
   const exportHtml = () => download(`/api/presentations/${id}/export.html`, `${deck.value.title}.html`);
@@ -157,7 +167,7 @@ export function useEditor(id) {
   });
 
   return {
-    deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, previewKey,
+    deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, previewKey, assets, media, videoLibrary,
     load, save, discard, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout,
     uploadImage, assetUrl, exportHtml, exportPdf, remove, duplicate,
   };

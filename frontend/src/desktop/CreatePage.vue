@@ -1,11 +1,12 @@
 <script setup>
-// Tạo bài trình bày (desktop): nguồn nội dung → tuỳ chọn → AI tạo nền; chuyển sang trình soạn thảo để theo dõi tiến trình.
+// Tạo bài trình bày (desktop): nguồn nội dung → tuỳ chọn (tỷ lệ, tông màu, số trang) → AI lập dàn ý (chạy nền);
+// chuyển sang bước duyệt dàn ý để theo dõi tiến trình, sửa nội dung, gắn media, chọn thiết kế.
 import { useRouter } from 'vue-router'
 import DesktopShell from './DesktopShell.vue'
 import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
-import TonePicker from '@/shared/TonePicker.vue'
+import ThemePicker from '@/shared/ThemePicker.vue'
 import MRadioGroup from '@/components/mds/MRadioGroup.vue'
 import MTabs from '@/components/mds/MTabs.vue'
 import MUpload from '@/components/mds/MUpload.vue'
@@ -20,7 +21,7 @@ const { form, errors, submitting, progress, submitError, totalBytes, submit, fil
 
 async function onSubmit() {
   const res = await submit()
-  if (res) router.push(`/p/${res.id}/edit`)
+  if (res) router.push(`/p/${res.id}/outline`)
 }
 </script>
 
@@ -30,7 +31,7 @@ async function onSubmit() {
       <div class="mx-auto flex w-full max-w-[880px] flex-1 flex-col gap-4 p-6">
         <div>
           <h1 class="text-[20px] font-semibold leading-7 text-[var(--mds-text)]">Tạo bài trình bày</h1>
-          <p class="text-[13px] text-[var(--mds-text-secondary)]">AI đọc nội dung nguồn, chọn bố cục phù hợp cho từng trang và dựng hiệu ứng chuyển động. Bạn chỉnh sửa lại được mọi chữ và ảnh.</p>
+          <p class="text-[13px] text-[var(--mds-text-secondary)]">AI đọc nội dung nguồn và lập dàn ý từng trang. Bạn duyệt lại nội dung, gắn ảnh/video, chọn màu – nền – phông – logo, rồi AI mới dựng bài có hiệu ứng chuyển động.</p>
         </div>
 
         <FormAlert v-if="submitError">{{ submitError.message }}</FormAlert>
@@ -48,7 +49,7 @@ async function onSubmit() {
               :disabled="submitting"
               :max-size-m-b="MAX_UPLOAD_MB"
               :size-hint="`Tổng tối đa ${MAX_UPLOAD_MB}MB · tối đa ${MAX_UPLOAD_FILES} tệp`"
-              hint="Chọn được nhiều tệp cùng lúc: tài liệu, PDF scan, ảnh, ghi âm"
+              hint="Chọn được nhiều tệp cùng lúc: tài liệu, bảng tính, PDF scan, ảnh, ghi âm"
               label="Tư liệu nguồn"
               @select-files="onSelectFiles"
               @oversized="onOversized"
@@ -58,7 +59,7 @@ async function onSubmit() {
               {{ form.files.length }} tệp · {{ formatMb(totalBytes) }} / {{ MAX_UPLOAD_MB }} MB
             </p>
             <p class="text-[12px] text-[var(--mds-text-secondary)]">
-              PowerPoint (.pptx), Word (.docx), PDF (kể cả bản scan — AI tự nhận dạng chữ), văn bản (.txt, .md), ảnh (AI đọc cả chữ trong ảnh) hoặc ghi âm MP3/M4A/WAV/OGG/FLAC/AAC/WebM (AI chuyển thể lời nói thành tư liệu). Ảnh trong tài liệu được giữ lại để dùng trên slide.
+              PowerPoint (.pptx), Word (.docx), Excel (.xlsx) / CSV, PDF (kể cả bản scan — AI tự nhận dạng chữ), văn bản (.txt, .md), ảnh (AI đọc cả chữ trong ảnh; ảnh HEIC tự đổi sang JPEG) hoặc ghi âm MP3/M4A/WAV/OGG/FLAC/AAC/WebM. Tư liệu thô (ghi chú, bảng số liệu, biên bản) được AI phân tích và thiết kế lại; ảnh chụp thật trong tài liệu được giữ để đặt lên slide.
             </p>
             <p v-if="errors.file" class="text-[12px] text-[var(--mds-danger)]">{{ errors.file }}</p>
           </div>
@@ -77,8 +78,9 @@ async function onSubmit() {
           <FormField label="Tỷ lệ khung hình" group>
             <RatioPicker v-model="form.ratio" />
           </FormField>
-          <FormField label="Tông màu nền" group hint="AI chọn bảng màu trong tông này; nền sáng luôn dùng chữ và hình hoạ màu đậm, tương phản cao.">
-            <TonePicker v-model="form.tone" />
+          <FormField label="Tông màu" group hint="Gợi ý bảng màu theo nền tối/sáng; Tuỳ chỉnh tự đảm bảo chữ đủ tương phản. Đổi lại được ở bước duyệt dàn ý.">
+            <ThemePicker v-model:tone="form.tone" v-model:theme="form.theme" v-model:primary="form.primary" v-model:secondary="form.secondary" allow-auto />
+            <p v-if="errors.theme" class="text-[12px] text-[var(--mds-danger)]">{{ errors.theme }}</p>
           </FormField>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField
@@ -111,7 +113,7 @@ async function onSubmit() {
           <MButton variant="outline" @click="router.back()">Hủy</MButton>
           <MButton variant="primary" type="submit" :loading="submitting">
             <template #icon><MIcon name="send" :size="16" /></template>
-            Tạo bằng AI
+            Lập dàn ý bằng AI
           </MButton>
         </div>
       </div>

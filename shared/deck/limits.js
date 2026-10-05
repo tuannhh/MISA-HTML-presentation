@@ -30,4 +30,9 @@ export const SPEC_LIMITS = Object.freeze({
   quoteAuthor: 100,
   alt: 200,
   images: 6,
+  videoTitle: 200,
+  // Dàn ý (bước duyệt trước khi dựng bài): mỗi trang là tiêu đề + các dòng nội dung sẽ hiển thị.
+  outlineSlides: 40,
+  outlinePoints: 12,
+  outlinePoint: 400,
 });

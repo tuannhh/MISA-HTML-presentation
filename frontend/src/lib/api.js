@@ -58,6 +58,7 @@ export async function api(method, path, { body, form, signal, retryCsrf = true }
 export const get = (path, opts) => api('GET', path, opts);
 export const post = (path, body, opts) => api('POST', path, { ...opts, body });
 export const patch = (path, body, opts) => api('PATCH', path, { ...opts, body });
+export const put = (path, body, opts) => api('PUT', path, { ...opts, body });
 export const del = (path, opts) => api('DELETE', path, opts);
 export const postForm = (path, form, opts) => api('POST', path, { ...opts, form });
 

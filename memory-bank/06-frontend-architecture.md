@@ -4,18 +4,20 @@
 
 - Vue 3 SPA (`frontend/`), build bằng Vite ra `dist/`, Express phục vụ tĩnh + fallback `index.html`.
 - **MISA Design System 2.0** (nguồn `C:\MISA-project\misa-design-system-skill`): component copy vào `frontend/src/components/mds/`, token vào `frontend/src/styles/mds/`. Theme mặc định `blue`. Không tự vẽ lại component MDS đã có.
-- Alias: `@` → `frontend/src`, `@shared` → `shared/` (dùng `SPEC_LIMITS`, `icons` chung với server).
+- Alias: `@` → `frontend/src`, `@shared` → `shared/` (dùng `SPEC_LIMITS`, `icons`, `palette`, `fonts`, `backgrounds` chung với server — xem trước thiết kế bằng **chính mã** của deck).
 - Mọi gọi API đi qua `lib/api.js` (gắn CSRF, chuẩn hoá `ApiError{status, code, message, details}`, phát sự kiện `mp:unauthorized` khi 401).
 
 ## Cấu trúc thư mục
 
 ```
 frontend/src/
-  App.vue            # chọn trang theo bề mặt: meta.desktop | meta.mobile, key = `${surface}:${path}`
+  App.vue            # chọn trang theo bề mặt: meta.desktop | meta.mobile, key = `${surface}:${path}`; gắn VideoOverlay toàn cục
   router.js          # route + guard (session, guest, auth, mustChange, admin), safeNext()
-  lib/               # api, session, surface, slideModel, deckActions, format
-  composables/       # logic dùng chung 2 bề mặt: useDecks, useCreate, useEditor, useDeckFrame, useAuthForms, useAdminUsers
-  shared/            # component dùng chung: SlideFields, ImagePicker, DeckThumb, RatioPicker, TonePicker, FormField, FormAlert, TempPasswordBox
+  lib/               # api, session, surface, slideModel, deckActions, format, design (tông màu/nền/phông/logo cho giao diện)
+  composables/       # logic dùng chung 2 bề mặt: useDecks, useCreate, useOutline, useEditor, useMedia, useVideoPlayer, useDeckFrame, useAuthForms, useAdminUsers
+  shared/            # component dùng chung: SlideFields, ImagePicker, DeckThumb, RatioPicker, FormField, FormAlert, TempPasswordBox,
+                     #   ThemePicker, DesignPanel (+ DesignPreview, BackgroundPicker, DeckBgCanvas, FontPicker, LogoSettings),
+                     #   OutlineSlideCard, OutlineMedia, VideoPicker, MediaLibrary, VideoOverlay
   desktop/           # composition desktop: DesktopShell (MHeaderBar + MSidebar) + các trang
   mobile/            # composition mobile mini-app: MobileShell (MMobileTopBar + MMobileBottomNav) + ActionSheet + các trang
   components/mds/    # bản sao MDS 2.0 (có vá cục bộ — xem 09)
@@ -42,8 +44,9 @@ Ký hiệu: ✅ hiển thị trang; ↪ chuyển hướng; 🚫 trang 403 **tron
 | `/change-password` | Đổi mật khẩu (bắt buộc hoặc tự chọn) | ↪ `/login` | ✅ | ✅ | AuthLayout (forced) / DesktopShell | MobileShell, footer sticky |
 | `/decks` | Bài của tôi | ↪ `/login?next=` | ✅ | ✅ | Lưới thẻ + tab + tìm kiếm + phân trang | Danh sách hàng + ActionSheet; bottom nav "Bài của tôi" |
 | `/public` | Thư viện công khai | ↪ login | ✅ | ✅ | như trên (menu chỉ đọc) | như trên; bottom nav "Công khai" |
-| `/create` | Tạo bằng AI | ↪ login | ✅ | ✅ | Tab nguồn, MUpload `block` nhiều tệp (tổng ≤ 300MB, tiến trình tải lên qua `uploadForm` XHR), RatioPicker, TonePicker, số trang Tự động/Tuỳ chỉnh (MRadioGroup), footer sticky | Back → `/decks`, không bottom nav, footer Hủy/Tạo, TonePicker `compact` |
-| `/p/:id/edit` | Trình soạn thảo | ↪ login | ✅ chủ sở hữu (không phải chủ → thông báo + nút Xem) | như user | 3 cột: danh sách trang · preview · panel sửa | Preview trên, dải trang ngang, form dưới, màn con "Thiết lập bài" |
+| `/create` | Tạo bằng AI (bước 1: lập dàn ý) | ↪ login | ✅ | ✅ | Tab nguồn, MUpload `block` nhiều tệp (tổng ≤ 300MB, tiến trình tải lên qua `uploadForm` XHR), RatioPicker, **ThemePicker** (Nền tối/sáng + mẫu theo tông + Tự động + Tuỳ chỉnh 2 màu có gợi ý), số trang Tự động/Tuỳ chỉnh, nút "Lập dàn ý bằng AI" → `/p/:id/outline` | Back → `/decks`, không bottom nav, footer Hủy/Lập dàn ý, ThemePicker `compact` |
+| `/p/:id/outline` | Duyệt dàn ý (bước 2) — trạng thái `outlining`/`outline`/`generating` | ↪ login | ✅ chủ sở hữu | như user | Bước tiến trình 3 bước; cột trái: thẻ từng trang (`OutlineSlideCard`: bố cục, tiêu đề, mô tả, các dòng nội dung, media, ghi chú, menu ⋯); cột phải: `DesignPanel` (xem trước + tab Màu sắc/Nền/Phông chữ/Logo + chân trang); footer Hủy thay đổi/Lưu nháp/Dựng bài; xong → ↪ `/p/:id/edit` | Tab phân đoạn "Nội dung (N)" / "Thiết kế"; thẻ `compact` (⋯ 44px mở ActionSheet thao tác trang); footer Lưu nháp/Dựng bài; ActionSheet ⋯: Hủy thay đổi, Xóa bài |
+| `/p/:id/edit` | Trình soạn thảo | ↪ login (bài còn ở bước dàn ý → ↪ `/outline`) | ✅ chủ sở hữu (không phải chủ → thông báo + nút Xem) | như user | 3 cột: danh sách trang · preview · panel sửa (tab "Thiết lập bài" chứa DesignPanel) | Preview trên, dải trang ngang, form dưới, màn con "Thiết kế & thiết lập" (DesignPanel `compact`) |
 | `/p/:id/view` | Trình chiếu | ↪ login | ✅ chủ sở hữu hoặc bài public | như user | Toolbar Prev/Next, toàn màn hình, tải xuống | Footer Prev/Next/Chỉnh sửa hoặc Nhân bản |
 | `/account` | Tài khoản | ↪ login | ✅ | ✅ (+ lối vào Quản trị) | DesktopShell | Bottom nav "Tài khoản"; link đổi mật khẩu, quản trị, đăng xuất |
 | `/admin/users` | Quản lý người dùng | ↪ login | 🚫 `/403` | ✅ | MDataTable + dialog | Danh sách thẻ + ActionSheet + sheet tạo |
@@ -67,17 +70,27 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 - Trình đọc màn hình của hệ điều hành (VoiceOver/TalkBack) — **chưa kiểm chứng**; mới kiểm tra nhãn/role ở mức DOM.
 
 Đã kiểm chứng (puppeteer + browser pane, 2026-10-05): mọi route ở 390px và 1440px không cuộn ngang; luồng đăng ký → tạo bài → sửa trên mobile → Lưu → xem lại.
+Đã kiểm chứng (browser pane, 2026-10-05, bản dàn ý): desktop 1366px — tạo bài với tông tuỳ chỉnh → dàn ý 8 trang → đổi phông, tải logo + tách nền, gắn YouTube (ảnh bìa 16:9, bấm → lớp phủ tự phát) → Dựng bài → tự sang editor; mobile 375px — tab Nội dung/Thiết kế, ActionSheet thao tác trang. **Không** xem được slide trong iframe preview ở browser pane (pane chặn request từ trang sandbox origin `null` — `ERR_BLOCKED_BY_CLIENT`); slide thật kiểm bằng Chrome headless trên HTML xuất.
 
 ## Trình soạn thảo (`useEditor` + `SlideFields`)
 
 - `SlideFields.vue` sinh form theo layout: kicker, tiêu đề, highlight (phải nằm trong tiêu đề), subtitle, caption, tags (phân tách dấu phẩy), icon (combobox), quote, danh sách stats/items/steps/columns (thêm/xoá/di chuyển), ImagePicker (tải ảnh mới hoặc chọn ảnh đã có trong bài), gallery, ghi chú. Lỗi độ dài tính từ `SPEC_LIMITS` ngay khi gõ.
 - Đổi layout (`change-layout`) dùng `lib/slideModel.js` để chuyển dữ liệu sang hình dạng của layout mới mà không mất nội dung chung.
-- Preview là iframe `sandbox="allow-scripts allow-popups"` trỏ `/api/presentations/:id/preview?v=<specVersion>`; đồng bộ trang qua `postMessage` (`deck:goto` từ app, `deck:slide` từ engine) — `useDeckFrame`.
+- Preview là iframe `sandbox="allow-scripts allow-popups"` + thuộc tính **`data-deck-frame`** trỏ `/api/presentations/:id/preview?v=<specVersion>`; đồng bộ trang qua `postMessage` (`deck:goto` từ app, `deck:slide` từ engine) — `useDeckFrame`. Bấm video trong slide → engine gửi `deck:video` → `useVideoPlayer` chỉ nhận từ iframe có `data-deck-frame` → `VideoOverlay` phát toàn màn hình (iframe sandbox không tự fullscreen/nhúng YouTube được).
+- Trang có ô media (`MEDIA_LAYOUTS`) có tab Ảnh / Video trong `SlideFields`; bảng Thiết kế dùng chung `DesignPanel` với bước dàn ý.
+- `useEditor`/`useOutline` áp `withDesignDefaults` khi nhận dữ liệu (component không tự sửa props).
 - Engine thêm `body.embed` khi chạy trong iframe → ẩn HUD của engine; ứng dụng tự vẽ nút Prev/Next.
 
 ## Trình bày (deck renderer — `shared/deck/`)
 
-- `render.js`: spec → HTML (escape mọi chuỗi), 13 layout, 4 theme, `mode: present|print`.
-- `engine.js`: điều khiển trang (phím mũi tên/Space/PageUp/Down, chạm, HUD), hiệu ứng spring, đếm số, vẽ đường, nền động; mode print tắt chuyển động.
-- `theme.css`: biến màu theo theme, bố cục theo tỷ lệ; font `InterVariable.woff2`.
+- `render.js`: spec → HTML (escape mọi chuỗi), 13 layout × biến thể (`variants.js`, lớp `V-<biến thể>`), `data-style` phong cách bài, 14 mẫu màu + tuỳ chỉnh, `data-bg`/`data-tone` trên trang, khung video 16:9, logo, `mode: present|print`.
+- `variants.js`: danh sách biến thể/phong cách, điều kiện hợp nội dung, `artDirect` (server) + `resolveVariant` (renderer) — xem `05` §9.
+- `engine.js`: điều khiển trang (phím mũi tên/Space/PageUp/Down, chạm, HUD), hiệu ứng spring, đếm số, vẽ đường, nền động (`window.DeckBg` từ `backgrounds.js` ghép trước engine), lớp phát video; mode print tắt chuyển động.
+- `theme.css`: biến màu 5 mẫu gốc, bố cục theo tỷ lệ; `palette.js` sinh biến cho các mẫu còn lại + tuỳ chỉnh (đảm bảo tương phản); `fonts.js` + `fonts/`: @font-face theo phông đã chọn.
 - `icons.js`: tập icon SVG nội tuyến (dùng chung server + editor).
+
+## Kiểm tra tệp trước khi tải lên (`lib/fileKinds.js`)
+
+- `SOURCE_ACCEPT` liệt kê cả .doc/.xls/.ppt/.key/.pages/.numbers để người dùng chọn được và nhận hướng dẫn ngay (`sourceProblem`), thay vì tệp bị làm mờ không rõ lý do. Nhiều tệp lỗi → gộp tối đa 3 lý do + "và N tệp khác".
+- `heicToJpeg`: ảnh HEIC → JPEG ≤ 2560px trên trình duyệt (Safari); trình duyệt không giải mã được → lỗi `HEIC_UNSUPPORTED` kèm cách đổi. Dùng ở tư liệu (`useCreate`), ảnh trang + logo (`useMedia`).
+- `OutlineMedia.vue`: kéo-thả nhiều ảnh vào khung media của trang (desktop).

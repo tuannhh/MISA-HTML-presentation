@@ -3,10 +3,13 @@
 //  - lenient (kết quả AI): tự cắt chuỗi quá dài, thay giá trị lạ bằng mặc định, bỏ phần tử thừa.
 //  - strict (người dùng lưu): vượt giới hạn → trả danh sách lỗi để API báo 422 (không âm thầm cắt dữ liệu người dùng).
 import { randomUUID } from 'node:crypto';
-import { LAYOUTS, THEMES } from '../../shared/deck/render.js';
+import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE } from '../../shared/deck/render.js';
+import { CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
+import { FONT_IDS, DEFAULT_FONT } from '../../shared/deck/fonts.js';
 import { ICON_NAMES } from '../../shared/deck/icons.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
+import { VARIANTS, STYLES } from '../../shared/deck/variants.js';
 
 export { SPEC_LIMITS };
 
@@ -15,6 +18,8 @@ const ICON_SET = new Set(ICON_NAMES);
 const LAYOUT_SET = new Set(LAYOUTS);
 const TONES = new Set(['neg', 'pos', 'neutral']);
 const ID_RE = /^[a-z0-9-]{1,40}$/i;
+export const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+const uuidOrNull = (v) => (typeof v === 'string' && isUuid(v) ? v.toLowerCase() : null);
 
 function makeCtx(strict) {
   const errors = [];
@@ -61,6 +66,56 @@ function cleanImage(c, v, path) {
   return img.asset || img.alt || img.caption ? img : null;
 }
 
+// Video trên slide: YouTube (mã 11 ký tự) hoặc tệp tải lên (asset). poster = ảnh bìa (asset).
+export function cleanVideo(c, v, path) {
+  if (v === undefined || v === null) return null;
+  const o = c.obj(v);
+  const provider = o.provider === 'youtube' ? 'youtube' : o.provider === 'file' ? 'file' : null;
+  const base = { poster: uuidOrNull(o.poster), title: c.str(o.title, SPEC_LIMITS.videoTitle, `${path}.title`), caption: c.str(o.caption, SPEC_LIMITS.caption, `${path}.caption`) };
+  if (provider === 'youtube' && typeof o.id === 'string' && YOUTUBE_ID_RE.test(o.id)) return { provider, id: o.id, ...base };
+  if (provider === 'file' && uuidOrNull(o.asset)) return { provider, asset: uuidOrNull(o.asset), ...base };
+  if (c.strict) c.errors.push(`${path}: video không hợp lệ`);
+  return null;
+}
+
+// Thiết kế toàn bài (dùng chung cho spec và dàn ý): tông màu, mẫu nền, phông chữ, logo.
+export function cleanDesign(c, o) {
+  let theme = THEMES.includes(o.theme) ? o.theme : 'midnight';
+  if (o.theme !== undefined && !THEMES.includes(o.theme) && c.strict) c.errors.push('theme: tông màu không hợp lệ');
+  let palette = null;
+  if (theme === CUSTOM_THEME) {
+    const pl = c.obj(o.palette);
+    const primary = normHex(pl.primary);
+    const secondary = normHex(pl.secondary) || primary;
+    if (primary) palette = { tone: pl.tone === 'light' ? 'light' : 'dark', primary, secondary };
+    else {
+      if (c.strict) c.errors.push('palette: cần màu chính dạng #RRGGBB');
+      theme = 'midnight';
+    }
+  }
+  const background = BACKGROUNDS.includes(o.background) ? o.background : 'network';
+  const f = c.obj(o.font);
+  const body = FONT_IDS.includes(f.body) ? f.body : DEFAULT_FONT;
+  const font = { heading: FONT_IDS.includes(f.heading) ? f.heading : body, body };
+  let logo = null;
+  if (o.logo) {
+    const lg = c.obj(o.logo);
+    const asset = uuidOrNull(lg.asset);
+    if (asset) {
+      const size = Math.round(Number(lg.size));
+      logo = {
+        asset,
+        cutout: uuidOrNull(lg.cutout),
+        removeBg: lg.removeBg === true,
+        position: LOGO_POSITIONS.includes(lg.position) ? lg.position : 'tr',
+        size: Number.isFinite(size) ? Math.min(LOGO_SIZE.max, Math.max(LOGO_SIZE.min, size)) : LOGO_SIZE.def,
+        showOn: LOGO_SHOW.includes(lg.showOn) ? lg.showOn : 'all',
+      };
+    } else if (c.strict) c.errors.push('logo: mã ảnh logo không hợp lệ');
+  }
+  return { theme, palette, background, font, logo };
+}
+
 function cleanItem(c, v, path) {
   const o = c.obj(v);
   return {
@@ -100,7 +155,7 @@ function fallbackLayout(s) {
     process: s.steps.length > 0,
     comparison: s.columns.length >= 2,
     quote: !!s.quote.text,
-    image: !!s.image?.asset,
+    image: !!s.image?.asset || !!s.video,
     gallery: s.images.some((im) => im.asset),
   };
   if (!(s.layout in has) || has[s.layout]) return s.layout;
@@ -150,9 +205,12 @@ function cleanSlide(c, v, i, seen) {
     quote: { text: c.str(q.text, SPEC_LIMITS.quoteText, `${p}.quote.text`), author: c.str(q.author, SPEC_LIMITS.quoteAuthor, `${p}.quote.author`), role: c.str(q.role, SPEC_LIMITS.quoteAuthor, `${p}.quote.role`) },
     image: cleanImage(c, o.image, `${p}.image`),
     images: c.arr(o.images, SPEC_LIMITS.images, `${p}.images`).map((im, k) => cleanImage(c, im, `${p}.images[${k}]`)).filter(Boolean),
+    video: cleanVideo(c, o.video, `${p}.video`),
   };
   if (slide.highlight && !slide.title.includes(slide.highlight)) slide.highlight = '';
   if (!c.strict) slide.layout = fallbackLayout(slide);
+  // Biến thể trình bày do hệ thống chọn ngầm (không có trên giao diện) → giá trị lạ/không thuộc bố cục: bỏ, không báo lỗi.
+  slide.variant = VARIANTS[slide.layout]?.includes(o.variant) ? o.variant : '';
   return slide;
 }
 
@@ -166,31 +224,69 @@ export function normalizeSpec(input, { strict = false } = {}) {
   const spec = {
     version: 1,
     title: c.str(o.title, SPEC_LIMITS.deckTitle, 'title') || slides[0]?.title || 'Bài trình bày',
-    theme: THEMES.includes(o.theme) ? o.theme : 'midnight',
+    ...cleanDesign(c, o),
+    style: STYLES.includes(o.style) ? o.style : STYLES[0],
     footer: c.str(o.footer, SPEC_LIMITS.footer, 'footer'),
     slides,
   };
   return { spec, errors: c.errors.slice(0, 20) };
 }
 
-// Mọi mã ảnh mà spec tham chiếu (để kiểm tra thuộc đúng bài trình bày).
+// Mọi mã asset mà spec (hoặc dàn ý) tham chiếu: ảnh, video + ảnh bìa video, logo (để kiểm tra thuộc đúng bài trình bày).
 export function collectAssetIds(spec) {
   const ids = new Set();
+  const add = (v) => v && ids.add(v);
   for (const s of spec.slides || []) {
-    if (s.image?.asset) ids.add(s.image.asset);
-    for (const im of s.images || []) if (im.asset) ids.add(im.asset);
+    add(s.image?.asset);
+    for (const im of s.images || []) add(im.asset);
+    add(s.video?.asset);
+    add(s.video?.poster);
   }
+  const lg = spec.logo || spec.design?.logo;
+  add(lg?.asset);
+  add(lg?.cutout);
   return ids;
 }
 
-// Bỏ tham chiếu tới ảnh không thuộc bài trình bày (phòng spec trỏ sang asset của tenant khác).
+// Bỏ tham chiếu tới asset không thuộc bài trình bày (phòng spec trỏ sang asset của tenant khác).
 export function dropForeignAssets(spec, allowedIds) {
-  const keep = (im) => (im && im.asset && !allowedIds.has(im.asset) ? { ...im, asset: null } : im);
+  const ok = (v) => !!v && allowedIds.has(v);
+  const keep = (im) => (im && im.asset && !ok(im.asset) ? { ...im, asset: null } : im);
   for (const s of spec.slides) {
     s.image = keep(s.image);
     s.images = (s.images || []).map(keep);
+    if (s.video) {
+      if (s.video.provider === 'file' && !ok(s.video.asset)) s.video = null;
+      else if (s.video.poster && !ok(s.video.poster)) s.video = { ...s.video, poster: null };
+    }
+  }
+  const holder = spec.design || spec;
+  if (holder.logo) {
+    if (!ok(holder.logo.asset)) holder.logo = null;
+    else if (holder.logo.cutout && !ok(holder.logo.cutout)) holder.logo = { ...holder.logo, cutout: null, removeBg: false };
   }
   return spec;
+}
+
+// Đổi toàn bộ mã asset theo bảng ánh xạ (nhân bản bài: asset được sao chép sang mã mới).
+export function remapAssetIds(doc, map) {
+  const m = (v) => (v ? map.get(v) || null : v);
+  for (const s of doc.slides || []) {
+    if (s.image?.asset) s.image.asset = m(s.image.asset);
+    for (const im of s.images || []) if (im.asset) im.asset = m(im.asset);
+    if (s.video) {
+      if (s.video.asset) s.video.asset = m(s.video.asset);
+      if (s.video.poster) s.video.poster = m(s.video.poster);
+      if (s.video.provider === 'file' && !s.video.asset) s.video = null;
+    }
+  }
+  const holder = doc.design || doc;
+  if (holder.logo) {
+    holder.logo.asset = m(holder.logo.asset);
+    holder.logo.cutout = m(holder.logo.cutout);
+    if (!holder.logo.asset) holder.logo = null;
+  }
+  return doc;
 }
 
 // Áp trần số trang cho kết quả AI (schema đã khoá, đây là lưới an toàn): giữ trang đầu và trang kết (closing).

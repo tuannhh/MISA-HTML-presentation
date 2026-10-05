@@ -12,7 +12,7 @@ export const LAYOUTS = [
   { value: 'bullets', label: 'Ý chính', icon: 'list' },
   { value: 'cards', label: 'Thẻ nội dung', icon: 'layout-grid' },
   { value: 'stats', label: 'Con số nổi bật', icon: 'star' },
-  { value: 'image', label: 'Ảnh lớn', icon: 'photo' },
+  { value: 'image', label: 'Ảnh / video lớn', icon: 'photo' },
   { value: 'gallery', label: 'Bộ sưu tập ảnh', icon: 'photo' },
   { value: 'timeline', label: 'Dòng thời gian', icon: 'clock' },
   { value: 'process', label: 'Quy trình', icon: 'arrow-right' },
@@ -60,7 +60,7 @@ export const emptyColumn = () => ({ title: '', subtitle: '', tone: 'neutral', po
 export function newSlide(layout = 'bullets') {
   const s = {
     id: newId(), layout, kicker: '', title: 'Tiêu đề mới', highlight: '', subtitle: '', caption: '', icon: 'sparkles', notes: '',
-    tags: [], items: [], stats: [], steps: [], columns: [], quote: { text: '', author: '', role: '' }, image: null, images: [],
+    tags: [], items: [], stats: [], steps: [], columns: [], quote: { text: '', author: '', role: '' }, image: null, images: [], video: null,
   };
   return ensureLayoutContent(s);
 }
@@ -74,6 +74,9 @@ export function ensureLayoutContent(s) {
   if (s.layout === 'quote' && !s.quote) s.quote = { text: '', author: '', role: '' };
   return s;
 }
+
+// Bố cục có ô media (ảnh hoặc video) — khớp MEDIA_LAYOUTS của renderer.
+export const MEDIA_LAYOUTS = ['cover', 'section', 'bullets', 'image', 'quote'];
 
 export function duplicateSlide(s) {
   return { ...clone(s), id: newId() };
@@ -89,6 +92,10 @@ export function prepareSpecForSave(spec) {
     }
     for (const c of s.columns || []) c.points = (c.points || []).map((p) => String(p).trim()).filter(Boolean);
     s.tags = (s.tags || []).map((t) => String(t).trim()).filter(Boolean);
+    // Bố cục không có ô media → bỏ video (renderer không hiển thị, tránh dữ liệu thừa).
+    if (s.video && !MEDIA_LAYOUTS.includes(s.layout)) s.video = null;
+    if (s.video) s.image = null;
   }
+  if (out.palette && out.theme !== 'custom') out.palette = null;
   return out;
 }

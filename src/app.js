@@ -14,7 +14,7 @@ import { authRoutes } from './routes/authRoutes.js';
 import { presentationRoutes } from './routes/presentationRoutes.js';
 import { assetRoutes } from './routes/assetRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
-import { deckFontBuffer, DECK_FONT_PATH } from './services/renderService.js';
+import { deckFontBuffer, deckFontFile, DECK_FONT_PATH } from './services/renderService.js';
 import { ok } from './lib/validate.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,10 +29,13 @@ export function createApp({ config, pool, repos, services }) {
     req.id = randomUUID();
     res.set('X-Request-Id', req.id);
     const started = process.hrtime.bigint();
+    // Lấy đường dẫn NGAY lúc nhận request: Express 5 gán lại req.url/req.path tương đối trong router con (mount '/api/…'),
+    // đến sự kiện 'finish' req.path không còn tiền tố /api → trước đây gần như mọi request API bị bỏ khỏi log.
+    // Không ghi query string (có thể chứa chữ ký URL ảnh).
+    const p = req.originalUrl.split('?')[0];
     res.on('finish', () => {
-      if (req.path.startsWith('/api/') && req.path !== '/api/health') {
-        // Không ghi query string (có thể chứa chữ ký URL ảnh).
-        logger.info('http', { id: req.id, m: req.method, p: req.path, s: res.statusCode, ms: Number((process.hrtime.bigint() - started) / 1000000n), u: req.user?.id });
+      if (p.startsWith('/api/') && p !== '/api/health') {
+        logger.info('http', { id: req.id, m: req.method, p, s: res.statusCode, ms: Number((process.hrtime.bigint() - started) / 1000000n), u: req.user?.id });
       }
     });
     next();
@@ -40,10 +43,17 @@ export function createApp({ config, pool, repos, services }) {
 
   app.use(securityHeaders());
 
-  // Font của bài trình bày: công khai, cho phép khung sandbox (origin null) tải.
+  // Phông của bài trình bày: công khai, cho phép khung sandbox (origin null) tải. Chỉ tệp trong danh sách cho phép.
+  const fontHeaders = { 'Content-Type': 'font/woff2', 'Cache-Control': 'public, max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' };
   app.get(DECK_FONT_PATH, (_req, res) => {
-    res.set({ 'Content-Type': 'font/woff2', 'Cache-Control': 'public, max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' });
+    res.set(fontHeaders);
     res.send(deckFontBuffer());
+  });
+  app.get('/deck-assets/fonts/*file', (req, res) => {
+    const buf = deckFontFile([].concat(req.params.file).join('/'));
+    if (!buf) return res.status(404).end();
+    res.set(fontHeaders);
+    return res.send(buf);
   });
 
   // Health: liveness không chạm DB; readiness kiểm tra DB.

@@ -5,7 +5,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import DesktopShell from './DesktopShell.vue'
 import SlideFields from '@/shared/SlideFields.vue'
-import FormField from '@/shared/FormField.vue'
+import DesignPanel from '@/shared/DesignPanel.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
@@ -21,14 +21,14 @@ import MEmptyState from '@/components/mds/MEmptyState.vue'
 import { useToast } from '@/components/mds/toast.js'
 import { useEditor, usePreviewSync } from '@/composables/useEditor.js'
 import { LAYOUTS, LAYOUT_LABEL, LAYOUT_ICON, SPEC_LIMITS } from '@/lib/slideModel.js'
-import { RATIO_OPTIONS, THEME_OPTIONS, ratioCss } from '@/lib/format.js'
+import { RATIO_OPTIONS, ratioCss } from '@/lib/format.js'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const id = route.params.id
-const ed = useEditor(id)
-const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl } = ed
+const ed = useEditor(id, { onOutline: () => router.replace(`/p/${id}/outline`) })
+const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, media, videoLibrary } = ed
 
 const frame = ref(null)
 const { goto } = usePreviewSync(frame, selected)
@@ -172,8 +172,8 @@ onMounted(ed.load)
     <div v-else-if="deck?.status === 'generating'" class="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
       <MSpinner :size="40" />
       <div>
-        <h1 class="text-[18px] font-semibold leading-6">AI đang dựng “{{ deck.title }}”</h1>
-        <p class="mt-1 max-w-[520px] text-[13px] text-[var(--mds-text-secondary)]">Đọc tài liệu, chọn bố cục cho từng trang và sắp xếp hình ảnh — thường mất 30 giây đến 2 phút. Bạn có thể rời trang, bài vẫn tiếp tục được tạo.</p>
+        <h1 class="text-[18px] font-semibold leading-6">AI đang dựng “{{ deck.title }}” theo dàn ý</h1>
+        <p class="mt-1 max-w-[520px] text-[13px] text-[var(--mds-text-secondary)]">Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn — thường dưới 1 phút. Bạn có thể rời trang, bài vẫn tiếp tục được dựng.</p>
       </div>
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>
     </div>
@@ -262,6 +262,7 @@ onMounted(ed.load)
               <iframe
                 v-if="previewUrl"
                 ref="frame"
+                data-deck-frame
                 :key="previewUrl"
                 :src="previewUrl"
                 title="Xem trước bài trình bày"
@@ -286,15 +287,11 @@ onMounted(ed.load)
           <div class="flex-1 overflow-y-auto p-4">
             <template v-if="panel === 'slide'">
               <p v-if="slide" class="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--mds-text-secondary)]">Trang {{ selected + 1 }} · {{ LAYOUT_LABEL[slide.layout] }}</p>
-              <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="deck.assets || []" :upload="ed.uploadImage" @change-layout="ed.changeLayout" />
+              <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="ed.assets.value" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" @change-layout="ed.changeLayout" />
             </template>
             <div v-else class="flex flex-col gap-4">
-              <FormField label="Giao diện màu" hint="Áp dụng cho toàn bộ bài sau khi lưu">
-                <MSelect v-model="draft.spec.theme" :options="THEME_OPTIONS" />
-              </FormField>
-              <FormField label="Chân trang" hint="Hiển thị ở góc dưới mỗi trang; để trống sẽ dùng tên bài">
-                <MInput v-model="draft.spec.footer" :error="(draft.spec.footer || '').length > SPEC_LIMITS.footer ? `Tối đa ${SPEC_LIMITS.footer} ký tự` : ''" />
-              </FormField>
+              <DesignPanel v-model:footer="draft.spec.footer" :design="draft.spec" :media="media" :title="draft.title" :subtitle="draft.spec.slides[0]?.subtitle || ''" :ratio="deck.ratio" />
+              <FormAlert tone="info">Màu sắc, nền, phông chữ và logo áp dụng cho toàn bộ bài sau khi bấm <strong>Lưu</strong>.</FormAlert>
               <FormAlert tone="info">
                 Tỷ lệ khung và chế độ chia sẻ được áp dụng ngay khi đổi trên thanh công cụ. Công khai: mọi người dùng của hệ thống đều xem và nhân bản được bài này.
               </FormAlert>

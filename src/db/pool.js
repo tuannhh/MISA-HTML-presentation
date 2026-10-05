@@ -2,6 +2,8 @@
 import mysql from 'mysql2/promise';
 
 const REQUIRED_TABLES = ['users', 'presentations', 'assets', 'sessions', 'audit_logs', 'schema_changelog'];
+// Changelog mà code hiện tại phụ thuộc (baseline schema.sql đã gồm sẵn; DB cũ phải chạy thủ công).
+const REQUIRED_CHANGELOGS = ['changelog_database_20261005_170000.sql'];
 
 export function createPool(dbConfig) {
   return mysql.createPool({
@@ -21,7 +23,7 @@ export function createPool(dbConfig) {
   });
 }
 
-// Fail-fast: không tự chạy schema.sql, chỉ xác nhận các bảng bắt buộc đã tồn tại.
+// Fail-fast: không tự chạy schema.sql/changelog, chỉ xác nhận các bảng bắt buộc + changelog cần thiết đã có.
 export async function verifyTables(pool) {
   const [rows] = await pool.query(
     'SELECT TABLE_NAME AS name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE()',
@@ -31,6 +33,14 @@ export async function verifyTables(pool) {
   if (missing.length) {
     throw new Error(
       `Cơ sở dữ liệu thiếu bảng: ${missing.join(', ')}. Chạy startup/database/schema.sql trước (xem memory-bank/07-deployment-infrastructure.md).`,
+    );
+  }
+  const [applied] = await pool.query('SELECT name FROM schema_changelog WHERE name IN (?)', [REQUIRED_CHANGELOGS]);
+  const done = new Set(applied.map((r) => r.name));
+  const pending = REQUIRED_CHANGELOGS.filter((n) => !done.has(n));
+  if (pending.length) {
+    throw new Error(
+      `Cơ sở dữ liệu chưa chạy changelog: ${pending.join(', ')}. Chạy các tệp trong startup/database/changelogs/ trước (xem memory-bank/07-deployment-infrastructure.md).`,
     );
   }
 }

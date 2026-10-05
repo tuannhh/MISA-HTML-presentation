@@ -1,7 +1,7 @@
 // Lớp lưu trữ file trừu tượng. Hiện tại: thư mục cục bộ (Docker volume /data/storage).
-// Đổi sang S3/MinIO sau này: viết adapter cùng giao diện { put, get, remove, removePrefix } — không sửa service khác.
+// Đổi sang S3/MinIO sau này: viết adapter cùng giao diện { put, putFile, get, pathOf, copy, remove, removePrefix } — không sửa service khác.
 // Khoá (key) luôn do server sinh từ UUID; vẫn kiểm tra đường dẫn nằm trong thư mục gốc để chặn path traversal.
-import { mkdir, readFile, rm, writeFile, rename, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile, rename, readdir, stat, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { logger } from '../lib/logger.js';
@@ -32,8 +32,36 @@ export function createLocalStorage({ privateDir, tempDir, tempTtlMinutes, upload
       await rename(tmp, full);
     },
 
+    // Tệp lớn (video) đã nằm trên đĩa (multer): chuyển vào kho, không đọc vào RAM. Khác ổ đĩa → sao chép rồi xoá.
+    async putFile(key, srcPath) {
+      const full = resolveKey(key);
+      await mkdir(path.dirname(full), { recursive: true });
+      const tmp = `${full}.${randomUUID()}.part`;
+      try {
+        await rename(srcPath, tmp);
+      } catch (err) {
+        if (err.code !== 'EXDEV') throw err;
+        await copyFile(srcPath, tmp);
+        await rm(srcPath, { force: true });
+      }
+      await rename(tmp, full);
+    },
+
+    async copy(srcKey, dstKey) {
+      const dst = resolveKey(dstKey);
+      await mkdir(path.dirname(dst), { recursive: true });
+      const tmp = `${dst}.${randomUUID()}.part`;
+      await copyFile(resolveKey(srcKey), tmp);
+      await rename(tmp, dst);
+    },
+
     async get(key) {
       return readFile(resolveKey(key));
+    },
+
+    // Đường dẫn tuyệt đối để phát video theo Range (res.sendFile) — chỉ adapter đĩa cục bộ có.
+    pathOf(key) {
+      return resolveKey(key);
     },
 
     async remove(key) {

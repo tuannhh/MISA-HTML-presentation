@@ -11,6 +11,7 @@ export function deckMenuItems(d) {
     ];
   }
   const items = [];
+  if (d.status === 'outline') items.push({ key: 'edit', label: 'Duyệt dàn ý', icon: 'pencil' }, { key: 'd0', divider: true });
   if (ready) {
     items.push(
       { key: 'edit', label: 'Chỉnh sửa', icon: 'pencil' },
@@ -29,7 +30,9 @@ export function deckMenuItems(d) {
   return items;
 }
 
-// Đích khi bấm vào bài: chủ sở hữu → trình soạn thảo (kể cả đang tạo/lỗi để xem tiến trình); người khác → trình chiếu.
-export const deckTarget = (d) => (d.isOwner ? `/p/${d.id}/edit` : `/p/${d.id}/view`);
+// Đích khi bấm vào bài: chủ sở hữu → bước duyệt dàn ý (đang lập/chờ duyệt/đang dựng) hoặc trình soạn thảo;
+// người khác → trình chiếu.
+const OUTLINE_STATUSES = ['outlining', 'outline', 'generating'];
+export const deckTarget = (d) => (!d.isOwner ? `/p/${d.id}/view` : OUTLINE_STATUSES.includes(d.status) ? `/p/${d.id}/outline` : `/p/${d.id}/edit`);
 
 export const VISIBILITY_LABEL = { private: 'Riêng tư', public: 'Công khai' };

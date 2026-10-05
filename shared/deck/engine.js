@@ -3,7 +3,9 @@
    để có thể "tua" tới khung cuối khi chụp thumbnail / in PDF.
    Chế độ: present (mặc định) · still (?still&slide=N — 1 slide, khung cuối) · print (mọi slide, khung cuối).
    API cho trình duyệt tự động: window.__deck = { count, ready, goto(i, frame) }.
-   Nhúng trong khung xem trước: nhận postMessage {type:'deck:goto', index}, gửi {type:'deck:slide', index, count}. */
+   Nhúng trong khung xem trước: nhận postMessage {type:'deck:goto', index}, gửi {type:'deck:slide', index, count}
+   và {type:'deck:video', provider, id|src, title} khi bấm video (khung sandbox không phát được YouTube → ứng dụng mở lớp phát).
+   Mẫu nền chuyển động: window.DeckBg (shared/deck/backgrounds.js, được ghép trước engine). */
 (function () {
   'use strict';
   var deck = document.getElementById('deck');
@@ -80,7 +82,7 @@
         }
         var an = { a: a, d: d, dur: +(el.getAttribute('data-dur') || 24), dist: +(el.getAttribute('data-dist') || 70) };
         if (a === 'draw') { el.style.strokeDasharray = '1 1'; }
-        if (a === 'bar') { an.to = +(el.getAttribute('data-to') || 100); }
+        if (a === 'bar' || a === 'grow' || a === 'ring') { an.to = +(el.getAttribute('data-to') || 100); }
         if (a === 'count') {
           an.to = +(el.getAttribute('data-to') || 0); an.dec = +(el.getAttribute('data-dec') || 0); an.dur = +(el.getAttribute('data-dur') || 48);
           an.fmt = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: an.dec, maximumFractionDigits: an.dec }); an.last = null;
@@ -120,6 +122,10 @@
           case 'fade': op = easeOut(clamp(lf / A.dur)); break;
           case 'draw': { var p = easeInOut(clamp(lf / A.dur)); el.style.strokeDashoffset = String(1 - p); op = lf > 0 ? 1 : 0; break; }
           case 'bar': s = spring(lf, 24, 60); el.style.width = (A.to * clamp(s, 0, 1.05)).toFixed(2) + '%'; break;
+          // Cột dọc (biểu đồ cột) mọc từ đáy.
+          case 'grow': s = spring(lf, 24, 60); el.style.height = (A.to * clamp(s, 0, 1.05)).toFixed(2) + '%'; break;
+          // Vòng tiến độ: vòng tròn pathLength=100, stroke-dasharray "P 100" → dashoffset P → 0 vẽ dần cung P%.
+          case 'ring': { var q = easeInOut(clamp(lf / A.dur)); el.style.strokeDashoffset = (A.to * (1 - q)).toFixed(2); break; }
           case 'count': {
             var v = A.to * easeOut(clamp(lf / A.dur));
             var txt = A.fmt.format(Math.abs(v - A.to) < 1e-9 ? A.to : v);
@@ -145,31 +151,90 @@
     }
   }
 
-  /* ---------- nền mạng lưới (xác định theo khung hình) ---------- */
+  /* ---------- nền chuyển động (mẫu theo data-bg, vẽ xác định theo thời gian t) ---------- */
   var cv = document.getElementById('bg');
   var cx = cv && cv.getContext ? cv.getContext('2d') : null;
-  var CW = Math.round(W / 2), CH = Math.round(H / 2), nodes = [], node = '160,220,255', edge = '46,230,214';
-  if (cx) {
+  var CW = Math.round(W / 2), CH = Math.round(H / 2), painter = null;
+  function rgbVar(cs, name, fb) {
+    var v = (cs.getPropertyValue(name) || '').trim();
+    var m = /^#([0-9a-f]{6})$/i.exec(v);
+    if (m) { var n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(','); }
+    m = /^rgba?\(([^)]+)\)$/i.exec(v);
+    if (m) return m[1].split(',').slice(0, 3).map(function (x) { return x.trim(); }).join(',');
+    return /^\d+\s*,\s*\d+\s*,\s*\d+$/.test(v) ? v : fb;
+  }
+  var bgName = deck.getAttribute('data-bg') || 'network';
+  if (cx && bgName !== 'none' && window.DeckBg) {
     cv.width = CW; cv.height = CH;
     var cs = getComputedStyle(document.documentElement);
-    node = (cs.getPropertyValue('--node') || node).trim() || node;
-    edge = (cs.getPropertyValue('--edge') || edge).trim() || edge;
-    var seed = 7; var rnd = function () { return (seed = (seed * 16807) % 2147483647) / 2147483647; };
-    var count = Math.round(64 * W / 2560);
-    for (var q = 0; q < count; q++) nodes.push({ x: rnd() * CW, y: rnd() * CH, ax: 20 + rnd() * 50, ay: 20 + rnd() * 40, sp: .05 + rnd() * .12, ph: rnd() * 6.28, r: .8 + rnd() * 1.6 });
+    var node = rgbVar(cs, '--node', '160,220,255'), edge = rgbVar(cs, '--edge', '46,230,214');
+    painter = window.DeckBg.create(cx, {
+      name: bgName, width: CW, height: CH, node: node, edge: edge,
+      accent: rgbVar(cs, '--accent', edge), accent2: rgbVar(cs, '--accent-2', node),
+      light: document.documentElement.getAttribute('data-tone') === 'light', seed: 7,
+    });
   }
-  function drawBg(t) {
-    if (!cx) return;
-    cx.clearRect(0, 0, CW, CH);
-    var P = nodes.map(function (n) { return [n.x + Math.sin(t * n.sp + n.ph) * n.ax, n.y + Math.cos(t * n.sp * .8 + n.ph) * n.ay, n.r]; });
-    cx.lineWidth = .6;
-    for (var i = 0; i < P.length; i++) for (var j = i + 1; j < P.length; j++) {
-      var dx = P[i][0] - P[j][0], dy = P[i][1] - P[j][1], d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 150) { cx.strokeStyle = 'rgba(' + edge + ',' + ((1 - d / 150) * .16).toFixed(3) + ')'; cx.beginPath(); cx.moveTo(P[i][0], P[i][1]); cx.lineTo(P[j][0], P[j][1]); cx.stroke(); }
+  function drawBg(t) { if (painter) painter.draw(t); }
+
+  /* ---------- video: bấm ảnh bìa → phát toàn màn hình, tự phát ---------- */
+  var ov = null, blobs = {};
+  function embedUrl(key) {
+    if (blobs[key]) return blobs[key];
+    var el = document.getElementById(key);
+    if (!el) return null;
+    var bin = atob((el.textContent || '').replace(/\s+/g, ''));
+    var u8 = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    blobs[key] = URL.createObjectURL(new Blob([u8], { type: el.getAttribute('data-mime') || 'video/mp4' }));
+    return blobs[key];
+  }
+  function closeVideo() {
+    if (!ov) return;
+    var o = ov; ov = null;
+    try { if (document.fullscreenElement === o) document.exitFullscreen(); } catch (e) { /* bỏ qua */ }
+    if (o.parentNode) o.parentNode.removeChild(o);
+  }
+  function playVideo(fig) {
+    var vp = fig.getAttribute('data-vp');
+    var title = fig.getAttribute('data-title') || 'Video';
+    var yt = fig.getAttribute('data-vid') || '';
+    if (vp === 'youtube' && !/^[A-Za-z0-9_-]{11}$/.test(yt)) return;
+    if (vp !== 'youtube' && vp !== 'file') return;
+    if (EMBED) {
+      try { window.parent.postMessage({ type: 'deck:video', provider: vp, id: vp === 'youtube' ? yt : undefined, src: vp === 'file' ? fig.getAttribute('data-src') : undefined, title: title }, '*'); } catch (e) { /* bỏ qua */ }
+      return;
     }
-    cx.fillStyle = 'rgba(' + node + ',.5)';
-    for (var k = 0; k < P.length; k++) { cx.beginPath(); cx.arc(P[k][0], P[k][1], P[k][2], 0, 6.283); cx.fill(); }
+    closeVideo();
+    ov = document.createElement('div');
+    ov.id = 'vov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', title);
+    var box = document.createElement('div'); box.className = 'vframe'; ov.appendChild(box);
+    var x = document.createElement('button'); x.type = 'button'; x.className = 'vx'; x.setAttribute('aria-label', 'Đóng video'); x.textContent = '×'; ov.appendChild(x);
+    x.addEventListener('click', function (e) { e.stopPropagation(); closeVideo(); });
+    ov.addEventListener('click', function (e) { e.stopPropagation(); if (e.target === ov) closeVideo(); });
+    if (vp === 'youtube') {
+      var f = document.createElement('iframe');
+      f.src = 'https://www.youtube-nocookie.com/embed/' + yt + '?autoplay=1&rel=0&playsinline=1';
+      f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.setAttribute('allowfullscreen', ''); f.title = title;
+      f.referrerPolicy = 'strict-origin-when-cross-origin';
+      box.appendChild(f);
+      // Mở tệp HTML trực tiếp (file://) YouTube có thể từ chối nhúng → luôn có đường mở sang YouTube.
+      var a = document.createElement('a'); a.className = 'vyt'; a.target = '_blank'; a.rel = 'noopener';
+      a.href = 'https://www.youtube.com/watch?v=' + yt; a.textContent = 'Không phát được? Mở trên YouTube ↗'; ov.appendChild(a);
+    } else {
+      var v = document.createElement('video');
+      v.controls = true; v.autoplay = true; v.playsInline = true;
+      box.appendChild(v);
+      var key = fig.getAttribute('data-embed');
+      setTimeout(function () {
+        v.src = key ? embedUrl(key) : fig.getAttribute('data-src') || '';
+        var pr = v.play(); if (pr && pr.catch) pr.catch(function () { /* trình duyệt chặn tự phát → còn nút phát */ });
+      }, 0);
+    }
+    document.body.appendChild(ov);
+    // Phải gọi ngay trong sự kiện bấm (trình duyệt chỉ cho toàn màn hình khi có thao tác người dùng).
+    try { var r = ov.requestFullscreen && ov.requestFullscreen(); if (r && r.catch) r.catch(function () {}); } catch (e) { /* khung chặn → vẫn phủ kín cửa sổ */ }
   }
+  document.addEventListener('fullscreenchange', function () { if (ov && !document.fullscreenElement && ov.getAttribute('data-fs')) closeVideo(); else if (ov && document.fullscreenElement === ov) ov.setAttribute('data-fs', '1'); });
 
   /* ---------- điều hướng ---------- */
   var cur = 0, t0 = performance.now();
@@ -213,6 +278,8 @@
 
     if (MODE === 'print') {
       document.body.classList.add('print');
+      // Nền chuyển động không in được → 1 khung tĩnh làm ảnh nền cho từng trang PDF.
+      if (painter) { try { painter.draw(0); deck.style.setProperty('--bgimg', 'url(' + cv.toDataURL('image/png') + ')'); } catch (e) { /* bỏ qua */ } }
       slides.forEach(function (s, i) { s.removeAttribute('aria-hidden'); render(i, FINAL, 0); });
       readyResolve(); return;
     }
@@ -239,6 +306,9 @@
 
     addEventListener('keydown', function (e) {
       var k = e.key;
+      if (ov) { if (k === 'Escape') closeVideo(); return; }
+      // Enter/Space trên nút phát video → để nút nhận lệnh bấm, không chuyển trang.
+      if ((k === 'Enter' || k === ' ') && e.target && e.target.closest && e.target.closest('.vplay')) return;
       if (['ArrowRight', 'PageDown', ' ', 'Enter', 'ArrowDown'].indexOf(k) >= 0) { e.preventDefault(); next(); }
       else if (['ArrowLeft', 'PageUp', 'Backspace', 'ArrowUp'].indexOf(k) >= 0) { e.preventDefault(); prev(); }
       else if (k === 'Home') show(0); else if (k === 'End') show(N - 1);
@@ -255,10 +325,14 @@
     if ((b = document.getElementById('next'))) b.addEventListener('click', function (e) { e.stopPropagation(); next(); });
     if ((b = document.getElementById('prev'))) b.addEventListener('click', function (e) { e.stopPropagation(); prev(); });
     if ((b = document.getElementById('fs'))) b.addEventListener('click', function (e) { e.stopPropagation(); toggleFs(); });
-    document.getElementById('stage').addEventListener('click', function (e) { if (e.clientX < innerWidth * .3) prev(); else next(); });
+    document.getElementById('stage').addEventListener('click', function (e) {
+      var fig = e.target && e.target.closest ? e.target.closest('.vid') : null;
+      if (fig) { e.stopPropagation(); playVideo(fig); return; }
+      if (e.clientX < innerWidth * .3) prev(); else next();
+    });
     var tx = null;
     addEventListener('touchstart', function (e) { tx = e.touches[0].clientX; }, { passive: true });
-    addEventListener('touchend', function (e) { if (tx === null) return; var dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) { if (dx < 0) next(); else prev(); } tx = null; });
+    addEventListener('touchend', function (e) { if (tx === null || ov) return; var dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) { if (dx < 0) next(); else prev(); } tx = null; });
     var idle; function wake() { document.body.classList.remove('idle'); clearTimeout(idle); idle = setTimeout(function () { document.body.classList.add('idle'); }, 2500); }
     addEventListener('mousemove', wake); wake();
     setTimeout(function () { var hn = document.getElementById('hint'); if (hn) hn.style.opacity = '0'; }, 4500);

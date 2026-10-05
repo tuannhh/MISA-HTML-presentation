@@ -1,4 +1,5 @@
 // Danh sách bài trình bày (của tôi / công khai) + thao tác nhanh — dùng chung desktop/mobile.
+import { deckTarget } from '@/lib/deckActions.js';
 import { ref, reactive, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { get, post, patch, del, download } from '@/lib/api.js';
@@ -40,7 +41,7 @@ export function useDecks(scope) {
   // Bài đang tạo hoặc chưa có ảnh bìa → tải lại nhẹ định kỳ.
   function schedulePoll() {
     clearTimeout(pollTimer);
-    const pending = rows.value.some((r) => r.status === 'generating' || (r.status === 'ready' && !r.thumbnailUrl));
+    const pending = rows.value.some((r) => ['outlining', 'generating'].includes(r.status) || (r.status === 'ready' && !r.thumbnailUrl));
     if (pending) pollTimer = setTimeout(() => load({ silent: true }), 4000);
   }
 
@@ -88,7 +89,7 @@ export function useDecks(scope) {
 
   async function handle(key, d) {
     try {
-      if (key === 'edit') return router.push(`/p/${d.id}/edit`);
+      if (key === 'edit') return router.push(deckTarget(d));
       if (key === 'view') return router.push(`/p/${d.id}/view`);
       if (key === 'remove') return (pendingRemove.value = d);
       if (key === 'public' || key === 'private') {

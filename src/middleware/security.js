@@ -42,7 +42,9 @@ export function securityHeaders() {
         'img-src': ["'self'", 'data:', 'blob:'],
         'font-src': ["'self'", 'data:'],
         'connect-src': ["'self'"],
-        'frame-src': ["'self'"],
+        // Video tải lên (và ảnh bìa chụp từ video ở trình duyệt qua blob:); YouTube phát trong lớp phủ của ứng dụng.
+        'media-src': ["'self'", 'blob:'],
+        'frame-src': ["'self'", 'https://www.youtube-nocookie.com'],
         'frame-ancestors': ["'none'"],
         'object-src': ["'none'"],
         'base-uri': ["'self'"],
@@ -89,6 +91,9 @@ export function rateLimits() {
     }),
     register: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 10, handler: limitHandler('Quá nhiều lượt đăng ký, thử lại sau', 'RATE_LIMITED') }),
     generate: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 30, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã tạo quá nhiều bài trong 1 giờ, vui lòng thử lại sau', 'GENERATE_RATE_LIMITED') }),
+    build: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 60, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã dựng bài quá nhiều lần trong 1 giờ, vui lòng thử lại sau', 'BUILD_RATE_LIMITED') }),
+    // Tải video, đọc link YouTube, tách nền logo — tốn băng thông/CPU hơn thao tác thường.
+    media: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 120, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn thêm media quá nhanh, vui lòng thử lại sau ít phút', 'MEDIA_RATE_LIMITED') }),
     exportPdf: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 20, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn xuất PDF quá nhiều lần, thử lại sau ít phút', 'EXPORT_RATE_LIMITED') }),
   };
 }

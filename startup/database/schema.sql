@@ -31,12 +31,16 @@ CREATE TABLE IF NOT EXISTS presentations (
   title             VARCHAR(200)  NOT NULL,
   ratio             ENUM('16:9','4:3','2:1','3:1') NOT NULL DEFAULT '16:9',
   visibility        ENUM('private','public') NOT NULL DEFAULT 'private',
-  status            ENUM('generating','ready','failed') NOT NULL DEFAULT 'generating',
+  -- outlining: AI đang lập dàn ý · outline: chờ người dùng duyệt dàn ý · generating: AI đang dựng bài.
+  status            ENUM('outlining','outline','generating','ready','failed') NOT NULL DEFAULT 'generating',
   source_kind       ENUM('file','url','text','copy') NOT NULL,
   source_label      VARCHAR(300)  NULL,
   instructions      VARCHAR(2000) NULL,
   -- Đặc tả bài trình bày (JSON) — nguồn sự thật duy nhất để render HTML/PDF.
   spec              JSON          NULL,
+  -- Dàn ý (bước 1 của AI): nội dung từng trang + media + thiết kế, người dùng duyệt rồi mới dựng bài.
+  outline           JSON          NULL,
+  outline_version   INT UNSIGNED  NOT NULL DEFAULT 0,
   -- Khoá lạc quan: mỗi lần lưu tăng 1, lưu với version cũ → 409.
   spec_version      INT UNSIGNED  NOT NULL DEFAULT 0,
   slide_count       SMALLINT UNSIGNED NOT NULL DEFAULT 0,
@@ -55,7 +59,8 @@ CREATE TABLE IF NOT EXISTS assets (
   id               CHAR(36)      NOT NULL,
   tenant_id        CHAR(36)      NOT NULL,
   presentation_id  CHAR(36)      NOT NULL,
-  kind             ENUM('image','thumbnail') NOT NULL DEFAULT 'image',
+  -- image: ảnh trong slide · thumbnail: ảnh bìa bài · video: video tải lên · logo: logo (gốc + bản tách nền) · poster: ảnh bìa video/YouTube
+  kind             ENUM('image','thumbnail','video','logo','poster') NOT NULL DEFAULT 'image',
   mime             VARCHAR(80)   NOT NULL,
   bytes            INT UNSIGNED  NOT NULL,
   width            SMALLINT UNSIGNED NULL,
@@ -103,3 +108,5 @@ CREATE TABLE IF NOT EXISTS schema_changelog (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 INSERT IGNORE INTO schema_changelog (name) VALUES ('schema.sql@2026-10-05-baseline');
+-- Baseline đã gồm các changelog sau (cài mới không cần chạy lại):
+INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261005_170000.sql');

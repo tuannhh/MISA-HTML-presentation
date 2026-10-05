@@ -1,6 +1,7 @@
 <script setup>
 // Trình soạn thảo mobile: xem trước (bản đã lưu) → dải chọn trang cuộn ngang → form nội dung trang; footer sticky Hủy thay đổi | Lưu.
-// Thiết lập bài (tên, giao diện, tỷ lệ, chia sẻ) là màn con toàn màn hình trong cùng route.
+// Thiết kế & thiết lập bài (tên, màu – nền – phông – logo, chân trang, tỷ lệ, chia sẻ) là màn con toàn màn hình trong cùng route.
+// Bài còn ở bước dàn ý (đang lập / chờ duyệt) → chuyển sang màn duyệt dàn ý.
 import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import MobileShell from './MobileShell.vue'
@@ -8,11 +9,11 @@ import ActionSheet from './ActionSheet.vue'
 import SlideFields from '@/shared/SlideFields.vue'
 import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
+import DesignPanel from '@/shared/DesignPanel.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import MInput from '@/components/mds/MInput.vue'
-import MSelect from '@/components/mds/MSelect.vue'
 import MSwitch from '@/components/mds/MSwitch.vue'
 import MDialog from '@/components/mds/MDialog.vue'
 import MSpinner from '@/components/mds/MSpinner.vue'
@@ -20,14 +21,14 @@ import MEmptyState from '@/components/mds/MEmptyState.vue'
 import { useToast } from '@/components/mds/toast.js'
 import { useEditor, usePreviewSync } from '@/composables/useEditor.js'
 import { LAYOUTS, LAYOUT_LABEL, SPEC_LIMITS } from '@/lib/slideModel.js'
-import { THEME_OPTIONS, ratioCss } from '@/lib/format.js'
+import { ratioCss } from '@/lib/format.js'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const id = route.params.id
-const ed = useEditor(id)
-const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl } = ed
+const ed = useEditor(id, { onOutline: () => router.replace(`/p/${id}/outline`) })
+const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, assets, media, videoLibrary } = ed
 
 const view = ref('slides') // 'slides' | 'deck'
 const frame = ref(null)
@@ -42,7 +43,7 @@ watch(selected, async (i) => {
 const sheet = ref('') // '' | 'more' | 'add' | 'slide'
 const sheetOpen = computed({ get: () => !!sheet.value, set: (v) => !v && (sheet.value = '') })
 const moreItems = computed(() => [
-  { key: 'settings', label: 'Thiết lập bài', icon: 'settings' },
+  { key: 'settings', label: 'Thiết kế & thiết lập bài', icon: 'palette' },
   { key: 'html', label: 'Tải HTML (có chuyển động)', icon: 'file-export' },
   { key: 'pdf', label: 'Tải PDF', icon: 'download' },
   { key: 'duplicate', label: 'Nhân bản bài', icon: 'copy' },
@@ -79,6 +80,12 @@ const titleError = computed(() => {
   if (!t.trim()) return 'Nhập tên bài'
   return t.length > SPEC_LIMITS.deckTitle ? `Tối đa ${SPEC_LIMITS.deckTitle} ký tự` : ''
 })
+const saveDetails = computed(() => (Array.isArray(saveError.value?.details) ? saveError.value.details.slice(0, 5) : []))
+function reloadLatest() {
+  // load() không xoá lỗi lưu cũ → xoá tại đây để thông báo 409 không còn sau khi đã tải bản mới.
+  saveError.value = null
+  ed.load()
+}
 
 async function onSave() {
   if (titleError.value) {
@@ -155,7 +162,7 @@ onMounted(ed.load)
 </script>
 
 <template>
-  <MobileShell :title="view === 'deck' ? 'Thiết lập bài' : draft?.title || 'Chỉnh sửa'" back="/decks" :on-back="onBack" :show-more="!!draft && view === 'slides'" @more="sheet = 'more'">
+  <MobileShell :title="view === 'deck' ? 'Thiết kế & thiết lập' : draft?.title || 'Chỉnh sửa'" back="/decks" :on-back="onBack" :show-more="!!draft && view === 'slides'" @more="sheet = 'more'">
     <template v-if="draft && view === 'slides'" #actions>
       <MButton variant="icon" aria-label="Trình chiếu" @click="router.push(`/p/${id}/view`)"><template #icon><MIcon name="eye" :size="24" /></template></MButton>
     </template>
@@ -176,8 +183,8 @@ onMounted(ed.load)
 
     <div v-else-if="deck?.status === 'generating'" class="flex flex-col items-center gap-4 px-6 py-16 text-center">
       <MSpinner :size="40" />
-      <p class="text-[16px] font-semibold leading-6">AI đang dựng “{{ deck.title }}”</p>
-      <p class="text-[14px] leading-5 text-[var(--mds-text-secondary)]">Thường mất 30 giây đến 2 phút. Bạn có thể rời màn hình, bài vẫn được tạo tiếp.</p>
+      <p class="mds-mobile-readable text-[16px] font-semibold leading-6">AI đang dựng “{{ deck.title }}” theo dàn ý</p>
+      <p class="text-[14px] leading-5 text-[var(--mds-text-secondary)]">Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn — thường dưới 1 phút. Bạn có thể rời màn hình, bài vẫn tiếp tục được dựng.</p>
     </div>
 
     <div v-else-if="deck?.status === 'failed'" class="px-4 py-10">
@@ -189,17 +196,22 @@ onMounted(ed.load)
       </MEmptyState>
     </div>
 
-    <!-- Màn con: thiết lập bài -->
+    <!-- Màn con: thiết kế & thiết lập bài -->
     <div v-else-if="draft && view === 'deck'" class="flex flex-col gap-4 bg-[var(--mds-bg)] p-4">
       <FormField label="Tên bài" required>
         <MInput v-model="draft.title" :error="titleError" />
       </FormField>
-      <FormField label="Giao diện màu" hint="Áp dụng sau khi Lưu">
-        <MSelect v-model="draft.spec.theme" :options="THEME_OPTIONS" />
-      </FormField>
-      <FormField label="Chân trang" hint="Để trống sẽ dùng tên bài">
-        <MInput v-model="draft.spec.footer" :error="(draft.spec.footer || '').length > SPEC_LIMITS.footer ? `Tối đa ${SPEC_LIMITS.footer} ký tự` : ''" />
-      </FormField>
+      <!-- Thiết kế sửa thẳng vào spec (theme/palette/background/font/logo) — áp dụng khi Lưu, cùng chân trang -->
+      <DesignPanel
+        v-model:footer="draft.spec.footer"
+        compact
+        :design="draft.spec"
+        :media="media"
+        :title="draft.title"
+        :subtitle="draft.spec.slides[0]?.subtitle || ''"
+        :ratio="deck.ratio"
+      />
+      <FormAlert tone="info">Màu sắc, nền, phông chữ, logo và chân trang áp dụng cho toàn bộ bài sau khi bấm <strong>Lưu</strong>.</FormAlert>
       <hr class="border-[var(--mds-border-light)]" />
       <FormField label="Tỷ lệ khung hình" hint="Áp dụng ngay" group>
         <RatioPicker :model-value="deck.ratio" compact name="ratio-ed" @update:model-value="(r) => onMeta({ ratio: r }, `Đã đổi tỷ lệ sang ${r}`)" />
@@ -221,7 +233,7 @@ onMounted(ed.load)
     <template v-else-if="draft">
       <div class="bg-[#05070F] p-2">
         <div class="relative w-full overflow-hidden rounded" :style="{ aspectRatio: ratioCss(deck.ratio) }">
-          <iframe v-if="previewUrl" ref="frame" :key="previewUrl" :src="previewUrl" title="Xem trước bài trình bày" sandbox="allow-scripts allow-popups" class="absolute inset-0 h-full w-full border-0" @load="goto(selected)" />
+          <iframe v-if="previewUrl" ref="frame" data-deck-frame :key="previewUrl" :src="previewUrl" title="Xem trước bài trình bày" sandbox="allow-scripts allow-popups" class="absolute inset-0 h-full w-full border-0" @load="goto(selected)" />
           <div v-if="saving" class="absolute inset-0 grid place-items-center bg-black/40"><MSpinner :size="32" /></div>
         </div>
       </div>
@@ -252,14 +264,17 @@ onMounted(ed.load)
 
       <div class="bg-[var(--mds-bg)] p-4">
         <p v-if="slide" class="mb-3 text-[13px] font-semibold uppercase tracking-wide text-[var(--mds-text-secondary)]">Trang {{ selected + 1 }} · {{ LAYOUT_LABEL[slide.layout] }}</p>
-        <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="deck.assets || []" :upload="ed.uploadImage" @change-layout="ed.changeLayout" />
+        <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="assets" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" @change-layout="ed.changeLayout" />
       </div>
     </template>
 
     <template v-if="draft && deck?.status === 'ready' && deck.isOwner" #footer>
-      <FormAlert v-if="saveError" class="mb-2">
-        {{ saveError.message }}
-        <button v-if="saveError.status === 409" type="button" class="block min-h-12 font-medium text-[var(--mds-brand-600)]" @click="ed.load()">Tải lại bản mới nhất</button>
+      <FormAlert v-if="saveError" class="mb-2 max-h-[30dvh] overflow-y-auto">
+        <span class="mds-mobile-readable">{{ saveError.message }}</span>
+        <ul v-if="saveDetails.length" class="mt-1 list-disc pl-4">
+          <li v-for="(d, k) in saveDetails" :key="k" class="mds-mobile-readable">{{ d.message || d }}</li>
+        </ul>
+        <button v-if="saveError.status === 409" type="button" class="block min-h-12 text-left font-medium text-[var(--mds-brand-600)]" @click="reloadLatest">Tải lại bản mới nhất</button>
       </FormAlert>
       <div class="flex gap-2">
         <MButton variant="outline" class="flex-1" :disabled="!dirty || saving" @click="ed.discard()">Hủy thay đổi</MButton>

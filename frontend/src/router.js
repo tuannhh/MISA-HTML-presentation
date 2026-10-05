@@ -17,6 +17,7 @@ const routes = [
   { path: '/decks', component: Holder, meta: { auth: true, nav: 'mine', title: 'Bài của tôi', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },
   { path: '/public', component: Holder, meta: { auth: true, nav: 'public', title: 'Thư viện công khai', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },
   { path: '/create', component: Holder, meta: { auth: true, nav: 'create', title: 'Tạo bài trình bày', ...pair(() => import('./desktop/CreatePage.vue'), () => import('./mobile/CreatePage.vue')) } },
+  { path: '/p/:id/outline', component: Holder, meta: { auth: true, nav: 'mine', title: 'Duyệt dàn ý', ...pair(() => import('./desktop/OutlinePage.vue'), () => import('./mobile/OutlinePage.vue')) } },
   { path: '/p/:id/edit', component: Holder, meta: { auth: true, nav: 'mine', title: 'Chỉnh sửa', ...pair(() => import('./desktop/EditorPage.vue'), () => import('./mobile/EditorPage.vue')) } },
   { path: '/p/:id/view', component: Holder, meta: { auth: true, nav: 'public', title: 'Trình chiếu', ...pair(() => import('./desktop/ViewerPage.vue'), () => import('./mobile/ViewerPage.vue')) } },
   { path: '/account', component: Holder, meta: { auth: true, nav: 'account', title: 'Tài khoản', ...pair(() => import('./desktop/AccountPage.vue'), () => import('./mobile/AccountPage.vue')) } },

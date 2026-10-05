@@ -40,18 +40,38 @@ export function createAssetRepository(pool) {
       return rows;
     },
 
+    // Mọi tệp dùng trong nội dung bài (ảnh, video, logo, ảnh bìa video) — không gồm ảnh bìa danh sách (thumbnail).
+    async listMediaForPresentation(presentationId) {
+      const [rows] = await pool.execute(
+        `SELECT ${COLS} FROM assets a WHERE a.presentation_id = ? AND a.kind <> 'thumbnail' ORDER BY a.created_at`,
+        [presentationId],
+      );
+      return rows;
+    },
+
     async listOwnedForPresentation(tenantId, presentationId) {
       const t = tenantClause(tenantId, 'a');
       const [rows] = await pool.execute(
-        `SELECT ${COLS} FROM assets a WHERE a.presentation_id = ? AND a.kind = 'image' AND ${t.sql} ORDER BY a.created_at`,
+        `SELECT ${COLS} FROM assets a WHERE a.presentation_id = ? AND a.kind <> 'thumbnail' AND ${t.sql} ORDER BY a.created_at`,
         [presentationId, ...t.params],
       );
       return rows;
     },
 
-    async countForPresentation(presentationId) {
-      const [[row]] = await pool.execute("SELECT COUNT(*) AS n FROM assets WHERE presentation_id = ? AND kind = 'image'", [presentationId]);
+    async findOwnedInPresentation(tenantId, presentationId, id) {
+      const t = tenantClause(tenantId, 'a');
+      const [rows] = await pool.execute(`SELECT ${COLS} FROM assets a WHERE a.id = ? AND a.presentation_id = ? AND ${t.sql} LIMIT 1`, [id, presentationId, ...t.params]);
+      return rows[0] || null;
+    },
+
+    async countForPresentation(presentationId, kind = 'image') {
+      const [[row]] = await pool.execute('SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS bytes FROM assets WHERE presentation_id = ? AND kind = ?', [presentationId, kind]);
       return Number(row.n);
+    },
+
+    async bytesForPresentation(presentationId, kind) {
+      const [[row]] = await pool.execute('SELECT COALESCE(SUM(bytes), 0) AS bytes FROM assets WHERE presentation_id = ? AND kind = ?', [presentationId, kind]);
+      return Number(row.bytes);
     },
 
     async listStorageKeysForPresentation(tenantId, presentationId) {

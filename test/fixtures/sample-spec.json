@@ -2,59 +2,312 @@
   "version": 1,
   "title": "Chuyển đổi số cho doanh nghiệp vừa",
   "theme": "midnight",
+  "background": "circuit",
+  "font": {
+    "heading": "montserrat",
+    "body": "inter"
+  },
   "footer": "MISA Presentation · Mẫu kiểm thử",
   "slides": [
-    { "id": "s01", "layout": "cover", "kicker": "Hội thảo 2026", "title": "Chuyển đổi số cho doanh nghiệp vừa", "highlight": "doanh nghiệp vừa", "subtitle": "Từ dữ liệu rời rạc đến vận hành thông minh trên một nền tảng duy nhất.", "tags": ["AI First", "ERP", "Dữ liệu", "Tự động hoá"], "caption": "Nguyễn Văn A · Giám đốc Giải pháp", "icon": "sparkles" },
-    { "id": "s02", "layout": "agenda", "kicker": "Nội dung", "title": "Chương trình hôm nay", "items": [
-      { "title": "Bối cảnh thị trường", "text": "Xu hướng và áp lực cạnh tranh" },
-      { "title": "Bài toán vận hành", "text": "Điểm nghẽn ở các phòng ban" },
-      { "title": "Giải pháp đề xuất", "text": "Kiến trúc và lộ trình" },
-      { "title": "Lợi ích đo được", "text": "Chỉ số trước và sau" },
-      { "title": "Hỏi đáp", "text": "Trao đổi cùng chuyên gia" }
-    ] },
-    { "id": "s03", "layout": "section", "kicker": "Phần 1", "title": "Bối cảnh thị trường", "subtitle": "Doanh nghiệp vừa đang đứng trước làn sóng tự động hoá thứ hai." },
-    { "id": "s04", "layout": "bullets", "kicker": "Thực trạng", "title": "Ba điểm nghẽn phổ biến", "highlight": "điểm nghẽn", "subtitle": "Khảo sát 320 doanh nghiệp vừa năm 2026.", "items": [
-      { "icon": "database", "title": "Dữ liệu phân tán", "text": "Mỗi phòng ban một phần mềm, số liệu không khớp nhau khi tổng hợp báo cáo." },
-      { "icon": "clock", "title": "Quy trình thủ công", "text": "Phê duyệt qua giấy tờ và tin nhắn, mất 3–5 ngày cho một đề nghị mua hàng.", "value": "-40% năng suất" },
-      { "icon": "eye", "title": "Thiếu tầm nhìn tức thời", "text": "Lãnh đạo chỉ thấy số liệu sau khi kết thúc tháng." }
-    ] },
-    { "id": "s05", "layout": "cards", "kicker": "Giải pháp", "title": "Một nền tảng, sáu phân hệ", "items": [
-      { "icon": "coins", "title": "Tài chính – Kế toán", "text": "Hạch toán tự động, báo cáo thuế đúng hạn.", "value": "Kế toán" },
-      { "icon": "cart", "title": "Bán hàng", "text": "Quản lý đơn, công nợ, chiết khấu theo chính sách.", "value": "CRM" },
-      { "icon": "truck", "title": "Kho vận", "text": "Tồn kho theo thời gian thực, nhiều kho.", "value": "SCM" },
-      { "icon": "users", "title": "Nhân sự", "text": "Chấm công, tính lương, đánh giá KPI.", "value": "HRM" },
-      { "icon": "factory", "title": "Sản xuất", "text": "Định mức, lệnh sản xuất, giá thành.", "value": "MRP" },
-      { "icon": "chart", "title": "Quản trị", "text": "Dashboard điều hành trên di động.", "value": "BI" }
-    ] },
-    { "id": "s06", "layout": "stats", "kicker": "Kết quả", "title": "Con số sau 6 tháng triển khai", "stats": [
-      { "value": 62, "suffix": "%", "label": "Giảm thời gian lập báo cáo" },
-      { "value": 3.5, "suffix": "x", "label": "Tốc độ phê duyệt chứng từ" },
-      { "value": 1200, "prefix": "+", "label": "Giờ công tiết kiệm mỗi quý" },
-      { "value": "24/7", "label": "Số liệu điều hành trên di động" }
-    ] },
-    { "id": "s07", "layout": "timeline", "kicker": "Lộ trình", "title": "Triển khai trong 16 tuần", "steps": [
-      { "value": "Tuần 1–2", "title": "Khảo sát", "text": "Phỏng vấn các phòng ban, chốt phạm vi." },
-      { "value": "Tuần 3–6", "title": "Thiết lập", "text": "Cấu hình danh mục, quy trình, phân quyền." },
-      { "value": "Tuần 7–10", "title": "Chuyển dữ liệu", "text": "Nhập số dư, đối chiếu với hệ thống cũ." },
-      { "value": "Tuần 11–14", "title": "Đào tạo", "text": "Hướng dẫn theo vai trò, chạy song song." },
-      { "value": "Tuần 15–16", "title": "Vận hành", "text": "Nghiệm thu và hỗ trợ sau triển khai." }
-    ] },
-    { "id": "s08", "layout": "process", "kicker": "Quy trình", "title": "Mua hàng khép kín", "steps": [
-      { "title": "Đề nghị", "text": "Nhân viên tạo đề nghị trên di động." },
-      { "title": "Phê duyệt", "text": "Trưởng bộ phận duyệt theo hạn mức." },
-      { "title": "Đặt hàng", "text": "Tự sinh đơn mua gửi nhà cung cấp." },
-      { "title": "Nhập kho", "text": "Quét mã, cập nhật tồn kho và công nợ." }
-    ] },
-    { "id": "s09", "layout": "comparison", "kicker": "So sánh", "title": "Trước và sau khi chuyển đổi", "columns": [
-      { "title": "Cách làm cũ", "subtitle": "Thủ công", "tone": "neg", "points": ["Nhập liệu lặp lại ở nhiều nơi", "Báo cáo cuối tháng mới có", "Phê duyệt qua giấy tờ"] },
-      { "title": "Trên nền tảng mới", "subtitle": "Tự động", "tone": "pos", "points": ["Nhập một lần, dùng mọi nơi", "Số liệu tức thời trên di động", "Phê duyệt một chạm"] }
-    ] },
-    { "id": "s10", "layout": "quote", "kicker": "Khách hàng nói", "quote": { "text": "Lần đầu tiên tôi xem được lãi lỗ từng đơn hàng ngay trong ngày, thay vì chờ kế toán chốt sổ.", "author": "Chị Trần Thu Hà", "role": "Giám đốc tài chính" } },
-    { "id": "s11", "layout": "image", "kicker": "Minh hoạ", "title": "Màn hình điều hành", "caption": "Ảnh minh hoạ (chưa gắn ảnh)", "image": { "alt": "Dashboard" }, "items": [
-      { "icon": "gauge", "title": "Chỉ số chính", "text": "Doanh thu, dòng tiền, tồn kho." },
-      { "icon": "bell", "title": "Cảnh báo", "text": "Công nợ quá hạn, tồn kho dưới định mức." }
-    ] },
-    { "id": "s12", "layout": "gallery", "kicker": "Hình ảnh", "title": "Hoạt động triển khai", "images": [ { "caption": "Khảo sát" }, { "caption": "Đào tạo" }, { "caption": "Nghiệm thu" } ] },
-    { "id": "s13", "layout": "closing", "kicker": "Cảm ơn", "title": "Xin cảm ơn!", "subtitle": "Cùng xây dựng doanh nghiệp vận hành bằng dữ liệu.", "tags": ["hotro@example.com", "1900 0000"] }
+    {
+      "id": "s01",
+      "layout": "cover",
+      "kicker": "Hội thảo 2026",
+      "title": "Chuyển đổi số cho doanh nghiệp vừa",
+      "highlight": "doanh nghiệp vừa",
+      "subtitle": "Từ dữ liệu rời rạc đến vận hành thông minh trên một nền tảng duy nhất.",
+      "tags": [
+        "AI First",
+        "ERP",
+        "Dữ liệu",
+        "Tự động hoá"
+      ],
+      "caption": "Nguyễn Văn A · Giám đốc Giải pháp",
+      "icon": "sparkles"
+    },
+    {
+      "id": "s02",
+      "layout": "agenda",
+      "kicker": "Nội dung",
+      "title": "Chương trình hôm nay",
+      "items": [
+        {
+          "title": "Bối cảnh thị trường",
+          "text": "Xu hướng và áp lực cạnh tranh"
+        },
+        {
+          "title": "Bài toán vận hành",
+          "text": "Điểm nghẽn ở các phòng ban"
+        },
+        {
+          "title": "Giải pháp đề xuất",
+          "text": "Kiến trúc và lộ trình"
+        },
+        {
+          "title": "Lợi ích đo được",
+          "text": "Chỉ số trước và sau"
+        },
+        {
+          "title": "Hỏi đáp",
+          "text": "Trao đổi cùng chuyên gia"
+        }
+      ]
+    },
+    {
+      "id": "s03",
+      "layout": "section",
+      "kicker": "Phần 1",
+      "title": "Bối cảnh thị trường",
+      "subtitle": "Doanh nghiệp vừa đang đứng trước làn sóng tự động hoá thứ hai.",
+      "video": {
+        "provider": "youtube",
+        "id": "dQw4w9WgXcQ",
+        "poster": null,
+        "title": "Video giới thiệu giải pháp",
+        "caption": ""
+      }
+    },
+    {
+      "id": "s04",
+      "layout": "bullets",
+      "kicker": "Thực trạng",
+      "title": "Ba điểm nghẽn phổ biến",
+      "highlight": "điểm nghẽn",
+      "subtitle": "Khảo sát 320 doanh nghiệp vừa năm 2026.",
+      "items": [
+        {
+          "icon": "database",
+          "title": "Dữ liệu phân tán",
+          "text": "Mỗi phòng ban một phần mềm, số liệu không khớp nhau khi tổng hợp báo cáo."
+        },
+        {
+          "icon": "clock",
+          "title": "Quy trình thủ công",
+          "text": "Phê duyệt qua giấy tờ và tin nhắn, mất 3–5 ngày cho một đề nghị mua hàng.",
+          "value": "-40% năng suất"
+        },
+        {
+          "icon": "eye",
+          "title": "Thiếu tầm nhìn tức thời",
+          "text": "Lãnh đạo chỉ thấy số liệu sau khi kết thúc tháng."
+        }
+      ]
+    },
+    {
+      "id": "s05",
+      "layout": "cards",
+      "kicker": "Giải pháp",
+      "title": "Một nền tảng, sáu phân hệ",
+      "items": [
+        {
+          "icon": "coins",
+          "title": "Tài chính – Kế toán",
+          "text": "Hạch toán tự động, báo cáo thuế đúng hạn.",
+          "value": "Kế toán"
+        },
+        {
+          "icon": "cart",
+          "title": "Bán hàng",
+          "text": "Quản lý đơn, công nợ, chiết khấu theo chính sách.",
+          "value": "CRM"
+        },
+        {
+          "icon": "truck",
+          "title": "Kho vận",
+          "text": "Tồn kho theo thời gian thực, nhiều kho.",
+          "value": "SCM"
+        },
+        {
+          "icon": "users",
+          "title": "Nhân sự",
+          "text": "Chấm công, tính lương, đánh giá KPI.",
+          "value": "HRM"
+        },
+        {
+          "icon": "factory",
+          "title": "Sản xuất",
+          "text": "Định mức, lệnh sản xuất, giá thành.",
+          "value": "MRP"
+        },
+        {
+          "icon": "chart",
+          "title": "Quản trị",
+          "text": "Dashboard điều hành trên di động.",
+          "value": "BI"
+        }
+      ]
+    },
+    {
+      "id": "s06",
+      "layout": "stats",
+      "kicker": "Kết quả",
+      "title": "Con số sau 6 tháng triển khai",
+      "stats": [
+        {
+          "value": 62,
+          "suffix": "%",
+          "label": "Giảm thời gian lập báo cáo"
+        },
+        {
+          "value": 3.5,
+          "suffix": "x",
+          "label": "Tốc độ phê duyệt chứng từ"
+        },
+        {
+          "value": 1200,
+          "prefix": "+",
+          "label": "Giờ công tiết kiệm mỗi quý"
+        },
+        {
+          "value": "24/7",
+          "label": "Số liệu điều hành trên di động"
+        }
+      ]
+    },
+    {
+      "id": "s07",
+      "layout": "timeline",
+      "kicker": "Lộ trình",
+      "title": "Triển khai trong 16 tuần",
+      "steps": [
+        {
+          "value": "Tuần 1–2",
+          "title": "Khảo sát",
+          "text": "Phỏng vấn các phòng ban, chốt phạm vi."
+        },
+        {
+          "value": "Tuần 3–6",
+          "title": "Thiết lập",
+          "text": "Cấu hình danh mục, quy trình, phân quyền."
+        },
+        {
+          "value": "Tuần 7–10",
+          "title": "Chuyển dữ liệu",
+          "text": "Nhập số dư, đối chiếu với hệ thống cũ."
+        },
+        {
+          "value": "Tuần 11–14",
+          "title": "Đào tạo",
+          "text": "Hướng dẫn theo vai trò, chạy song song."
+        },
+        {
+          "value": "Tuần 15–16",
+          "title": "Vận hành",
+          "text": "Nghiệm thu và hỗ trợ sau triển khai."
+        }
+      ]
+    },
+    {
+      "id": "s08",
+      "layout": "process",
+      "kicker": "Quy trình",
+      "title": "Mua hàng khép kín",
+      "steps": [
+        {
+          "title": "Đề nghị",
+          "text": "Nhân viên tạo đề nghị trên di động."
+        },
+        {
+          "title": "Phê duyệt",
+          "text": "Trưởng bộ phận duyệt theo hạn mức."
+        },
+        {
+          "title": "Đặt hàng",
+          "text": "Tự sinh đơn mua gửi nhà cung cấp."
+        },
+        {
+          "title": "Nhập kho",
+          "text": "Quét mã, cập nhật tồn kho và công nợ."
+        }
+      ]
+    },
+    {
+      "id": "s09",
+      "layout": "comparison",
+      "kicker": "So sánh",
+      "title": "Trước và sau khi chuyển đổi",
+      "columns": [
+        {
+          "title": "Cách làm cũ",
+          "subtitle": "Thủ công",
+          "tone": "neg",
+          "points": [
+            "Nhập liệu lặp lại ở nhiều nơi",
+            "Báo cáo cuối tháng mới có",
+            "Phê duyệt qua giấy tờ"
+          ]
+        },
+        {
+          "title": "Trên nền tảng mới",
+          "subtitle": "Tự động",
+          "tone": "pos",
+          "points": [
+            "Nhập một lần, dùng mọi nơi",
+            "Số liệu tức thời trên di động",
+            "Phê duyệt một chạm"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "s10",
+      "layout": "quote",
+      "kicker": "Khách hàng nói",
+      "quote": {
+        "text": "Lần đầu tiên tôi xem được lãi lỗ từng đơn hàng ngay trong ngày, thay vì chờ kế toán chốt sổ.",
+        "author": "Chị Trần Thu Hà",
+        "role": "Giám đốc tài chính"
+      }
+    },
+    {
+      "id": "s11",
+      "layout": "image",
+      "kicker": "Minh hoạ",
+      "title": "Màn hình điều hành",
+      "caption": "Ảnh minh hoạ (chưa gắn ảnh)",
+      "image": {
+        "alt": "Dashboard"
+      },
+      "items": [
+        {
+          "icon": "gauge",
+          "title": "Chỉ số chính",
+          "text": "Doanh thu, dòng tiền, tồn kho."
+        },
+        {
+          "icon": "bell",
+          "title": "Cảnh báo",
+          "text": "Công nợ quá hạn, tồn kho dưới định mức."
+        }
+      ]
+    },
+    {
+      "id": "s12",
+      "layout": "gallery",
+      "kicker": "Hình ảnh",
+      "title": "Hoạt động triển khai",
+      "images": [
+        {
+          "caption": "Khảo sát"
+        },
+        {
+          "caption": "Đào tạo"
+        },
+        {
+          "caption": "Nghiệm thu"
+        }
+      ]
+    },
+    {
+      "id": "s13",
+      "layout": "closing",
+      "kicker": "Cảm ơn",
+      "title": "Xin cảm ơn!",
+      "subtitle": "Cùng xây dựng doanh nghiệp vận hành bằng dữ liệu.",
+      "tags": [
+        "hotro@example.com",
+        "1900 0000"
+      ]
+    }
   ]
 }
