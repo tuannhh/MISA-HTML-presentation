@@ -1,8 +1,9 @@
 // Bảng màu (tông màu) của bài trình bày. Hàm thuần — dùng chung cho renderer (server), giao diện chọn màu (Vue) và kiểm thử.
 //  - 5 theme gốc (midnight, ocean, aurora, paper, ember) được tinh chỉnh tay trong theme.css.
 //  - Các theme còn lại + "Tuỳ chỉnh" (người dùng nhập 2 màu) được SINH từ (nền sáng/tối, màu chính, màu phụ):
-//    mọi màu dùng làm chữ đều được tự đẩy đậm/nhạt tới khi đạt tương phản tối thiểu với nền
-//    (≥ 4.5:1 cho màu nhấn) → nền sáng không bao giờ ra chữ vàng/xám nhạt khó đọc.
+//    mọi màu dùng làm chữ đều được tự đẩy đậm/nhạt tới khi đạt tương phản tối thiểu với nền → không ra chữ vàng/xám nhạt khó đọc.
+//    Màu nhấn nền sáng chỉ cần ≥ 3:1 (chuẩn chữ lớn/đồ hoạ — màu nhấn dùng cho tiêu đề, số liệu, icon; chữ thường dùng --text/--muted)
+//    → cam/xanh giữ được độ rực thay vì bị đẩy về nâu/xanh thẫm.
 
 export const PALETTE_TONES = Object.freeze(['dark', 'light']);
 
@@ -15,13 +16,13 @@ export const THEME_PRESETS = Object.freeze({
   emerald: { tone: 'dark', label: 'Đen – xanh lá', hint: 'tăng trưởng, bền vững', primary: '#34D399', secondary: '#22D3EE', bg: '#04110D' },
   crimson: { tone: 'dark', label: 'Đen – đỏ', hint: 'mạnh mẽ, khẩn trương', primary: '#FF4D5E', secondary: '#FF9F43', bg: '#0F0709' },
   gold: { tone: 'dark', label: 'Đen – vàng kim', hint: 'cao cấp, vinh danh', primary: '#F5C451', secondary: '#E9DCC0', bg: '#0C0A06' },
-  paper: { tone: 'light', label: 'Xanh dương – đen', hint: 'trang trọng, rõ ràng', swatch: { bg: '#F7F9FC', ink: '#0B1220', a: '#1D4ED8', b: '#0F172A' } },
-  ember: { tone: 'light', label: 'Cam – đen', hint: 'năng động', swatch: { bg: '#FBF8F3', ink: '#111111', a: '#B83A0B', b: '#1C1917' } },
-  sky: { tone: 'light', label: 'Xanh – trắng', hint: 'tươi sáng, hiện đại', primary: '#0B63E5', secondary: '#0A2A66', bg: '#FFFFFF' },
-  sunset: { tone: 'light', label: 'Cam – trắng', hint: 'ấm áp, thân thiện', primary: '#C2410C', secondary: '#7C2D12', bg: '#FFFFFF' },
-  forest: { tone: 'light', label: 'Xanh lá – đen', hint: 'tự nhiên, bền vững', primary: '#047857', secondary: '#0F172A', bg: '#F6FAF7' },
-  royal: { tone: 'light', label: 'Tím – đen', hint: 'sáng tạo, khác biệt', primary: '#6D28D9', secondary: '#111827', bg: '#F8F7FC' },
-  ruby: { tone: 'light', label: 'Đỏ – đen', hint: 'quyết liệt, nổi bật', primary: '#B91C1C', secondary: '#111111', bg: '#FCF8F8' },
+  paper: { tone: 'light', label: 'Xanh dương – đen', hint: 'trang trọng, rõ ràng', swatch: { bg: '#F7F9FC', ink: '#0B1220', a: '#2563EB', b: '#0F172A' } },
+  ember: { tone: 'light', label: 'Cam – đen', hint: 'năng động', swatch: { bg: '#FFFAF6', ink: '#111111', a: '#F05A22', b: '#1C1917' } },
+  sky: { tone: 'light', label: 'Xanh – trắng', hint: 'tươi sáng, hiện đại', primary: '#1677FF', secondary: '#0B3B8C', bg: '#FFFFFF' },
+  sunset: { tone: 'light', label: 'Cam – trắng', hint: 'ấm áp, thân thiện', primary: '#F05A22', secondary: '#9A3412', bg: '#FFFFFF' },
+  forest: { tone: 'light', label: 'Xanh lá – đen', hint: 'tự nhiên, bền vững', primary: '#059669', secondary: '#0F172A', bg: '#F6FAF7' },
+  royal: { tone: 'light', label: 'Tím – đen', hint: 'sáng tạo, khác biệt', primary: '#7C3AED', secondary: '#111827', bg: '#F8F7FC' },
+  ruby: { tone: 'light', label: 'Đỏ – đen', hint: 'quyết liệt, nổi bật', primary: '#DC2626', secondary: '#111111', bg: '#FCF8F8' },
 });
 export const CUSTOM_THEME = 'custom';
 // Theme có CSS viết tay trong theme.css (không sinh biến).
@@ -117,12 +118,13 @@ export function paletteVars(p) {
   const muted = ensureContrast(mix(text, bg1, dark ? 0.4 : 0.3), bg2, dark ? 5.5 : 7, toward);
   const dim = ensureContrast(mix(text, bg1, dark ? 0.52 : 0.42), bg2, dark ? 4.5 : 5.5, toward);
 
-  const primary = ensureContrast(primaryIn, bg2, 4.5, toward);
-  const secondary = ensureContrast(secondaryIn, bg2, dark ? 4.5 : 4.5, toward);
-  const blend = ensureContrast(mix(primary, secondary, 0.5), bg2, 4.5, toward);
-  const shade = ensureContrast(mix(primary, toward, 0.28), bg2, 4.5, toward);
-  const good = ensureContrast(dark ? '#4ADE80' : '#047857', bg2, 4.5, toward);
-  const bad = ensureContrast(dark ? '#F87171' : '#B91C1C', bg2, 4.5, toward);
+  const accentMin = dark ? 4.5 : 3;
+  const primary = ensureContrast(primaryIn, bg2, accentMin, toward);
+  const secondary = ensureContrast(secondaryIn, bg2, accentMin, toward);
+  const blend = ensureContrast(mix(primary, secondary, 0.5), bg2, accentMin, toward);
+  const shade = ensureContrast(mix(primary, toward, 0.2), bg2, accentMin, toward);
+  const good = ensureContrast(dark ? '#4ADE80' : '#059669', bg2, accentMin, toward);
+  const bad = ensureContrast(dark ? '#F87171' : '#DC2626', bg2, accentMin, toward);
   const onAccent = contrast(primary, '#FFFFFF') >= contrast(primary, '#0A0A0A') ? '#FFFFFF' : mix(bg1, '#000000', 0.4);
   const line = dark ? mix(primary, '#FFFFFF', 0.5) : text;
 

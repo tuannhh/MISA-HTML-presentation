@@ -66,6 +66,7 @@ function cleanOutlineSlide(c, v, i, seen) {
           const img = { asset, caption: c.str(x.caption, SPEC_LIMITS.caption, `${p}.images[${k}].caption`) };
           // Ảnh đồ hoạ người dùng gửi kèm (infographic, sơ đồ…) hiển thị trọn khung, không cắt.
           if (x.fit === 'contain') img.fit = 'contain';
+          if (x.frame === 'browser') img.frame = 'browser';
           return img;
         })
         .filter(Boolean);
@@ -109,7 +110,8 @@ export function normalizeOutline(input, { strict = false, options } = {}) {
 }
 
 /**
- * Chỉ giữ ảnh chụp thật trên các trang dàn ý do AI lập (infographic, slide, biểu đồ… là tư liệu, không gắn vào trang).
+ * Chỉ giữ ảnh được phép gắn (ảnh chụp thật, ảnh giao diện phần mềm, ảnh người dùng gửi) trên các trang dàn ý do AI lập
+ * (infographic, slide, biểu đồ… là tư liệu, không gắn vào trang).
  * Trang bố cục ảnh (image/gallery) mất hết ảnh → 'auto' để bước dựng bài tự chọn bố cục hợp nội dung chữ.
  * @param {Array} slides  trang dàn ý (images: [{asset, caption}])
  * @param {(assetId:string)=>boolean} isPhoto
@@ -133,10 +135,15 @@ export function keepPhotoImages(slides, isPhoto) {
  * trang ảnh/video trước trang kết (khi còn hạn mức trang), cuối cùng gom thêm vào trang ảnh sẵn có.
  * @param {Array} slides  trang dàn ý đã chuẩn hoá (images: [{asset, caption, fit?}], video)
  * @param {{ images: Array<{asset:string, fit?:string}>, videos: Array<object> }} required  video = đối tượng video dàn ý
- * @param {{ room?: number }} o  số trang còn được thêm (0 = giữ đúng số trang)
+ * @param {{ room?: number, force?: boolean, chunk?: number, title?: string }} o  room = số trang còn được thêm (0 = giữ đúng số trang);
+ *   force = false: media không bắt buộc (ảnh giao diện cắt từ PDF) — chỉ chèn vào trang chữ còn trống hoặc thêm trang khi còn hạn mức,
+ *   hết chỗ thì bỏ qua; chunk = số ảnh tối đa mỗi trang gom; title = tiêu đề trang ảnh thêm mới.
  * @returns {{ added: number, moved: number }}
  */
-export function placeUserMedia(slides, required, { room = 0 } = {}) {
+// Kiểu hiển thị ảnh mang theo khi đặt lại vị trí (trọn khung / khung trình duyệt).
+const look = (im) => ({ ...(im?.fit === 'contain' ? { fit: 'contain' } : {}), ...(im?.frame === 'browser' ? { frame: 'browser' } : {}) });
+
+export function placeUserMedia(slides, required, { room = 0, force = true, chunk: per = SPEC_LIMITS.images, title = 'Hình ảnh' } = {}) {
   const imgs = new Map((required.images || []).map((im) => [im.asset, im]));
   const vids = new Map((required.videos || []).map((v) => [v.asset, v]));
   if (!imgs.size && !vids.size) return { added: 0, moved: 0 };
@@ -160,12 +167,12 @@ export function placeUserMedia(slides, required, { room = 0 } = {}) {
         continue;
       }
       seenImg.add(im.asset);
-      kept.push({ ...im, ...(imgs.get(im.asset).fit === 'contain' ? { fit: 'contain' } : {}) });
+      kept.push({ ...im, ...look(imgs.get(im.asset)) });
     }
     s.images = s.video ? [] : kept;
   }
   const leftVids = [...vids.values()].filter((v) => !seenVid.has(v.asset));
-  const leftImgs = [...imgs.values()].filter((im) => !seenImg.has(im.asset)).map((im) => ({ asset: im.asset, caption: '', ...(im.fit === 'contain' ? { fit: 'contain' } : {}) }));
+  const leftImgs = [...imgs.values()].filter((im) => !seenImg.has(im.asset)).map((im) => ({ asset: im.asset, caption: '', ...look(im) }));
   if (!leftVids.length && !leftImgs.length) return { added: 0, moved };
 
   const RANK = { image: 0, gallery: 0, auto: 1, bullets: 1, section: 2, quote: 2, cards: 3, agenda: 4, cover: 5 };
@@ -190,18 +197,20 @@ export function placeUserMedia(slides, required, { room = 0 } = {}) {
   while (leftImgs.length) {
     const spots = free();
     // Trang hợp để chèn ảnh: trang chữ / bìa (trang số liệu, quy trình… giữ nguyên cấu trúc, chỉ dùng khi hết cách).
-    const good = spots.filter((x) => (RANK[x.layout] ?? 6) <= 5);
+    // Media không bắt buộc chỉ vào trang chữ ngắn (≤ 4 dòng) — không ép trang thẻ/số liệu đổi bố cục làm mất nội dung.
+    const good = spots.filter((x) => (force ? (RANK[x.layout] ?? 6) <= 5 : (RANK[x.layout] ?? 6) <= 2 && (x.points || []).length <= 4));
     // 1–2 ảnh: mỗi ảnh 1 trang chữ; nhiều hơn: gom thành bộ sưu tập (≤ 6 ảnh/trang).
     if (leftImgs.length <= 2 && leftImgs.length <= good.length) {
       for (const sp of good.slice(0, leftImgs.length)) sp.images = [leftImgs.shift()];
       break;
     }
-    const chunk = leftImgs.splice(0, SPEC_LIMITS.images);
-    const withRoom = slides.find((x) => !x.video && x.images.length && x.images.length + chunk.length <= SPEC_LIMITS.images && x.images.every((im) => imgs.has(im.asset)));
+    const chunk = leftImgs.splice(0, per);
+    const withRoom = slides.find((x) => !x.video && x.images.length && x.images.length + chunk.length <= per && x.images.every((im) => imgs.has(im.asset)));
     if (withRoom) withRoom.images.push(...chunk);
-    else if (room > 0) insert({ layout: chunk.length > 1 ? 'gallery' : 'image', title: 'Hình ảnh', images: chunk });
-    else if (good.length || spots.length) (good[0] || spots[0]).images = chunk;
-    else insert({ layout: chunk.length > 1 ? 'gallery' : 'image', title: 'Hình ảnh', images: chunk }); // không bỏ media người dùng
+    else if (room > 0) insert({ layout: chunk.length > 1 ? 'gallery' : 'image', title, images: chunk });
+    else if (good.length || (force && spots.length)) (good[0] || spots[0]).images = chunk;
+    else if (force) insert({ layout: chunk.length > 1 ? 'gallery' : 'image', title, images: chunk }); // không bỏ media người dùng
+    else break; // media không bắt buộc: hết chỗ thì thôi
   }
   for (const s of slides) if ((s.images || []).length >= 2 && !s.video && s.layout !== 'gallery') s.layout = 'gallery';
   return { added, moved };
@@ -288,11 +297,11 @@ export function applyOutlineMedia(slide, os) {
     slide.image = null;
     slide.images = [];
   } else if (imgs.length === 1) {
-    slide.image = { asset: imgs[0].asset, alt: imgs[0].caption || '', caption: imgs[0].caption || '', fit: imgs[0].fit === 'contain' ? 'contain' : 'cover' };
+    slide.image = { asset: imgs[0].asset, alt: imgs[0].caption || '', caption: imgs[0].caption || '', fit: imgs[0].fit === 'contain' ? 'contain' : 'cover', ...(imgs[0].frame === 'browser' ? { frame: 'browser' } : {}) };
     slide.video = null;
   } else if (imgs.length >= 2) {
     slide.layout = 'gallery';
-    slide.images = imgs.map((im) => ({ asset: im.asset, alt: im.caption || '', caption: im.caption || '', fit: im.fit === 'contain' ? 'contain' : 'cover' }));
+    slide.images = imgs.map((im) => ({ asset: im.asset, alt: im.caption || '', caption: im.caption || '', fit: im.fit === 'contain' ? 'contain' : 'cover', ...(im.frame === 'browser' ? { frame: 'browser' } : {}) }));
     slide.image = null;
     slide.video = null;
     return slide;

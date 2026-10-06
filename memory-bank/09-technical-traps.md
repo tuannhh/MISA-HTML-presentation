@@ -51,10 +51,25 @@
 - **Kích thước gói:** `npm ci` kéo binary mọi nền tảng (~290 MB) → Dockerfile xoá trừ `linux/<arch>`. Build chéo kiến trúc phải dùng `--platform` (xem `07`).
 - **Giới hạn chất lượng đã biết:** mặt nạ AI ở 320px (U²-Net-p) → biên logo nhỏ hơi mềm; chế độ màu chỉ xoá lỗ nhỏ trong nét mảnh (lòng chữ O, A, 0) — lỗ lớn > ~6% được giữ nền (tuỳ chọn `inner:'remove'` có trong `cutoutService` nhưng **chưa mở qua API/giao diện**); logo nền gradient/ảnh chụp nên chọn AI.
 
+### Ảnh giao diện từ PDF: render trang, không trích ảnh nhúng
+- `pdfimages` trả cả mảng nền gradient, ảnh lặp, smask tách rời; ảnh UI trên slide thường chồng lớp (điện thoại đè máy tính, logo đè ảnh) →
+  render trang (`pdftoppm -scale-to 2000`) rồi cắt theo `box_2d` của Gemini mới ra đúng thứ người xem thấy. PDF 20 trang/50 MB: render ~7 giây,
+  AI khoanh vùng ~20 giây. Hộp AI đôi khi lẹm vài chữ tiêu đề slide sát mép ảnh (vd. "ất") — chấp nhận, nới mép chỉ 0,5%.
+
 ### Gemini bước dựng bài chậm hơn bước dàn ý
 - `designDeck` trả JSON lớn (đủ mọi trường slide) → 1–3 phút với ~8 trang; dàn ý chỉ ~30–60 giây. Nếu AI bỏ trang/sai `ref`, `composeDeckFromOutline` tự dựng trang từ dàn ý — bài **luôn** đủ số trang người dùng đã duyệt.
 
 ## Giao diện
+
+### Deck: hình trang trí tràn làm bộ tự co chữ thu nhỏ tiêu đề
+- `engine.fitSlide` co `--k` khi `.body` có `scrollHeight/scrollWidth` lớn hơn khung — kể cả do phần tử `absolute` (svg `overflow: visible`).
+  Bìa kiểu `center` có hình minh hoạ mờ phía sau → tiêu đề bị co tới k = 0,48. Lớp trang trí trong `.body` phải `overflow: hidden`.
+- `.im.has-side .media { align-self: stretch }` kéo giãn cả tấm nền ảnh / video nằm trong `.vbox` → ghi đè `.im.has-side .vbox > .media { align-self: center }`.
+- Chụp deck bằng puppeteer: đợi `domcontentloaded` (+ chờ animation) thay vì `networkidle0` — có lúc treo vô hạn với deck nhúng ảnh base64 lớn.
+
+### Docker: npm bỏ qua lặng lẽ gói tuỳ chọn tải lỗi
+- `@img/sharp-libvips-linux-arm64` (optionalDependency) tải lỗi → `npm ci` vẫn thành công, container sập lúc chạy ("Could not load the sharp
+  module"). Dockerfile chạy `node -e "require('sharp')"` ngay sau `npm ci` để build thất bại sớm; gặp thì build lại `--no-cache`.
 
 ### Bản sao MDS có vá cục bộ (phải giữ khi cập nhật MDS)
 | Component | Vá | Lý do |

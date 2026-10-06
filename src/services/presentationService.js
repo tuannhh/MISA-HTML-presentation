@@ -14,6 +14,7 @@ import { normalizeSpec, collectAssetIds, dropForeignAssets, remapAssetIds, theme
 import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia } from './outlineService.js';
 import { precheckSource, precheckMedia, ingestSource, fitPieces } from './ingestService.js';
 import { prepareMedia } from './mediaService.js';
+import { extractPdfUiShots } from './pdfShotService.js';
 import { TONE_THEMES } from '../../shared/deck/render.js';
 import { THEME_PRESETS, CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
 import { DEFAULT_FONT } from '../../shared/deck/fonts.js';
@@ -163,7 +164,12 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       // Media người dùng gửi kèm: lưu thành asset của bài trước khi gọi AI (AI xem để đặt đúng trang).
       const user = await storeUserMedia(tenantId, id, input.userMedia);
       let previewBytes = user.previewBytes;
-      const images = await normalizeExtractedImages(source.images, { max: config.limits.maxImagesPerDeck });
+      // PDF: cắt ảnh giao diện phần mềm từ các trang (ưu tiên đưa vào bài) — đứng đầu danh sách ảnh để AI luôn được xem.
+      const pdfs = source.media.filter((m) => m.kind === 'pdf');
+      const shots = config.pdfShots.enabled && pdfs.length && config.pdfShots.maxShots
+        ? await extractPdfUiShots(pdfs, { gemini, bin: config.pdfShots.bin, tempDir: config.storage.tempDir, maxPages: config.pdfShots.maxPages, maxShots: config.pdfShots.maxShots })
+        : [];
+      const images = await normalizeExtractedImages([...shots, ...source.images], { max: config.limits.maxImagesPerDeck });
       const assetIds = [];
       for (const img of images) {
         const assetId = randomUUID();
@@ -180,7 +186,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
           preview = await previewForModel(img.buffer, { side: MODEL_PREVIEW_SIDE });
           previewBytes += preview.length;
         }
-        modelImages.push({ hint: img.hint, width: img.width, height: img.height, preview });
+        modelImages.push({ hint: img.hint, width: img.width, height: img.height, preview, ui: !!img.ui });
         traits.push(await imageTraits(img.buffer).catch(() => null));
       }
       // PDF/ghi âm: đính kèm trực tiếp hoặc chuyển thành văn bản trước (tư liệu lớn) — xem mediaService.
@@ -208,6 +214,20 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         const m = /^VID(\d+)$/i.exec(String(ref || '').trim());
         return m ? user.videos[Number(m[1]) - 1]?.video || null : null;
       };
+      // Kiểu hiển thị ảnh gắn vào trang: ảnh chụp thật → cover; ảnh giao diện/đồ hoạ → trọn khung (contain) trên nền trắng,
+      // ảnh giao diện máy tính có thêm khung trình duyệt.
+      const kindOf = new Map((Array.isArray(raw?.imageKinds) ? raw.imageKinds : []).map((k) => [mapRef(k?.ref), k?.kind]));
+      const look = new Map();
+      const ui = new Set();
+      images.forEach((img, i) => {
+        const aid = assetIds[i];
+        const shot = img.ui || (modelImages[i].preview && kindOf.get(aid) === 'screenshot');
+        if (shot) {
+          ui.add(aid);
+          const web = img.ui ? img.ui.device === 'web' : img.width / img.height >= 1.2;
+          look.set(aid, { fit: 'contain', ...(web ? { frame: 'browser' } : {}) });
+        }
+      });
       const { choice } = input;
       const theme = choice.theme === 'auto' ? themeForTone(raw?.theme, input.tone, TONE_THEMES) : choice.theme;
       const draft = {
@@ -220,29 +240,35 @@ export function createPresentationService({ config, repos, storage, gemini, brow
           subtitle: s?.subtitle,
           points: s?.points,
           notes: s?.notes,
-          images: (Array.isArray(s?.images) ? s.images : []).map((im) => ({ asset: mapRef(im?.ref), caption: im?.caption })).filter((im) => im.asset),
+          images: (Array.isArray(s?.images) ? s.images : []).map((im) => ({ asset: mapRef(im?.ref), caption: im?.caption })).filter((im) => im.asset).map((im) => ({ ...im, ...look.get(im.asset) })),
           video: mapVideo(s?.video),
         })),
       };
-      // Chỉ ảnh chụp thật được tự gắn vào trang: AI (đã xem ảnh) phân loại là chính; ảnh AI không được xem → chỉ nhận khi
-      // chỉ số ảnh rất rõ là ảnh chụp; AI nói "photo" nhưng chỉ số rõ là đồ hoạ → bỏ (chốt chặn an toàn).
-      const kindOf = new Map((Array.isArray(raw?.imageKinds) ? raw.imageKinds : []).map((k) => [mapRef(k?.ref), k?.kind]));
+      // Chỉ ảnh chụp thật + ảnh giao diện phần mềm được tự gắn vào trang: AI (đã xem ảnh) phân loại là chính; ảnh AI không được
+      // xem → chỉ nhận khi chỉ số ảnh rất rõ là ảnh chụp; AI nói "photo" nhưng chỉ số rõ là đồ hoạ → bỏ (chốt chặn an toàn).
       const photo = new Set(
         assetIds.filter((aid, i) => (modelImages[i].preview ? kindOf.get(aid) === 'photo' && !looksLikeGraphic(traits[i]) : looksLikePhoto(traits[i]))),
       );
       // Ảnh người dùng gửi kèm luôn được giữ (bất kể loại); ảnh đồ hoạ thì hiển thị trọn khung (contain), không cắt.
-      const required = user.images.map((u) => ({ asset: u.asset, fit: (kindOf.get(u.asset) && kindOf.get(u.asset) !== 'photo') || looksLikeGraphic(u.traits) ? 'contain' : 'cover' }));
+      const required = user.images.map((u) => {
+        const kind = kindOf.get(u.asset);
+        if (kind === 'screenshot') return { asset: u.asset, fit: 'contain', ...(u.width / u.height >= 1.2 ? { frame: 'browser' } : {}) };
+        return { asset: u.asset, fit: (kind && kind !== 'photo') || looksLikeGraphic(u.traits) ? 'contain' : 'cover' };
+      });
       const userImageIds = new Set(required.map((u) => u.asset));
-      const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid) || userImageIds.has(aid));
+      const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid) || ui.has(aid) || userImageIds.has(aid));
       const { outline } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: input.autoSlides, slideCount: input.slideCount } });
       if (!outline.slides.length) throw unprocessable('AI không lập được dàn ý từ tài liệu này', 'AI_EMPTY');
       const maxSlides = input.autoSlides ? AUTO_MAX_SLIDES : input.slideCount;
       capOutline(outline, maxSlides);
       const placed = placeUserMedia(outline.slides, { images: required, videos: user.videos.map((v) => v.video) }, { room: Math.max(0, maxSlides - outline.slides.length) });
+      // Ảnh giao diện cắt từ PDF mà AI chưa dùng: chèn vào trang chữ còn trống / gom thành trang ảnh khi còn hạn mức trang (không bắt buộc).
+      const uiLeft = [...ui].filter((aid) => !outline.slides.some((sl) => (sl.images || []).some((im) => im.asset === aid))).map((aid) => ({ asset: aid, ...look.get(aid) }));
+      const uiPlaced = placeUserMedia(outline.slides, { images: uiLeft, videos: [] }, { room: Math.max(0, maxSlides - outline.slides.length), force: false, chunk: 4, title: 'Giao diện sản phẩm' });
       await presentations.setOutlineResult(tenantId, id, { outline, title: input.title ? null : outline.title });
       const kinds = {};
       for (const k of kindOf.values()) if (k) kinds[k] = (kinds[k] || 0) + 1;
-      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, droppedImages, kinds, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
+      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, uiShots: shots.length, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, droppedImages, kinds, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi lập dàn ý. Vui lòng thử lại.';
       if (!(err instanceof HttpError)) logger.error('outline_failed', { id, err });

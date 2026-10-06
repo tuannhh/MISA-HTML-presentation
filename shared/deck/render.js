@@ -69,10 +69,23 @@ function gridCols(n, W, cap = 99) {
   return Math.ceil(n / rows);
 }
 
+// Ảnh trọn khung (ảnh giao diện phần mềm, infographic, PNG nền trong suốt): đặt trên tấm nền trắng đúng tỷ lệ ảnh, căn giữa ô —
+// rõ trên cả nền tối, không cắt mất thông tin; ảnh giao diện máy tính có thêm thanh trình duyệt. Tỷ lệ lấy từ kích thước asset.
+function plate(ref, url, cap, ctx, o) {
+  const m = ctx.assetMeta ? ctx.assetMeta(ref.asset) : null;
+  const ar = m && m.width > 0 && m.height > 0 ? Math.min(4, Math.max(0.3, m.width / m.height)) : 1.6;
+  const web = ref.frame === 'browser';
+  const bar = web ? '<div class="pbar" aria-hidden="true"><i></i><i></i><i></i></div>' : '';
+  return `<div class="vbox" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"><figure class="media plate${web ? ' web' : ''}${cap ? ' cap' : ''}" style="--ar:${ar.toFixed(4)}">${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"></div>${
+    cap ? `<figcaption>${esc(cap)}</figcaption>` : ''
+  }</figure></div>`;
+}
+
 function media(ref, ctx, o = {}) {
   const url = ref && ref.asset ? ctx.assetUrl(ref.asset) : null;
   const fit = ref && ref.fit === 'contain' ? 'contain' : 'cover';
   const cap = o.caption !== undefined ? o.caption : ref && ref.caption;
+  if (url && fit === 'contain') return plate(ref, url, cap, ctx, o);
   const inner = url
     ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" style="object-fit:${fit}"${fit === 'cover' ? ' data-loop="kb" data-p="20"' : ''}>`
     : `<div class="ph">${icon('image')}</div>`;
@@ -155,10 +168,11 @@ const longestWord = (list) => Math.max(4, ...list.map((t) => Math.max(0, ...Stri
 function statValue(st, d) {
   const num = typeof st.value === 'number' && Number.isFinite(st.value);
   const dec = num ? Math.min(2, (String(st.value).split('.')[1] || '').length) : 0;
-  const val = num
-    ? `<span data-a="count" data-to="${st.value}" data-dec="${dec}" data-d="${d}">${esc(new Intl.NumberFormat('vi-VN', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(st.value))}</span>`
-    : `<span>${esc(st.value)}</span>`;
-  return `<div class="sv">${st.prefix ? `<small>${esc(st.prefix)}</small>` : ''}${val}${st.suffix ? `<small>${esc(st.suffix)}</small>` : ''}</div>`;
+  const shown = num ? new Intl.NumberFormat('vi-VN', { minimumFractionDigits: dec, maximumFractionDigits: dec }).format(st.value) : String(st.value);
+  const val = num ? `<span data-a="count" data-to="${st.value}" data-dec="${dec}" data-d="${d}">${esc(shown)}</span>` : `<span>${esc(shown)}</span>`;
+  // Độ dài hiển thị (ký tự; tiền tố/hậu tố cỡ .42em) → CSS co cỡ số theo bề rộng thẻ, "270.000+" không bị cắt ở lưới 4 cột.
+  const sl = Math.max(3, shown.length + 0.45 * (String(st.prefix || '').length + String(st.suffix || '').length));
+  return `<div class="sv" style="--sl:${Math.round(sl * 10) / 10}">${st.prefix ? `<small>${esc(st.prefix)}</small>` : ''}${val}${st.suffix ? `<small>${esc(st.suffix)}</small>` : ''}</div>`;
 }
 
 // Danh sách dọc có trục nối (dòng thời gian dọc, quy trình dọc): cột nhãn | trục chấm | nội dung.
@@ -286,7 +300,10 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
       return `${bleed(s.image, ctx)}${head(s, ctx)}<div class="body"><div class="im-full">${side ? `<div class="im-glass" data-a="up" data-d="18">${side}</div>` : ''}${s.caption ? `<div class="im-cap" data-a="fade" data-d="30">${esc(s.caption)}</div>` : ''}</div></div>`;
     }
     const fig = slot(s, ctx, { d: 10, caption: s.caption });
-    return `${head(s, ctx)}<div class="body"><div class="im${side ? ' has-side' : ''}${v === 'right' ? ' rev' : ''}">${v === 'right' ? side + fig : fig + side}</div></div>`;
+    // Ảnh trọn khung rất ngang (bảng dữ liệu, dashboard) → cột ảnh rộng hơn để ảnh không bị thu nhỏ.
+    const m = !s.video && s.image?.fit === 'contain' && ctx.assetMeta ? ctx.assetMeta(s.image.asset) : null;
+    const wide = m && m.height > 0 && m.width / m.height >= 1.9 ? ' wide' : '';
+    return `${head(s, ctx)}<div class="body"><div class="im${side ? ' has-side' : ''}${wide}${v === 'right' ? ' rev' : ''}">${v === 'right' ? side + fig : fig + side}</div></div>`;
   },
 
   gallery(s, ctx, v) {
@@ -478,7 +495,7 @@ export function renderDeckHtml(spec, opts) {
   const slideHtml = slides
     .map((s, index) => {
       if (s.layout === 'section') sectionNo += 1;
-      const ctx = { W, H, index, total, sectionNo, assetUrl, videoEmbed: opts.videoEmbed };
+      const ctx = { W, H, index, total, sectionNo, assetUrl, assetMeta: opts.assetMeta, videoEmbed: opts.videoEmbed };
       const fn = L[s.layout] || L.bullets;
       const v = resolveVariant(s, W / H);
       const lg = logoOn(logo, s) ? logo : null;

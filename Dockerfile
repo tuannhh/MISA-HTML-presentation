@@ -17,9 +17,9 @@ ENV NODE_ENV=production \
     CHROME_PATH=/usr/bin/chromium \
     CHROME_NO_SANDBOX=true \
     STORAGE_DIR=/data/storage
-# Chromium để chụp thumbnail/xuất PDF; font Noto/DejaVu dự phòng cho ký tự ngoài Inter.
+# Chromium để chụp thumbnail/xuất PDF; poppler-utils (pdftoppm) render trang PDF để cắt ảnh giao diện; font Noto/DejaVu dự phòng cho ký tự ngoài Inter.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends chromium fonts-dejavu-core fonts-noto-core ca-certificates tini \
+ && apt-get install -y --no-install-recommends chromium poppler-utils fonts-dejavu-core fonts-noto-core ca-certificates tini \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -28,7 +28,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts \
  && find node_modules/onnxruntime-node/bin/napi-v6 -mindepth 1 -maxdepth 1 ! -name linux -exec rm -rf {} + \
  && find node_modules/onnxruntime-node/bin/napi-v6/linux -mindepth 1 -maxdepth 1 ! -name "$(node -p process.arch)" -exec rm -rf {} + \
- && npm cache clean --force
+ && npm cache clean --force \
+ # gói tuỳ chọn (binary sharp/libvips) tải lỗi thì npm lặng lẽ bỏ qua → kiểm tra ngay khi build thay vì sập lúc chạy
+ && node -e "require('sharp')"
 COPY src ./src
 COPY shared ./shared
 # Mô hình U²-Net-p (Apache-2.0) tách nền logo nền phức tạp — thiếu thì tự lùi về tách theo màu nền.

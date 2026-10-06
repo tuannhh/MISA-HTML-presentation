@@ -100,6 +100,13 @@ export function loadConfig() {
       generationConcurrency: int('GENERATION_CONCURRENCY', 2, { min: 1, max: 8 }),
       renderConcurrency: int('RENDER_CONCURRENCY', 2, { min: 1, max: 8 }),
     }),
+    // Cắt ảnh giao diện phần mềm từ PDF nguồn (render trang bằng poppler pdftoppm → AI khoanh vùng → cắt) để đưa vào bài.
+    pdfShots: Object.freeze({
+      enabled: bool('PDF_UI_SHOTS', true),
+      bin: str('PDFTOPPM_PATH', 'pdftoppm'),
+      maxPages: int('PDF_UI_SHOT_PAGES', 40, { min: 1, max: 200 }),
+      maxShots: int('PDF_UI_SHOTS_MAX', 16, { min: 0, max: 60 }),
+    }),
     chromePath: str('CHROME_PATH', ''),
     // Trong container chạy user không đặc quyền, sandbox của Chromium cần user namespace → tắt có kiểm soát (chỉ nạp HTML nội bộ, chặn mạng).
     chromeNoSandbox: bool('CHROME_NO_SANDBOX', false),

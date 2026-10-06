@@ -40,7 +40,7 @@ export async function normalizeExtractedImages(list, { max, minSide = 96 }) {
       const meta = await sharp(item.buffer, { limitInputPixels: MAX_PIXELS }).metadata();
       if (!meta.width || !meta.height || Math.min(meta.width, meta.height) < minSide) continue;
       const img = await normalizeImage(item.buffer);
-      out.push({ ...img, name: item.name, hint: item.hint || '' });
+      out.push({ ...img, name: item.name, hint: item.hint || '', ...(item.ui ? { ui: item.ui } : {}) });
     } catch {
       // ảnh không đọc được (EMF/WMF/hỏng) → bỏ qua
     }

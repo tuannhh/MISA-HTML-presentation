@@ -1,5 +1,32 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-06 — Ảnh giao diện phần mềm từ PDF, tấm nền ảnh, màu nhấn rực hơn
+
+### Yêu cầu
+(1) Bài tạo ra chưa đẹp bằng bản giới thiệu AMIS cho DN hoá chất Gia Anh làm tay trước đây; (2) PDF slide có nhiều ảnh giao diện ứng dụng
+nhưng không được nhận diện — bài toàn chữ; ưu tiên đưa ảnh UI vào slide: nền trắng dùng ảnh như gốc, nền tối/PNG trong suốt thì đặt trên nền
+trắng, cân đối, căn giữa, không mất thông tin; (3) màu chữ có sẵn hơi đậm → cam/xanh rực hơn.
+
+### Thay đổi (`05` §11)
+- `pdfShotService` (render trang bằng poppler + `gemini.locateUiShots` khoanh vùng + cắt + bỏ trùng); Dockerfile cài `poppler-utils`; cấu hình
+  `PDF_UI_SHOTS*` (`07`). `screenshot` được gắn vào trang, ưu tiên cao trong prompt dàn ý; ảnh UI bỏ sót được chèn không bắt buộc.
+- Renderer: tấm nền trắng đúng tỷ lệ ảnh (`.plate`), khung trình duyệt (`frame: 'browser'` trong spec), cột ảnh rộng cho ảnh rất ngang.
+- Bảng màu: ngưỡng màu nhấn nền sáng 3:1; ember/paper/sunset/sky/forest/royal/ruby đổi sang tông rực (cam `#F05A22`, xanh `#2563EB`/`#1677FF`).
+- Sửa phát hiện khi kiểm thử: bìa kiểu `center` chữ bị co còn 48% do hình trang trí tràn (`09`); tấm nền bị kéo giãn ở trang ảnh + ý (`09`);
+  Dockerfile kiểm tra `sharp` nạp được ngay khi build (`09`).
+- Số liệu dài ở thẻ thống kê ("270.000+" lưới 4 cột) bị cắt mép (thẻ `overflow: hidden` nên bộ tự co chữ không thấy) → `.stat` là container,
+  cỡ `.sv` = min(140px·k, 172cqi / độ dài hiển thị `--sl`).
+
+### Đã kiểm chứng
+- Unit 75/75 (mới `ui-shots.test.js`: `boxToRegion`, cắt thật bằng pdftoppm + AI giả lập — trùng/chất lượng thấp/trang lạ/AI lỗi/thiếu công cụ,
+  `placeUserMedia force=false`, `frame` qua dàn ý → spec, renderer tấm nền + `--ar` + `.wide`; bảng màu nền sáng ≥ 3:1).
+- Gemini thật với PDF mẫu "MISA AMIS OneAI" (20 trang, 50,5 MB, đi đường 2 bước): cắt 10 ảnh UI (~21 giây), AI dùng đủ 10/10
+  (`kinds {screenshot:10}`); bản nền sáng (ember, 22 trang) và nền tối (midnight, 20 trang, bìa có ảnh tổng quan, gallery màn hình điện thoại
+  không khung trình duyệt) — ảnh căn giữa, ôm sát nền trắng, không tràn chữ.
+- Smoke Docker (chạy 2 lần): mọi bước tới "lưu dàn ý" đạt; bước dựng bài vượt ngưỡng chờ 300 giây của smoke vì Gemini `designDeck` mất
+  421–533 giây cho riêng đầu vào smoke (bài vẫn `build_ready`), trong khi bài OneAI 19 trang chỉ 46 giây. Code bước dựng bài không đổi
+  trong đợt này → độ trễ phía Gemini. Bù lại: xuất HTML + PDF (19 trang, Chromium trong container) của bài OneAI kiểm tay đạt, tấm nền ảnh hiển thị đúng trong PDF.
+
 ## 2026-10-06 — Sửa: tab "Tải tệp lên" bấm không mở cửa sổ chọn tệp
 
 - Nguyên nhân: `MUpload.vue` (bản sao MDS) dùng `<label @click.prevent>` bọc `<input type=file>`; `openBrowse()` gọi `input.click()`, sự kiện nổi bọt lên label và bị `preventDefault` → trình duyệt huỷ hộp chọn tệp. Kéo-thả vẫn chạy nên lỗi chỉ lộ khi bấm. Đây là gốc của lỗi "không upload được file" người dùng báo trước đó.

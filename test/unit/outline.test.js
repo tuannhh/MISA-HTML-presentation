@@ -119,10 +119,12 @@ test('chọn tông màu khi tạo: tự động / mẫu (tông theo mẫu) / tu�
 });
 
 test('bảng màu: màu nhấn luôn đủ tương phản với nền (kể cả màu người dùng nhập khó đọc)', () => {
-  for (const [tone, primary, secondary] of [['light', '#FFE066', '#FFF3B0'], ['dark', '#0A1A3A', '#111111'], ['light', '#FF7A1A', '#FFB547']]) {
+  for (const [tone, primary, secondary] of [['light', '#FFE066', '#FFF3B0'], ['dark', '#0A1A3A', '#111111'], ['light', '#FFB547', '#FFD166']]) {
     const r = paletteVars({ tone, primary, secondary });
-    assert.ok(contrast(r.primary, r.vars['--bg2']) >= 4.5, `${tone} ${primary}`);
-    assert.ok(contrast(r.secondary, r.vars['--bg2']) >= 4.5, `${tone} ${secondary}`);
+    // nền tối: 4.5:1; nền sáng: màu nhấn rực, ≥ 3:1 (chữ lớn/đồ hoạ)
+    const min = tone === 'dark' ? 4.5 : 3;
+    assert.ok(contrast(r.primary, r.vars['--bg2']) >= min, `${tone} ${primary}`);
+    assert.ok(contrast(r.secondary, r.vars['--bg2']) >= min, `${tone} ${secondary}`);
     assert.ok(contrast(r.vars['--text'], r.vars['--bg2']) >= 7);
     assert.equal(r.adjusted, true);
   }

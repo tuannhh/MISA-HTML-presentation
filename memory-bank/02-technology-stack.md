@@ -16,6 +16,7 @@ Node 24 + Express 5  ──► MySQL 8.4 (users, presentations, assets, sessions
    │   ├─ cutoutService  : tách nền logo (theo màu / U²-Net-p qua onnxruntime-node trong worker thread)
    │   ├─ renderService  : spec → HTML (shared/deck: render.js + theme.css + palette.js + backgrounds.js + engine.js + fonts)
    │   ├─ browserService : Chromium (puppeteer-core) → ảnh bìa webp, PDF
+   │   ├─ pdfShotService : poppler pdftoppm render trang PDF → Gemini khoanh vùng → cắt ảnh giao diện phần mềm
    │   └─ storageService : tệp private trên đĩa/volume (trừu tượng hoá để chuyển S3/MinIO sau)
    ▼
 /api/presentations/:id/preview → iframe sandbox (CSP sandbox, origin null) chạy engine chuyển động
@@ -38,6 +39,7 @@ Một tiến trình Node duy nhất phục vụ cả API lẫn SPA tĩnh (`dist/
 | jszip | 3.10 | Đọc pptx/docx | Có giới hạn số entry & dung lượng giải nén |
 | sharp | 0.35 | Chuẩn hoá ảnh | → WebP, tối đa 1920px, giới hạn 60MP |
 | puppeteer-core | 25.12 | Điều khiển Chromium | Chặn mọi request trừ `data:`/`about:blank` |
+| poppler-utils (`pdftoppm`) | Debian bookworm | Render trang PDF thành ảnh để cắt ảnh giao diện | Công cụ hệ thống (apt), gọi bằng `execFile`, không qua shell; thiếu → bỏ qua bước cắt ảnh |
 | onnxruntime-node | 1.30 | Chạy mô hình U²-Net-p tách nền logo | Chỉ CPU; Dockerfile xoá binary nền tảng khác (~290 MB → ~30 MB); **phải** `ORT_DISABLE_TELEMETRY=1` |
 | zod | 4.6 | (dự phòng) | Validate chính dùng hàm tự viết trong `specService`/`lib/validate.js` |
 

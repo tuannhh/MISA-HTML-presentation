@@ -225,3 +225,29 @@ Tab **Nhập nội dung**: chữ người dùng nhập là **cơ sở nội dung
 - AI (`outlinePrompt` mục "MEDIA NGƯỜI DÙNG GỬI KÈM"): ảnh = `UIMGn` (kèm hình xem trước, được ưu tiên trong hạn mức 30 ảnh/6MB), video = `VIDn` (kèm ảnh bìa); mỗi mã đúng 1 lần ở trang hợp nội dung; ảnh có chữ → trang image + tóm tắt ý của ảnh; trang có video không kèm ảnh. Schema có trường `video` ở mỗi trang **chỉ khi** có video gửi kèm.
 - Ảnh gửi kèm luôn được giữ (bỏ qua bộ lọc photo); ảnh đồ hoạ (AI xếp loại khác `photo` hoặc `looksLikeGraphic`) → `fit: 'contain'` (dàn ý → spec) để hiển thị trọn khung; `variants.js` không chọn kiểu cắt ảnh (cover center, image full, mosaic, polaroid) cho ảnh contain.
 - `outlineService.placeUserMedia` (sau `capOutline`, chốt chặn xác định): bỏ trùng, trang có video thì bỏ ảnh, ≤ 6 ảnh/trang; media AI bỏ sót → video vào trang chữ chưa có media (ưu tiên image/gallery → bullets/auto → section/quote → cards → agenda → cover; trang số liệu/quy trình sau cùng); 1–2 ảnh → mỗi ảnh 1 trang chữ; nhiều hơn → gom bộ sưu tập (vào bộ sưu tập ảnh người dùng còn chỗ → thêm trang "Hình ảnh" trước trang kết nếu còn hạn mức trang → dồn vào trang trống). Không còn chỗ nào thì vẫn thêm trang — **không bao giờ bỏ media người dùng** (có thể vượt số trang tuỳ chỉnh trong trường hợp hiếm). Log `outline_ready`: `userImages`, `userVideos`, `mediaAddedSlides`, `mediaMoved`.
+
+## 11. Ảnh giao diện phần mềm từ PDF + tấm nền ảnh + màu nhấn rực (2026-10-06)
+
+Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trước đây PDF chỉ cho chữ → bài toàn chữ. Nay **ưu tiên đưa ảnh UI vào bài**.
+- **Cắt ảnh** (`pdfShotService.extractPdfUiShots`, gọi đầu `generateOutline`): `pdftoppm` (poppler-utils, có trong Docker) render ≤ `PDF_UI_SHOT_PAGES` trang
+  cạnh dài 2000px → ảnh trang 1024px gửi `gemini.locateUiShots` (1 lượt, prompt `UI_SHOTS_PROMPT`: chỉ lấy màn hình phần mềm web/mobile/tablet,
+  cụm điện thoại liền nhau = 1 vùng; bỏ logo, QR, sơ đồ, ảnh người, bảng giá) → `box_2d` 0–1000 + `device` + `title` + `quality` 1–3.
+  `boxToRegion` nới 0,5%/phía, bỏ vùng < 12% cạnh hoặc > 90% diện tích trang; bỏ `quality` 1; bỏ ảnh trùng (dHash 64 bit, Hamming ≤ 6);
+  tối đa `PDF_UI_SHOTS_MAX`. Cắt từ bản render (không trích ảnh nhúng) → giữ đúng ảnh chồng lớp/PNG trong suốt trên nền trang gốc.
+  Lỗi bất kỳ (thiếu pdftoppm, PDF mật khẩu, AI lỗi) → `[]`, log `pdf_ui_shots_failed`, bài vẫn tạo được.
+- Ảnh cắt đứng **đầu** danh sách IMGn (luôn có hình xem trước), mô tả "ẢNH GIAO DIỆN PHẦN MỀM (device) cắt từ trang N…".
+- **Phân loại**: `screenshot` nay được gắn vào trang như `photo` (ảnh từ PDF luôn là screenshot; ảnh trong PPTX/DOCX được AI xếp `screenshot`
+  cũng được gắn). Prompt: dùng MỖI screenshot đúng 1 lần ở trang đúng tính năng (image + 2–4 ý; 2–3 màn hình cùng nhóm → gallery);
+  bài giới thiệu sản phẩm → ảnh tổng quan đẹp nhất lên trang bìa.
+- **Kiểu hiển thị** (`look`): screenshot → `fit: 'contain'` + `frame: 'browser'` nếu máy tính (device web, hoặc rộng/cao ≥ 1,2 với ảnh không từ PDF).
+  `frame` đi suốt dàn ý (`normalizeOutline`) → `applyOutlineMedia` → spec (`cleanImage`, chỉ khi contain).
+- Screenshot AI bỏ sót → `placeUserMedia(..., { force: false, chunk: 4, title: 'Giao diện sản phẩm' })`: chỉ vào trang chữ ngắn
+  (image/gallery/auto/bullets/section/quote, ≤ 4 dòng) hoặc thêm trang khi còn hạn mức; hết chỗ thì bỏ (khác media người dùng: bắt buộc).
+  Log `outline_ready`: `uiShots`, `uiImages`, `uiAdded`, `uiLeft`.
+- **Tấm nền ảnh** (renderer `plate()` + CSS `.plate`): mọi ảnh `contain` (UI, infographic, PNG trong suốt) đặt trên **tấm nền trắng ôm đúng tỷ lệ
+  ảnh** (`--ar` từ `assetMeta`), căn giữa ô (`.vbox` container query), lề trong 18px, chú thích 1 dòng dưới ảnh; `frame: browser` thêm thanh
+  trình duyệt 3 chấm. Nền tối → ảnh nổi rõ trên nền trắng; nền sáng → như ảnh gốc có viền/bóng nhẹ. Trang `image` có ảnh contain rất ngang
+  (≥ 1,9) → lớp `.wide`, cột ảnh 2,1fr.
+- **Màu nhấn nền sáng rực hơn** (`palette.js`, `theme.css`): ngưỡng tương phản màu nhấn nền sáng 3:1 (chữ lớn/đồ hoạ; chữ nội dung vẫn đậm) thay vì
+  4,5:1. ember cam `#F05A22` trên nền `#FFFCF9`, paper xanh `#2563EB`, sunset `#F05A22`, sky `#1677FF`, forest/royal/ruby sáng hơn.
+

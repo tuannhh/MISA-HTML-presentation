@@ -43,37 +43,37 @@
   --node: 150, 200, 255; --edge: 47, 140, 255;
   --core-ink: #06244A;
 }
-/* ---------- Tông SÁNG: chữ và hình hoạ đậm, tương phản cao (≥ 4.5:1 trên nền) ----------
-   Không dùng vàng/xám nhạt cho chữ: bảng màu nhấn (--cyan…--coral) đều là màu đậm, --muted/--dim là xám đậm. */
+/* ---------- Tông SÁNG: chữ nội dung đậm (--text/--muted/--dim tương phản cao); màu nhấn rực, ≥ 3:1 trên nền ----------
+   (màu nhấn dùng cho tiêu đề, số liệu, icon — chữ lớn/đồ hoạ). Không dùng vàng/xám nhạt cho chữ nội dung. */
 [data-deck-theme="paper"] {
   /* Xanh dương – đen */
-  --bg1: #F7F9FC; --bg2: #EDF1F8;
-  --glow-a: rgba(29, 78, 216, .10); --glow-b: rgba(15, 23, 42, .06);
+  --bg1: #F7F9FC; --bg2: #EEF3FB;
+  --glow-a: rgba(37, 99, 235, .12); --glow-b: rgba(14, 165, 233, .08);
   --gridline: rgba(15, 23, 42, .06);
   --panel-a: #FFFFFF; --panel-b: #FBFCFE;
-  --line: rgba(15, 23, 42, .16); --line-2: rgba(15, 23, 42, .32);
+  --line: rgba(15, 23, 42, .14); --line-2: rgba(15, 23, 42, .26);
   --text: #0B1220; --soft: #1E293B; --muted: #334155; --dim: #475569;
-  --cyan: #0F172A; --blue: #1D4ED8; --amber: #1E3A8A; --coral: #B91C1C; --mint: #047857; --violet: #4338CA;
+  --cyan: #0F172A; --blue: #2563EB; --amber: #0284C7; --coral: #DC2626; --mint: #059669; --violet: #4F46E5;
   --accent: var(--blue); --accent-2: #0F172A; --on-accent: #FFFFFF;
   --chip-bg: #FFFFFF;
   --shadow: 0 24px 60px rgba(15, 23, 42, .10);
-  --node: 29, 78, 216; --edge: 15, 23, 42;
+  --node: 37, 99, 235; --edge: 15, 23, 42;
   --core: var(--accent); --core-ink: #FFFFFF;
   color-scheme: light;
 }
 [data-deck-theme="ember"] {
-  /* Cam – đen */
-  --bg1: #FBF8F3; --bg2: #F3EDE4;
-  --glow-a: rgba(234, 88, 12, .10); --glow-b: rgba(28, 25, 23, .06);
-  --gridline: rgba(28, 25, 23, .06);
-  --panel-a: #FFFFFF; --panel-b: #FFFCF8;
-  --line: rgba(28, 25, 23, .16); --line-2: rgba(28, 25, 23, .32);
+  /* Cam – đen: cam rực (như nhận diện AMIS OneAI) trên nền trắng ấm */
+  --bg1: #FFFCF9; --bg2: #FFF3EA;
+  --glow-a: rgba(240, 90, 34, .14); --glow-b: rgba(255, 159, 67, .10);
+  --gridline: rgba(28, 25, 23, .05);
+  --panel-a: #FFFFFF; --panel-b: #FFFCF9;
+  --line: rgba(28, 25, 23, .13); --line-2: rgba(28, 25, 23, .24);
   --text: #111111; --soft: #1C1917; --muted: #3F3A36; --dim: #57534E;
-  --cyan: #1C1917; --blue: #B83A0B; --amber: #9A3412; --coral: #B91C1C; --mint: #166534; --violet: #7C2D12;
+  --cyan: #1C1917; --blue: #F05A22; --amber: #D97706; --coral: #DC2626; --mint: #059669; --violet: #E8590C;
   --accent: var(--blue); --accent-2: #1C1917; --on-accent: #FFFFFF;
   --chip-bg: #FFFFFF;
-  --shadow: 0 24px 60px rgba(28, 25, 23, .10);
-  --node: 184, 58, 11; --edge: 28, 25, 23;
+  --shadow: 0 24px 60px rgba(120, 53, 15, .10);
+  --node: 240, 90, 34; --edge: 28, 25, 23;
   --core: var(--accent); --core-ink: #FFFFFF;
   color-scheme: light;
 }
@@ -183,6 +183,31 @@ svg * { transform-box: fill-box; transform-origin: center; }
 }
 .media .ph { width: 100%; height: 100%; display: grid; place-items: center; color: var(--dim); font-size: calc(160px * var(--k)); }
 
+/* ---------- ảnh trọn khung trên tấm nền trắng (ảnh giao diện phần mềm, infographic, PNG trong suốt) ----------
+   Rộng vừa ô theo tỷ lệ ảnh (--ar, renderer tính từ kích thước asset) → tấm nền ôm sát ảnh, căn giữa, không thừa khoảng trống.
+   --pp lề trong, --pb thanh trình duyệt, --pc dòng chú thích: trừ ra khi tính chiều rộng để ảnh luôn vừa chiều cao ô. */
+.plate {
+  --pp: calc(18px * var(--k)); --pb: 0px; --pc: 0px;
+  height: auto; padding: var(--pp); display: flex; flex-direction: column;
+  width: min(100cqw, calc((100cqh - var(--pb) - var(--pc) - 2 * var(--pp)) * var(--ar) + 2 * var(--pp)));
+  background: #FFFFFF; border-color: color-mix(in srgb, var(--line-2) 70%, rgba(15, 23, 42, .14));
+}
+.plate .pimg { width: 100%; aspect-ratio: var(--ar); }
+.plate img { object-fit: contain; object-position: center; }
+.plate.web { --pb: calc(46px * var(--k)); padding-top: 0; }
+.pbar {
+  flex: none; height: var(--pb); margin: 0 calc(-1 * var(--pp)) var(--pp); padding: 0 calc(20px * var(--k)); display: flex; align-items: center; gap: calc(12px * var(--k));
+  background: color-mix(in srgb, var(--bg2) 88%, var(--text) 6%); border-bottom: 1.5px solid var(--line);
+}
+.pbar i { width: calc(14px * var(--k)); height: calc(14px * var(--k)); border-radius: 50%; background: #FF5F57; }
+.pbar i:nth-child(2) { background: #FEBC2E; } .pbar i:nth-child(3) { background: #28C840; }
+.plate.cap { --pc: calc(var(--t-xs) * 1.35 + var(--pp)); }
+.plate figcaption {
+  position: static; flex: none; margin-top: var(--pp); padding: 0; background: none; color: #334155;
+  font-size: var(--t-xs); line-height: 1.35; height: calc(var(--t-xs) * 1.35); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+}
+[data-style="editorial"] .plate, [data-style="outline"] .plate { box-shadow: var(--shadow); }
+
 /* ---------- video (ảnh bìa 16:9 + nút phát; bấm → engine mở toàn màn hình) ---------- */
 .vbox { container-type: size; width: 100%; height: 100%; min-height: 0; display: grid; place-items: center; }
 .vid { width: min(100cqw, calc(100cqh * 16 / 9)); height: auto; aspect-ratio: 16 / 9; cursor: pointer; }
@@ -272,6 +297,9 @@ h3, h4, p { margin: 0; }
 .stat::before { content: ""; position: absolute; left: var(--g4); top: var(--g4); width: calc(90px * var(--k)); height: 8px; border-radius: 8px; background: var(--c); box-shadow: 0 0 30px var(--c); }
 .sv { font-size: calc(140px * var(--k)); font-weight: 850; line-height: 1; letter-spacing: -.035em; color: var(--c); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sv small { font-size: .42em; font-weight: 700; letter-spacing: -.01em; margin: 0 .06em; }
+/* Thẻ số liệu: cỡ số không vượt bề rộng thẻ (≈ 0,55em/ký tự đậm, dấu chấm hẹp) — chuỗi số dài tự nhỏ lại thay vì bị cắt. */
+.stat { container-type: inline-size; }
+.stat .sv { font-size: min(calc(140px * var(--k)), calc(172cqi / var(--sl, 5))); }
 .stat p { font-size: var(--t-md); line-height: 1.4; color: var(--soft); }
 .stats-note { margin-top: var(--g3); }
 
@@ -279,6 +307,9 @@ h3, h4, p { margin: 0; }
 .im { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: calc(72px * var(--k)); }
 .im.has-side { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: center; }
 .im.has-side .media { align-self: stretch; }
+/* Ảnh trọn khung / video trong .vbox tự tính kích thước theo tỷ lệ → không kéo giãn (ghi đè quy tắc stretch ở trên). */
+.im.has-side .vbox > .media { align-self: center; }
+.im.has-side.wide { grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); }
 
 /* ---------- gallery ---------- */
 .gal { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); gap: var(--g3); }
@@ -367,8 +398,12 @@ h3, h4, p { margin: 0; }
 .V-center .cv-l { align-items: center; max-width: 2300px; position: relative; z-index: 1; }
 .V-center .cv-sub { max-width: 1800px; }
 .V-center .cv .chips { justify-content: center; }
-.cv-ghost { position: absolute; inset: 0; display: grid; place-items: center; opacity: .2; pointer-events: none; }
+/* overflow: hidden — nét vẽ tràn của hình minh hoạ (svg overflow visible) không được tính là nội dung tràn, nếu không bộ tự co chữ
+   (engine fitSlide) thu nhỏ tiêu đề bìa xuống tận k = 0.5. Biểu tượng tâm hình bị ẩn để không đè lên tiêu đề. */
+.cv-ghost { position: absolute; inset: 0; display: grid; place-items: center; opacity: .2; pointer-events: none; overflow: hidden; }
 .cv-ghost .cv-art { height: 100%; max-height: none; }
+.cv-ghost .cv-ico { display: none; }
+[data-tone="light"] .cv-ghost { opacity: .14; }
 .V-center .bleed::after { background: radial-gradient(ellipse at 50% 50%, rgba(3, 7, 18, .55) 0%, rgba(3, 7, 18, .86) 100%); }
 .V-bottom .cv { grid-template-columns: minmax(0, 1.75fr) minmax(0, .75fr); align-items: end; }
 .V-bottom .cv-title { font-size: calc(150px * var(--k)); }
@@ -456,6 +491,7 @@ h3, h4, p { margin: 0; }
 
 /* ---------- image ---------- */
 .im.rev.has-side { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+.im.rev.has-side.wide { grid-template-columns: minmax(0, 1fr) minmax(0, 2.1fr); }
 .im-full { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; gap: var(--g3); }
 .im-glass { max-width: min(1500px, 62%); padding: var(--g4); border-radius: var(--r); background: rgba(6, 10, 22, .55); border: 1.5px solid rgba(255, 255, 255, .18); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
 .im-cap { font: 600 var(--t-xs)/1.4 var(--f-sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }

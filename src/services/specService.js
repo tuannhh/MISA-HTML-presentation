@@ -63,6 +63,8 @@ function cleanImage(c, v, path) {
   const asset = typeof o.asset === 'string' && isUuid(o.asset) ? o.asset.toLowerCase() : null;
   if (o.asset && !asset && c.strict) c.errors.push(`${path}.asset: mã ảnh không hợp lệ`);
   const img = { asset, alt: c.str(o.alt, SPEC_LIMITS.alt, `${path}.alt`), caption: c.str(o.caption, SPEC_LIMITS.caption, `${path}.caption`), fit: o.fit === 'contain' ? 'contain' : 'cover' };
+  // Khung trình duyệt cho ảnh giao diện phần mềm (chỉ với ảnh trọn khung).
+  if (o.frame === 'browser' && img.fit === 'contain') img.frame = 'browser';
   return img.asset || img.alt || img.caption ? img : null;
 }
 
