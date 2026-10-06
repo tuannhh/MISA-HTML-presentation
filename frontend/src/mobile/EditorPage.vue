@@ -32,6 +32,7 @@ import { useDeckUrl } from '@/composables/useDeckUrl.js'
 import { useLiveDeck } from '@/composables/useLiveDeck.js'
 import { useSlideMedia } from '@/composables/useSlideMedia.js'
 import { LAYOUT_LABEL, SPEC_LIMITS } from '@/lib/slideModel.js'
+import { plainText } from '@shared/deck/rich.js'
 import { ratioCss } from '@/lib/format.js'
 
 const route = useRoute()
@@ -263,7 +264,7 @@ onMounted(ed.load)
       <p class="flex items-start gap-1 bg-[var(--mds-bg)] px-4 py-2 text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">
         <MIcon name="info-circle" :size="16" class="mt-px shrink-0" />
         <span v-if="isFree">Chạm phần tử để chọn, kéo để di chuyển, kéo góc để đổi cỡ; chạm đúp để sửa chữ.</span>
-        <span v-else>Chạm vào chữ trên khung để sửa trực tiếp, chạm ảnh để đổi hoặc chỉnh sửa.<template v-if="dirty"> Nhớ bấm <strong>Lưu</strong>.</template></span>
+        <span v-else>Chạm chữ để sửa (giữ để bôi chữ → đổi màu, in đậm, VIẾT HOA), chạm ảnh/biểu tượng để đổi.<template v-if="dirty"> Nhớ bấm <strong>Lưu</strong>.</template></span>
       </p>
 
       <div class="sticky top-0 z-10 flex items-center gap-1 border-b border-[var(--mds-border-light)] bg-[var(--mds-bg)] py-1 pl-2 pr-1">
@@ -275,7 +276,7 @@ onMounted(ed.load)
             type="button"
             role="tab"
             :aria-selected="i === selected"
-            :aria-label="`Trang ${i + 1}: ${s.title || LAYOUT_LABEL[s.layout]}`"
+            :aria-label="`Trang ${i + 1}: ${plainText(s.title) || LAYOUT_LABEL[s.layout]}`"
             class="grid h-12 min-w-12 shrink-0 place-items-center rounded-lg border px-3 text-[15px] font-semibold tabular-nums"
             :class="i === selected ? 'border-[var(--mds-brand-600)] bg-[var(--mds-brand-50)] text-[var(--mds-brand-600)]' : 'border-[var(--mds-border)] text-[var(--mds-text)]'"
             @click="selected = i"
@@ -289,18 +290,23 @@ onMounted(ed.load)
 
       <div class="bg-[var(--mds-bg)] p-4">
         <p v-if="slide" class="mb-3 text-[13px] font-semibold uppercase tracking-wide text-[var(--mds-text-secondary)]">Trang {{ selected + 1 }} · {{ LAYOUT_LABEL[slide.layout] }}</p>
+        <!-- Trang tự do: phần tử là nội dung chính. Trang có bố cục: lớp chèn đè (logo, ảnh, chữ, hình khối). -->
         <FreeElementsPanel
-          v-if="slide && isFree"
+          v-if="slide"
+          :key="`fe-${slide.id || selected}`"
           class="mb-4"
+          :class="isFree ? '' : 'rounded-lg border border-[var(--mds-border)] p-3'"
           compact
           :slide="slide"
           :selected-id="selectedElId"
           :live="live"
           :media="media"
           :video-library="videoLibrary"
+          :overlay="!isFree"
+          :ratio="deck.ratio"
           @media="(m) => sm.open({ ...m, index: selected })"
         />
-        <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="assets" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" studio @change-layout="ed.changeLayout" @media="(m) => sm.open({ ...m, index: selected })" />
+        <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="assets" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" :ratio="deck.ratio" :asset-url="ed.assetUrl" studio @change-layout="ed.changeLayout" @media="(m) => sm.open({ ...m, index: selected })" />
       </div>
     </template>
 

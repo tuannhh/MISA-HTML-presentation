@@ -23,6 +23,13 @@ export const THEME_PRESETS = Object.freeze({
   forest: { tone: 'light', label: 'Xanh lá – đen', hint: 'tự nhiên, bền vững', primary: '#059669', secondary: '#0F172A', bg: '#F6FAF7' },
   royal: { tone: 'light', label: 'Tím – đen', hint: 'sáng tạo, khác biệt', primary: '#7C3AED', secondary: '#111827', bg: '#F8F7FC' },
   ruby: { tone: 'light', label: 'Đỏ – đen', hint: 'quyết liệt, nổi bật', primary: '#DC2626', secondary: '#111111', bg: '#FCF8F8' },
+  // Nền be & trắng (2026-10-06): ấm/sạch nhưng vẫn "công nghệ" nhờ màu nhấn điện tử (xanh điện, ngọc, chàm) + nền động.
+  sand: { tone: 'light', label: 'Be – xanh điện', hint: 'ấm áp, công nghệ', primary: '#2457F5', secondary: '#1E293B', bg: '#F4EDE2' },
+  latte: { tone: 'light', label: 'Be – xanh ngọc', hint: 'tinh tế, đổi mới', primary: '#0E9384', secondary: '#7C4A1E', bg: '#F5EFE7' },
+  linen: { tone: 'light', label: 'Be – đen – cam', hint: 'tối giản, sang trọng', primary: '#E5531A', secondary: '#111111', bg: '#F1ECE3' },
+  pearl: { tone: 'light', label: 'Trắng – chàm – cyan', hint: 'AI, dữ liệu', primary: '#4F46E5', secondary: '#0891B2', bg: '#FFFFFF' },
+  frost: { tone: 'light', label: 'Trắng băng – xanh – tím', hint: 'sạch, hiện đại', primary: '#0284C7', secondary: '#7C3AED', bg: '#F7FAFD' },
+  blossom: { tone: 'light', label: 'Trắng – hồng – chàm', hint: 'sáng tạo, trẻ trung', primary: '#DB2777', secondary: '#4F46E5', bg: '#FFFFFF' },
 });
 export const CUSTOM_THEME = 'custom';
 // Theme có CSS viết tay trong theme.css (không sinh biến).
@@ -125,7 +132,10 @@ export function paletteVars(p) {
   const shade = ensureContrast(mix(primary, toward, 0.2), bg2, accentMin, toward);
   const good = ensureContrast(dark ? '#4ADE80' : '#059669', bg2, accentMin, toward);
   const bad = ensureContrast(dark ? '#F87171' : '#DC2626', bg2, accentMin, toward);
-  const onAccent = contrast(primary, '#FFFFFF') >= contrast(primary, '#0A0A0A') ? '#FFFFFF' : mix(bg1, '#000000', 0.4);
+  // Chữ trên nền màu nhấn (số thứ tự, nhãn đậm): trắng khi đủ 3:1 (chữ đậm/lớn); không thì màu mực tối — nền sáng trước đây
+  // ra xám trung tính (pha nền sáng với đen) khó đọc trên màu nhấn xanh ngọc/xanh lá.
+  const darkInk = dark ? mix(bg1, '#000000', 0.4) : '#0B0F19';
+  const onAccent = contrast(primary, '#FFFFFF') >= 3 || contrast(primary, '#FFFFFF') >= contrast(primary, darkInk) ? '#FFFFFF' : darkInk;
   const line = dark ? mix(primary, '#FFFFFF', 0.5) : text;
 
   const vars = {
@@ -181,6 +191,21 @@ export function themeVarsCss(theme, palette) {
   if (!vars) return '';
   const body = Object.entries(vars).map(([k, v]) => `${k}:${v}`).join(';');
   return `[data-deck-theme="${theme === CUSTOM_THEME ? CUSTOM_THEME : theme}"]{${body}}`;
+}
+
+// Trang có ẢNH NỀN THƯƠNG HIỆU khác tông với bài (vd. bài tông sáng, trang kết là ảnh tối): đổi riêng màu chữ/màu nhấn của
+// trang đó — .slide.ink-light = chữ sáng (ảnh tối), .slide.ink-dark = chữ tối (ảnh sáng). Cùng cặp màu chính/phụ của bài,
+// tính lại độ tương phản theo nền giả định tối/sáng.
+const INK_KEYS = ['--accent', '--accent-2', '--text', '--soft', '--muted', '--dim', '--line', '--line-2', '--panel-a', '--panel-b', '--chip-bg', '--cyan', '--blue', '--amber', '--mint', '--violet', '--coral', '--on-accent', '--shadow', '--gridline', '--core', '--core-ink'];
+export function inkVarsCss(theme, palette) {
+  const base = theme === CUSTOM_THEME && palette && isHex(palette.primary) ? palette : THEME_PRESETS[theme] || THEME_PRESETS.midnight;
+  const primary = base.primary || base.swatch?.a;
+  const secondary = base.secondary || base.swatch?.b;
+  const block = (tone, bg) => {
+    const { vars } = paletteVars({ tone, primary, secondary, bg });
+    return INK_KEYS.map((k) => `${k}:${vars[k]}`).join(';');
+  };
+  return `.slide.ink-light{${block('dark', '#0B1220')}}.slide.ink-dark{${block('light', '#F8FAFC')}}`;
 }
 
 /** Màu minh hoạ cho ô chọn tông màu trong giao diện. */

@@ -38,7 +38,9 @@ const MAX_LOGOS_PER_DECK = 30;
 const MAX_POSTERS_PER_DECK = 60;
 // Trạng thái cho phép thêm media: đang duyệt dàn ý hoặc đã dựng xong.
 const MEDIA_STATUSES = new Set(['outline', 'ready']);
-const IMAGE_KINDS = new Set(['image', 'poster', 'logo']);
+const IMAGE_KINDS = new Set(['image', 'poster', 'logo', 'brand']);
+// Ảnh bộ nhận diện thương hiệu tải lên trực tiếp (áp mẫu có trần riêng — templateService).
+const MAX_BRAND_PER_DECK = 120;
 // Ảnh trong bài: tư liệu + tải lên + ảnh AI + ảnh tìm kiếm + bản chỉnh sửa (mỗi lần áp dụng chỉnh sửa tạo 1 ảnh mới).
 const EXTRA_IMAGES = 240;
 // Bố cục được tự thêm ảnh minh hoạ AI khi dựng bài (ô media 1 ảnh).
@@ -317,11 +319,13 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const imgRef = (im) => !im || (img(im.asset) && img(im.src));
     const vidOk = (v) => !v || (img(v.poster) && (v.provider !== 'file' || kind.get(v.asset) === 'video'));
     for (const s of doc.slides) {
-      if (!imgRef(s.image) || !(s.images || []).every(imgRef) || !(s.elements || []).every((e) => imgRef(e.image))) throw unprocessable('Ô ảnh chỉ nhận tệp ảnh', 'INVALID_MEDIA');
+      if (!imgRef(s.image) || !(s.images || []).every(imgRef) || !(s.items || []).every((it) => imgRef(it.image)) || !(s.elements || []).every((e) => imgRef(e.image))) throw unprocessable('Ô ảnh chỉ nhận tệp ảnh', 'INVALID_MEDIA');
       if (!vidOk(s.video) || !(s.elements || []).every((e) => vidOk(e.video))) throw unprocessable('Video không hợp lệ', 'INVALID_MEDIA');
     }
     const lg = doc.logo || doc.design?.logo;
     if (lg && (!img(lg.asset) || !img(lg.cutout))) throw unprocessable('Logo phải là tệp ảnh', 'INVALID_MEDIA');
+    const br = doc.brand || doc.design?.brand;
+    if (br && !Object.values(br).every((v) => typeof v !== 'string' || img(v))) throw unprocessable('Ảnh thương hiệu phải là tệp ảnh', 'INVALID_MEDIA');
   }
 
   async function saveOutline(user, id, body) {
@@ -627,6 +631,16 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     return storeImage(user, id, 'logo', img, String(file.originalname || '').normalize('NFC').slice(0, 255));
   }
 
+  // Ảnh bộ nhận diện (nền trang bìa/nội dung, dải đầu/chân trang): cạnh dài tới 3840px để nền 16:9–3:1 không bị nhoè,
+  // WebP giữ kênh trong suốt (dải đầu/chân trang dạng PNG nền trong).
+  async function addBrand(user, id, file) {
+    await mediaTarget(user, id);
+    if (!file) throw badRequest('Chưa chọn ảnh', 'FILE_REQUIRED');
+    if ((await assets.countForPresentation(id, 'brand')) >= MAX_BRAND_PER_DECK) throw unprocessable('Bài trình bày đã có quá nhiều ảnh thương hiệu', 'TOO_MANY_ASSETS');
+    const img = await normalizeImage(file.buffer, { maxSide: 3840, quality: 88 });
+    return storeImage(user, id, 'brand', img, String(file.originalname || '').normalize('NFC').slice(0, 255));
+  }
+
   async function cutoutLogo(user, id, assetId, { mode } = {}) {
     await mediaTarget(user, id);
     const src = await assets.findOwnedInPresentation(user.id, id, assetId);
@@ -780,7 +794,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
 
   return {
     create, list, get, update, remove, duplicate, saveOutline, build, idByCode,
-    addAsset, addLogo, cutoutLogo, addVideo, addYouTube, readAsset,
+    addAsset, addLogo, addBrand, cutoutLogo, addVideo, addYouTube, readAsset,
     generateImage, searchImages, importStockImage, editImage,
     preview, exportHtml, exportPdf, recoverStale, queueStats: () => ({ pending: genQueue.pending }),
   };

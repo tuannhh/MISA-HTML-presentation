@@ -45,6 +45,38 @@ export const LAYOUT_FIELDS = {
 };
 
 export const ICON_OPTIONS = ICON_NAMES.map((n) => ({ label: n, value: n }));
+
+// Tên tiếng Việt các kiểu trình bày (biến thể) của từng bố cục — khớp VARIANTS (shared/deck/variants.js), phần tử đầu = mặc định.
+export const VARIANT_LABELS = {
+  cover: { split: 'Chữ trái – hình phải', mirror: 'Hình trái – chữ phải', center: 'Căn giữa', bottom: 'Chữ dưới đáy' },
+  section: { num: 'Số thứ tự lớn', center: 'Căn giữa', band: 'Dải màu', ghost: 'Số chìm nền' },
+  agenda: { list: 'Danh sách', tiles: 'Ô lưới', split: 'Tiêu đề bên trái', path: 'Lộ trình' },
+  bullets: { icons: 'Biểu tượng', numbered: 'Đánh số', split: 'Tiêu đề bên trái', panels: 'Ô nội dung', checks: 'Dấu tích' },
+  cards: { grid: 'Lưới thẻ', bento: 'Bento (ô to nhỏ)', rows: 'Hàng ngang', numbered: 'Đánh số' },
+  stats: { cards: 'Thẻ số liệu', hero: 'Số lớn nổi bật', bars: 'Biểu đồ thanh', rings: 'Vòng tiến độ (%)', plain: 'Tối giản' },
+  image: { side: 'Ảnh trái', right: 'Ảnh phải', full: 'Ảnh tràn trang' },
+  gallery: { grid: 'Lưới ảnh', mosaic: 'Ghép mảng', polaroid: 'Ảnh polaroid' },
+  timeline: { line: 'Trục ngang', vertical: 'Trục dọc', zigzag: 'Zíc zắc', cards: 'Thẻ mốc' },
+  process: { cards: 'Thẻ bước', chevrons: 'Mũi tên', stairs: 'Bậc thang', vertical: 'Dọc' },
+  quote: { classic: 'Cổ điển', center: 'Căn giữa', band: 'Dải màu' },
+  comparison: { columns: 'Cột song song', split: 'Chia đôi đối lập' },
+  closing: { center: 'Căn giữa', split: 'Chia đôi', minimal: 'Tối giản' },
+};
+// Phong cách toàn bài (hình khối, viền, bóng) — khớp STYLES.
+export const STYLE_OPTIONS = [
+  { value: 'neon', label: 'Neon công nghệ', hint: 'Viền sáng, phát quang' },
+  { value: 'editorial', label: 'Tạp chí', hint: 'Đường kẻ mảnh, chữ lớn' },
+  { value: 'solid', label: 'Khối đặc', hint: 'Mảng màu đậm, rõ ràng' },
+  { value: 'outline', label: 'Viền nét', hint: 'Tối giản, chỉ viền' },
+  { value: 'soft', label: 'Mềm mại', hint: 'Bo tròn, bóng nhẹ' },
+];
+// Bố cục có ảnh/logo thay biểu tượng cho từng mục (renderer: mark()).
+export const ITEM_IMAGE_LAYOUTS = ['bullets', 'cards', 'stats', 'image'];
+// Tỷ lệ khung chữ ('16:9') → số.
+export const ratioNum = (r) => {
+  const m = /^(\d+):(\d+)$/.exec(String(r || ''));
+  return m ? Number(m[1]) / Number(m[2]) : 16 / 9;
+};
 export const TONE_OPTIONS = [
   { label: 'Trung tính', value: 'neutral' },
   { label: 'Tích cực (✓)', value: 'pos' },

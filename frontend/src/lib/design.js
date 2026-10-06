@@ -1,4 +1,4 @@
-// Thiết kế bài trình bày phía giao diện: tông màu (mẫu + tuỳ chỉnh), mẫu nền động, phông chữ, logo.
+// Thiết kế bài trình bày phía giao diện: tông màu (mẫu + tuỳ chỉnh), mẫu nền động, phông chữ, logo, bộ nhận diện thương hiệu.
 // Dùng chung renderer (shared/deck) để màu/nền/phông ở ô chọn khớp đúng bài trình bày sau khi dựng.
 import '@shared/deck/backgrounds.js';
 import { THEME_PRESETS, CUSTOM_THEME, presetsForTone, themeSwatch, themeTone, paletteVars, normHex, contrast } from '@shared/deck/palette.js';
@@ -80,5 +80,7 @@ export function withDesignDefaults(d) {
   if (!d.background) d.background = 'network';
   if (!d.font) d.font = { heading: DEFAULT_FONT, body: DEFAULT_FONT };
   if (d.logo === undefined) d.logo = null;
+  // Bộ nhận diện thương hiệu (ảnh bìa, nền trang, mở đầu phần, trang kết, dải đầu/chân) — null = không dùng.
+  if (d.brand === undefined) d.brand = null;
   return d;
 }

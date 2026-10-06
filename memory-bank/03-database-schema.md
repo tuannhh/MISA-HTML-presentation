@@ -49,13 +49,41 @@ Chỉ mục: `(tenant_id, updated_at)` cho "Bài của tôi"; `(visibility, stat
 
 | Cột | Kiểu | Ràng buộc | Ý nghĩa |
 |---|---|---|---|
-| id | CHAR(36) | PK | Được tham chiếu trong spec/dàn ý (`image.asset`, `video.asset`, `video.poster`, `logo.asset`, `logo.cutout`) |
+| id | CHAR(36) | PK | Được tham chiếu trong spec/dàn ý (`image.asset`, `video.asset`, `video.poster`, `logo.asset`, `logo.cutout`, `items[].image.asset`, `brand.<ô>`) |
 | tenant_id | CHAR(36) | FK → users ON DELETE CASCADE | |
 | presentation_id | CHAR(36) | FK → presentations ON DELETE CASCADE | Ảnh thuộc đúng 1 bài |
-| kind | ENUM('image','thumbnail','video','logo','poster') | | `logo` gồm cả bản tách nền; `poster` = ảnh bìa video tải lên / YouTube |
+| kind | ENUM('image','thumbnail','video','logo','poster','brand') | | `logo` gồm cả bản tách nền; `poster` = ảnh bìa video tải lên / YouTube; `brand` = ảnh bộ nhận diện (nền bìa/nội dung/mở đầu phần/kết, dải đầu/chân trang — cạnh dài ≤ 3840, giữ trong suốt, ≤ 120 ảnh/bài) |
 | mime, bytes, width, height | | | Ảnh luôn `image/webp` sau chuẩn hoá; video `video/mp4`·`quicktime`·`webm` (width/height NULL) |
 | storage_key | VARCHAR(255) | | Đường dẫn tương đối do server sinh, không lấy từ tên client |
 | original_name | VARCHAR(255) | NULL | Chỉ để hiển thị |
+
+### Bảng: `design_templates`
+
+Mẫu thiết kế / bộ nhận diện thương hiệu người dùng lưu để áp cho bài khác (`05` §13).
+
+| Cột | Kiểu | Ràng buộc | Ý nghĩa |
+|---|---|---|---|
+| id | CHAR(36) | PK | |
+| tenant_id | CHAR(36) | FK → users ON DELETE CASCADE | Chủ mẫu |
+| name | VARCHAR(120) | NOT NULL | 1–120 ký tự (gộp khoảng trắng) |
+| visibility | ENUM('private','public') | default 'private' | `public` = mọi người dùng thấy + áp được; chỉ chủ sửa/xoá |
+| design | JSON | NOT NULL | `{ theme, palette, background, font, logo, brand, style? }` đã qua `normalizeDesign` strict — mã ảnh trỏ tới `template_assets` **của chính mẫu** |
+| created_at / updated_at | DATETIME(3) | | |
+
+Chỉ mục: `(tenant_id, updated_at)`, `(visibility, updated_at)`. Tối đa 50 mẫu/người.
+
+### Bảng: `template_assets`
+
+Ảnh của mẫu — **bản sao riêng** (lưu mẫu: chép ảnh của bài sang; áp mẫu: chép tiếp sang `assets` của bài đích). Không dùng chung tệp giữa mẫu và bài → xoá bài/mẫu không ảnh hưởng nhau, cô lập tenant giữ nguyên.
+
+| Cột | Kiểu | Ràng buộc | Ý nghĩa |
+|---|---|---|---|
+| id | CHAR(36) | PK | |
+| tenant_id | CHAR(36) | FK → users ON DELETE CASCADE | Chủ mẫu |
+| template_id | CHAR(36) | FK → design_templates ON DELETE CASCADE | |
+| kind | ENUM('logo','brand','image') | | |
+| mime, bytes, width, height, storage_key, original_name | | | Như `assets`; `storage_key` do server sinh (`templates/<tenant>/<mẫu>/…`) |
+| created_at | DATETIME(3) | | |
 
 ### Bảng: `sessions`
 
@@ -74,6 +102,8 @@ Tên các changelog đã áp dụng (baseline tự chèn). Changelog mới đặ
 ```
 users 1 ──< presentations 1 ──< assets
   (xoá user → xoá bài → xoá asset trong DB; tệp trên đĩa dọn bằng storage.removePrefix khi xoá bài qua API)
+users 1 ──< design_templates 1 ──< template_assets
+  (ảnh mẫu ⇄ ảnh bài chỉ liên hệ bằng SAO CHÉP khi lưu/áp mẫu — không có FK chéo)
 ```
 
 ## Lịch sử thay đổi lược đồ đáng chú ý
@@ -81,3 +111,4 @@ users 1 ──< presentations 1 ──< assets
 - 2026-10-05: baseline đầu tiên.
 - 2026-10-05 (`changelog_database_20261005_170000.sql`, idempotent): trạng thái `outlining`/`outline`, cột `outline` + `outline_version`, asset kind `video`/`logo`/`poster`. Baseline `schema.sql` đã gồm sẵn.
 - 2026-10-06 (`changelog_database_20261006_090000.sql`, idempotent): cột `presentations.short_code` + backfill mã ngẫu nhiên cho bài cũ + unique key `uq_presentations_code`. Có trong `REQUIRED_CHANGELOGS` (app từ chối khởi động nếu chưa chạy). Baseline đã gồm sẵn.
+- 2026-10-06 (`changelog_database_20261006_200000.sql`, idempotent — `MODIFY` ENUM chỉ khi chưa có `'brand'`, `CREATE TABLE IF NOT EXISTS`): asset kind `brand`, bảng `design_templates` + `template_assets`. Có trong `REQUIRED_CHANGELOGS`; baseline đã gồm sẵn. Đã chạy 2 lần trên MySQL Docker để kiểm idempotent.

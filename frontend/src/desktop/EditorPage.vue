@@ -30,6 +30,7 @@ import { useDeckUrl } from '@/composables/useDeckUrl.js'
 import { useLiveDeck } from '@/composables/useLiveDeck.js'
 import { useSlideMedia } from '@/composables/useSlideMedia.js'
 import { LAYOUT_LABEL, LAYOUT_ICON, SPEC_LIMITS } from '@/lib/slideModel.js'
+import { plainText } from '@shared/deck/rich.js'
 import { RATIO_OPTIONS, ratioCss } from '@/lib/format.js'
 
 const route = useRoute()
@@ -262,7 +263,7 @@ onMounted(ed.load)
                   <span class="w-5 shrink-0 text-right text-[12px] tabular-nums text-[var(--mds-text-secondary)]">{{ i + 1 }}</span>
                   <MIcon :name="LAYOUT_ICON[s.layout]" :size="16" :class="i === selected ? 'text-[var(--mds-brand-600)]' : 'text-[var(--mds-icon-neutral)]'" />
                   <span class="min-w-0 flex-1">
-                    <span class="block truncate text-[13px] leading-[18px]" :class="i === selected ? 'font-semibold text-[var(--mds-brand-600)]' : 'text-[var(--mds-text)]'">{{ s.title || '(Chưa có tiêu đề)' }}</span>
+                    <span class="block truncate text-[13px] leading-[18px]" :class="i === selected ? 'font-semibold text-[var(--mds-brand-600)]' : 'text-[var(--mds-text)]'">{{ plainText(s.title) || '(Chưa có tiêu đề)' }}</span>
                     <span class="block truncate text-[11px] leading-4 text-[var(--mds-text-secondary)]">{{ LAYOUT_LABEL[s.layout] }}</span>
                   </span>
                 </button>
@@ -301,7 +302,7 @@ onMounted(ed.load)
             <p class="mt-2 flex items-center gap-1 text-[12px] text-[var(--mds-text-secondary)]">
               <MIcon name="info-circle" :size="16" />
               <span v-if="isFree">Kéo phần tử để di chuyển, kéo góc để đổi cỡ (Shift giữ tỷ lệ, Alt tắt hít lề) · bấm đúp để sửa chữ/đổi ảnh · Delete xóa · Ctrl+D nhân bản.</span>
-              <span v-else>Bấm vào chữ trên khung để sửa trực tiếp · bấm vào ảnh/video để đổi hoặc chỉnh sửa · <strong>Ctrl+S</strong> để lưu.</span>
+              <span v-else>Bấm vào chữ để sửa · bôi chữ để đổi màu, in đậm, VIẾT HOA · Enter xuống dòng · bấm ảnh/biểu tượng để đổi · <strong>Ctrl+S</strong> để lưu.</span>
             </p>
           </div>
         </section>
@@ -312,21 +313,26 @@ onMounted(ed.load)
           <div class="relative flex-1 overflow-y-auto p-4">
             <template v-if="panel === 'slide'">
               <p v-if="slide" class="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--mds-text-secondary)]">Trang {{ selected + 1 }} · {{ LAYOUT_LABEL[slide.layout] }}</p>
+              <!-- Trang tự do: phần tử là nội dung chính. Trang có bố cục: lớp chèn đè (logo, ảnh, chữ, hình khối). -->
               <FreeElementsPanel
-                v-if="slide && isFree"
+                v-if="slide"
+                :key="`fe-${slide.id || selected}`"
                 class="mb-4"
+                :class="isFree ? '' : 'rounded-lg border border-[var(--mds-border)] p-3'"
                 :slide="slide"
                 :selected-id="selectedElId"
                 :live="live"
                 :media="media"
                 :video-library="videoLibrary"
+                :overlay="!isFree"
+                :ratio="deck.ratio"
                 @media="(m) => sm.open({ ...m, index: selected })"
               />
-              <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="ed.assets.value" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" studio @change-layout="ed.changeLayout" @media="(m) => sm.open({ ...m, index: selected })" />
+              <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="ed.assets.value" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" :ratio="deck.ratio" :asset-url="ed.assetUrl" studio @change-layout="ed.changeLayout" @media="(m) => sm.open({ ...m, index: selected })" />
             </template>
             <div v-else class="flex flex-col gap-4">
               <DesignPanel v-model:footer="draft.spec.footer" :design="draft.spec" :media="media" :title="draft.title" :subtitle="draft.spec.slides[0]?.subtitle || ''" :ratio="deck.ratio" />
-              <FormAlert tone="info">Màu sắc, nền, phông chữ và logo áp dụng cho toàn bộ bài sau khi bấm <strong>Lưu</strong>.</FormAlert>
+              <FormAlert tone="info">Màu sắc, nền, phông chữ, logo và bộ nhận diện thương hiệu áp dụng cho toàn bộ bài sau khi bấm <strong>Lưu</strong>.</FormAlert>
               <FormAlert tone="info">
                 Tỷ lệ khung và chế độ chia sẻ được áp dụng ngay khi đổi trên thanh công cụ. Công khai: mọi người dùng của hệ thống đều xem và nhân bản được bài này.
               </FormAlert>

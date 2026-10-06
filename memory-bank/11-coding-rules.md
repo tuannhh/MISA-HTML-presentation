@@ -29,6 +29,8 @@
 9. **Đường dẫn bài** luôn dựng bằng `deckPath(deck, feature)` (`lib/deckPath.js`), không tự ghép `/p/:id/...`.
 10. **Khung sửa trực tiếp:** mọi dữ liệu từ khung (postMessage) là không tin cậy — thêm trường sửa được thì thêm cả đường dẫn vào allowlist `lib/editPaths.js` (+ test), renderer gắn `data-e` qua helper `E(ctx, path, max)` (chỉ khi `ctx.edit`).
 11. **Layout `free`** không đưa vào prompt/schema AI (`AI_LAYOUTS`); thêm loại phần tử = cập nhật `shared/deck/free.js` + `cleanElement` + `freeEl` + `FreeElementsPanel` + test.
+12. **Chữ định dạng `⟦…⟧`:** chỉ tạo/sửa qua `shared/deck/rich.js` (không tự ghép chuỗi thẻ); độ dài/so khớp/hiển thị tiêu đề dùng `plainText`; HTML chỉ qua `richHtml` (escape + style từ allowlist). Trường chỉ nhận chữ thường (ô số liệu, chân trang) đánh `plain` ở `editPaths` + `data-pl` ở renderer.
+13. **Bộ nhận diện / mẫu:** ảnh trong `brand` luôn là asset kind `brand` của **chính bài** (qua `collectAssetIds`/`dropForeignAssets`/`remapAssetIds`); mẫu chỉ liên hệ ảnh bằng **sao chép** (không dùng chung tệp giữa bài và mẫu, không tham chiếu chéo tenant). Thêm ô ảnh nhận diện = sửa `BRAND_SLOTS` + `cleanBrand` + `brandFor` + `BrandSettings` + test.
 
 ## Quy trình
 

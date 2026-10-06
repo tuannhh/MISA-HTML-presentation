@@ -20,7 +20,8 @@ frontend/src/
   shared/            # component dùng chung: SlideFields, ImagePicker, DeckThumb, RatioPicker, FormField, FormAlert, TempPasswordBox,
                      #   ThemePicker, DesignPanel (+ DesignPreview, BackgroundPicker, DeckBgCanvas, FontPicker, LogoSettings),
                      #   OutlineSlideCard, OutlineMedia, VideoPicker, MediaLibrary, VideoOverlay,
-                     #   ImageStudio(+Panel), ImageEditor (Cropper.js), RangeField, InsertSlidePanel, FreeElementsPanel
+                     #   ImageStudio(+Panel), ImageEditor (Cropper.js), RangeField, InsertSlidePanel, FreeElementsPanel,
+                     #   IconPicker (biểu tượng + ảnh/logo thay biểu tượng), BrandSettings (tab Thương hiệu: ảnh nhận diện + mẫu)
   desktop/           # composition desktop: DesktopShell (MHeaderBar + MSidebar) + các trang
   mobile/            # composition mobile mini-app: MobileShell (MMobileTopBar + MMobileBottomNav) + ActionSheet + FullScreenSheet + các trang
   components/mds/    # bản sao MDS 2.0 (có vá cục bộ — xem 09)
@@ -79,7 +80,10 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 
 ## Trình soạn thảo (`useEditor` + `SlideFields`)
 
-- `SlideFields.vue` sinh form theo layout: kicker, tiêu đề, highlight (phải nằm trong tiêu đề), subtitle, caption, tags (phân tách dấu phẩy), icon (combobox), quote, danh sách stats/items/steps/columns (thêm/xoá/di chuyển), ImagePicker (tải ảnh mới hoặc chọn ảnh đã có trong bài), gallery, ghi chú. Lỗi độ dài tính từ `SPEC_LIMITS` ngay khi gõ.
+- `SlideFields.vue` sinh form theo layout: **chip "Kiểu trình bày"** (`VARIANT_LABELS`, mờ khi không hợp nội dung), kicker, tiêu đề, highlight (phải nằm trong tiêu đề), subtitle, caption, tags (phân tách dấu phẩy), icon (`IconPicker`, lưới có tìm kiếm), quote, danh sách stats/items/steps/columns (thêm/xoá/di chuyển; mục ở `ITEM_IMAGE_LAYOUTS` có nút "Ảnh/logo" thay biểu tượng), ImagePicker (tải ảnh mới hoặc chọn ảnh đã có trong bài), gallery, ghi chú. Lỗi độ dài tính từ `SPEC_LIMITS` theo **chữ hiển thị** ngay khi gõ.
+- Chữ định dạng (`05` §13): ô nhập hiện `plainText`, ghi lại bằng `repaintRich` (giữ định dạng theo vị trí) qua helper `rx(obj, key)`; tiêu đề trong danh sách trang/aria dùng `plainText`. Định dạng (màu, đậm, VIẾT HOA, giữ liền) chỉ làm trên khung (thanh `#rtb` của engine) → `deck:edit` với chuỗi có thẻ → `editPaths` (`cutR` kiểm/cắt).
+- `FreeElementsPanel` hiện ở **mọi** trang: trang tự do = đủ phần tử; trang có bố cục = `overlay` ("Chèn lên trang": Logo, chữ, ảnh, hình) — `useLiveDeck.addElement` không còn đòi layout `free`.
+- Tab **Thương hiệu** của `DesignPanel` (`BrandSettings`): 6 ô ảnh nhận diện (tải lên/chọn lại/bỏ), "Chữ tối / Chữ sáng" cho ảnh nền toàn trang (tự đo độ sáng khi đặt ảnh), công tắc chữ chân trang, mẫu thương hiệu (lưu tên, danh sách có ảnh thu nhỏ, Áp dụng, menu chủ: đổi tên tại chỗ / chia sẻ công khai / xoá có `MDialog` xác nhận). API gọi qua `useMedia` (`uploadBrand`, `listTemplates`, `saveTemplate`, `updateTemplate`, `deleteTemplate`, `applyTemplate`). Mobile: ⋯ "Thêm thao tác" → "Thiết kế & thiết lập bài" → tab Thương hiệu (`compact`). `DesignPreview` vẽ ảnh bìa/nền + dải đầu/chân, đổi màu chữ theo `tones`.
 - Đổi layout (`change-layout`) dùng `lib/slideModel.js` để chuyển dữ liệu sang hình dạng của layout mới mà không mất nội dung chung.
 - Preview trình soạn thảo là iframe `sandbox="allow-scripts allow-popups"` + **`data-deck-frame`** trỏ `/api/presentations/:id/preview?edit=1` — **khung sửa trực tiếp** (`useLiveDeck`, xem `05` §12): engine → app `deck:ready|slide|edit|media|select|geom|el|save`; app → engine `deck:render|goto|select`. Mọi tin nhận chỉ từ đúng `e.source`, đường dẫn trường qua allowlist `editPaths`, số qua kẹp hữu hạn. Trang xem (`/view`) vẫn dùng `useDeckFrame` (`deck:goto`/`deck:slide`). Bấm video trong slide → engine gửi `deck:video` → `useVideoPlayer` chỉ nhận từ iframe có `data-deck-frame` → `VideoOverlay` phát toàn màn hình (iframe sandbox không tự fullscreen/nhúng YouTube được).
 - Trang có ô media (`MEDIA_LAYOUTS`) có tab Ảnh / Video trong `SlideFields`; bảng Thiết kế dùng chung `DesignPanel` với bước dàn ý.
@@ -88,7 +92,8 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 
 ## Trình bày (deck renderer — `shared/deck/`)
 
-- `render.js`: spec → HTML (escape mọi chuỗi), 13 layout × biến thể (`variants.js`, lớp `V-<biến thể>`), `data-style` phong cách bài, 14 mẫu màu + tuỳ chỉnh, `data-bg`/`data-tone` trên trang, khung video 16:9, logo, `mode: present|print`.
+- `render.js`: spec → HTML (escape mọi chuỗi), 13 layout × biến thể (`variants.js`, lớp `V-<biến thể>`), `data-style` phong cách bài, 20 mẫu màu + tuỳ chỉnh, `data-bg`/`data-tone` trên trang, khung video 16:9, logo, `mode: present|print`; chữ định dạng (`rich.js` → `span.rt`), ảnh mục `.ib-img`, lớp chèn đè `.free.over`, bộ nhận diện (`brandFor`: `.bimg`/`.bhd`/`.bft`, lớp `has-bimg`/`bspec`/`no-ftt`/`ink-light`/`ink-dark`, biến `--bt`/`--bb`).
+- `rich.js`: cú pháp `⟦…⟧…⟦/⟧` (parse/serialize/plainText/cutRich/repaintRich/formatRange/richHtml) — dùng chung server, renderer, giao diện.
 - `variants.js`: danh sách biến thể/phong cách, điều kiện hợp nội dung, `artDirect` (server) + `resolveVariant` (renderer) — xem `05` §9.
 - `engine.js`: điều khiển trang (phím mũi tên/Space/PageUp/Down, chạm, HUD), hiệu ứng spring, đếm số, vẽ đường, nền động (`window.DeckBg` từ `backgrounds.js` ghép trước engine), lớp phát video; mode print tắt chuyển động.
 - `theme.css`: biến màu 5 mẫu gốc, bố cục theo tỷ lệ; `palette.js` sinh biến cho các mẫu còn lại + tuỳ chỉnh (đảm bảo tương phản); `fonts.js` + `fonts/`: @font-face theo phông đã chọn.

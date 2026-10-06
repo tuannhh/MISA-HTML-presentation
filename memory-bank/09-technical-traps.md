@@ -112,6 +112,24 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - Xoay góc 90° luôn chạy **trước** `flip/flop` dù gọi sau; trình duyệt (Cropper/CSS) lật theo trục ảnh gốc rồi mới xoay → lật ở lượt riêng trước khi xoay.
 - `modulate({ brightness })` nhân độ sáng trong không gian LCh (xanh dương đậm gần như không tối đi) ≠ CSS `brightness()` nhân RGB → dùng `linear`/`recomb` theo công thức bộ lọc CSS, mỗi bước 1 lượt (sharp chỉ giữ 1 phép `linear`/lượt).
 
+### Biến CSS trỏ biến khác được "chốt" tại nơi khai báo (`--accent: var(--blue)`)
+- Biến tuỳ chỉnh tính giá trị **tại phần tử khai báo** rồi mới kế thừa xuống. Theme khai báo `--accent: var(--blue)` ở gốc → trang `.slide.ink-light` đổi `--blue` nhưng `--accent` vẫn là xanh đậm của gốc (chip/kicker chìm trên ảnh tối). Khi ghi đè bộ biến theo trang (`inkVarsCss`) phải khai báo lại **cả biến bí danh** (`--accent`, `--accent-2`), không chỉ biến gốc.
+
+### Ảnh nhận diện khác tông bài → chữ không đọc được
+- Tông bài sáng + ảnh trang kết tối (hoặc ngược lại) → chữ tối trên nền tối. Renderer không đọc được điểm ảnh → **giao diện** đo độ sáng khi đặt ảnh (`BrandSettings.imageTone`, canvas 24×14) và ghi `brand.tones`; renderer chỉ so `tones` với tông bài. Bài đặt ảnh qua API/bản cũ (chưa có `tones`) giữ màu chữ theo tông bài — người dùng chỉnh bằng "Chữ sáng/Chữ tối".
+
+### Tên lớp trùng giữa các bố cục (`.im`)
+- Ô ảnh thay biểu tượng từng dùng lớp `.ib.im` → trùng quy tắc `.im` của layout `image` (flex:1, grid) → ô cao 420px. Lớp mới phải tra trùng trong `theme.css` trước khi đặt tên (`ib-img`, `is-cover`).
+
+### Bìa thương hiệu: cột ảnh bị ép mất
+- `.bspec .cv` đặt 1 cột cho mọi bìa → bìa có ảnh/video bên phải bị đẩy xuống, tiêu đề tràn trên. Chỉ áp khi bìa **không** có cột ảnh: `.bspec .cv:has(> .cv-art)`… (giữ lưới 2 cột khi có ảnh).
+
+### Engine: chèn khối mã bằng thay chuỗi làm rơi hàm
+- Từng thay đoạn engine bằng script → mất `editable()`/`bindEditables()` → `ReferenceError` chỉ hiện ở `pageerror` của khung, sửa chữ không chạy. Sau khi sửa `engine.js` luôn chạy E2E có `page.on('pageerror')` (`tmp/ui-brand.mjs`).
+
+### Kiểm "không còn ⟦" trong HTML xem trước
+- Mã engine (nhúng trong `<script>`) chứa ký tự ⟦ để xử lý định dạng → kiểm rò thẻ định dạng phải bỏ `<script>…</script>` trước khi tìm.
+
 ### Video/YouTube không phát được trong iframe sandbox
 - iframe preview không có `allow-same-origin`/fullscreen → không `requestFullscreen` được, YouTube cũng từ chối nhúng trong origin `null`. **Cách làm:** engine chỉ gửi `postMessage({type:'deck:video'})`, app (`VideoOverlay`) phát. Đừng "sửa" bằng cách thêm `allow-same-origin` vào sandbox — script trong bài sẽ đọc được cookie/DOM app.
 - `requestFullscreen` phải gọi **ngay trong sự kiện bấm**; gọi sau `await`/`setTimeout` → trình duyệt từ chối (lớp phủ vẫn phủ kín cửa sổ).

@@ -44,6 +44,13 @@
 - Vì iframe không có cookie, ảnh/video dùng **URL ký HMAC** (`lib/signedUrl.js`, khoá = `SESSION_SECRET`, có hạn `exp`) — so sánh chữ ký bằng `timingSafeEqual`.
 - Chế độ sửa (`?edit=1`, chỉ chủ sở hữu): khung nhận `deck:render` (HTML slide do renderer dùng chung của **ứng dụng** sinh từ bản nháp — mọi chuỗi đã `esc()`) chỉ từ `window.parent`, chèn bằng `<template>.innerHTML` (script không chạy khi chèn kiểu này; CSP nonce chặn thuộc tính sự kiện). Chiều ngược lại ứng dụng coi khung là **không tin cậy**: đường dẫn trường qua allowlist (`lib/editPaths.js`, map không prototype), toạ độ kẹp số hữu hạn, id phần tử phải có trong bản nháp; máy chủ vẫn chuẩn hoá strict khi lưu.
 - Chromium (PDF/thumbnail): chặn mọi request trừ `data:`/`about:blank`; nội dung đã inline sẵn (ảnh, phông, ảnh bìa video).
+- Chữ định dạng từ khung (`⟦…⟧`): thuộc tính chỉ nhận token màu trong `RICH_COLORS`, `#RRGGBB`, `b`, `n` — sai bất kỳ → cả thẻ thành chữ thường; `richHtml` escape chữ, `style` chỉ ghép từ giá trị đã kiểm (không thể chèn `url(...)`/`;` vào CSS). Máy chủ chuẩn hoá lại khi lưu.
+
+## Mẫu thương hiệu (cô lập tenant)
+
+- `design_templates` riêng tư chỉ chủ đọc; công khai ai đăng nhập cũng đọc/áp được nhưng **chỉ chủ** sửa/xoá (người khác → 404, không 403).
+- Lưu mẫu: mọi ảnh trong `design` phải là ảnh của bài nguồn **thuộc người gọi** (`FOREIGN_ASSET`) → chép sang `template_assets` (mã + key mới). Áp mẫu: chép tiếp sang `assets` của bài đích. Không bao giờ tham chiếu tệp của tenant khác; xoá bài/mẫu không ảnh hưởng bên kia.
+- Ảnh mẫu đọc qua `/api/templates/assets/:id` có kiểm quyền đọc mẫu (cookie, `Cache-Control: private`), không ký URL.
 
 ## Bí mật
 

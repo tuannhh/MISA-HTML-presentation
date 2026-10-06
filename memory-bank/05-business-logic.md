@@ -11,24 +11,32 @@ Bài trình bày được lưu dưới dạng **spec JSON** (`presentations.spec
   "background": "network|circuit|grid|matrix|waves|hex|dots|orbits|particles|radar|none",
   "font": { "heading": "inter|montserrat|barlow|roboto|google-sans", "body": "…" },
   "logo": { "asset", "cutout" /* bản tách nền */, "removeBg", "position": "tl|tc|tr|bl|bc|br", "size": 40–360, "showOn": "all|cover|inner" } | null,
-  "style": "neon|editorial|solid|outline|soft" /* phong cách toàn bài — hệ thống tự chọn khi dựng, §9 */,
+  "style": "neon|editorial|solid|outline|soft" /* phong cách toàn bài — hệ thống tự chọn khi dựng, §9; người dùng đổi ở tab Màu sắc */,
+  "brand": { "cover", "page", "section", "closing", "header", "footer" /* mã asset kind brand | null */,
+             "footerText": true, "tones": { "cover|page|section|closing": "light|dark" } } | null /* §13 */,
   "slides": [
     { "layout": "cover|section|agenda|bullets|cards|stats|image|gallery|timeline|process|quote|comparison|closing",
       "kicker", "title", "highlight" /* phải là chuỗi con của title */, "subtitle", "caption", "tags": [],
       "icon" /* tên trong shared/deck/icons.js */,
-      "items": [{ "title", "text", "value", "icon" }], "stats": [{ "value", "prefix", "suffix", "label" }],
+      "items": [{ "title", "text", "value", "icon", "image": { "asset", "alt", "fit" } /* ảnh/logo thay biểu tượng — §13 */ }],
+      "stats": [{ "value", "prefix", "suffix", "label" }],
       "steps": [...], "columns": [{ "title", "subtitle", "points": [] }],
       "quote": { "text", "author", "role" },
       "image": { "asset": "<uuid>", "fit": "cover|contain", "alt" }, "images": [{ "asset", "alt" }],
       "video": { "provider": "file|youtube", "asset" /* file */, "id" /* YouTube 11 ký tự */, "poster", "title", "caption" }
                /* chỉ ở MEDIA_LAYOUTS: cover, section, bullets, image, quote — thay chỗ ô ảnh, khung 16:9 */,
       "variant": "<biến thể trình bày của layout — §9; '' = mặc định>",
+      "elements": [ /* phần tử tự do; ở layout khác free = lớp CHÈN ĐÈ lên trang (logo, chữ, ảnh, hình) — §13 */ ],
       "notes": "ghi chú người trình bày" }
   ]
 }
 ```
 
 Giới hạn độ dài/số lượng: `shared/deck/limits.js` (`SPEC_LIMITS`) — dùng chung server và `maxlength` trên form.
+
+**Chữ có định dạng** (2026-10-06, `shared/deck/rich.js`, §13): mọi trường văn bản (trừ ô số liệu `stats.value/prefix/suffix` và chân trang) có thể chứa
+`⟦thuộc tính⟧đoạn chữ⟦/⟧` — thuộc tính = token màu theo theme (`RICH_COLORS`: text, accent, accent-2, amber, mint, coral, violet, muted, white, dark) | `#RRGGBB` | `b` (đậm) | `n` (giữ liền, không ngắt dòng) — và `\n` = xuống dòng.
+Giới hạn độ dài tính theo **chữ hiển thị** (`plainText`); chuỗi thô dài quá `max*4+400` thì bỏ định dạng. Thẻ sai cú pháp → chữ thường (bỏ dấu ⟦ ⟧).
 
 ### Chuẩn hoá (`specService.normalizeSpec`)
 
@@ -172,7 +180,8 @@ Kích thước canvas (`RATIO_SIZES`): 16:9 = 2560×1440, 4:3 = 1920×1440, 2:1 
 - **Tông màu** (`shared/deck/palette.js`): chọn khi tạo bài và đổi được ở bảng Thiết kế.
   - `auto` — AI chọn mẫu hợp tông (sáng/tối) theo nội dung.
   - Mẫu tối: midnight (xanh đêm–cyan), ocean (navy–trắng), aurora (tím–hồng), carbon (đen–cam), emerald (đen–xanh lá), crimson (đen–đỏ), gold (đen–vàng kim).
-  - Mẫu sáng: paper (xanh dương–đen), ember (cam–đen), sky (xanh–trắng), sunset (cam–trắng), forest (xanh lá–đen), royal (tím–đen), ruby (đỏ–đen).
+  - Mẫu sáng: paper (xanh dương–đen), ember (cam–đen), sky (xanh–trắng), sunset (cam–trắng), forest (xanh lá–đen), royal (tím–đen), ruby (đỏ–đen);
+    **be/trắng công nghệ** (2026-10-06): sand (be–xanh điện), latte (be–xanh ngọc), linen (be–đen–cam), pearl (trắng–chàm–cyan), frost (trắng băng–xanh–tím), blossom (trắng–hồng–chàm).
   - `custom` — người dùng nhập màu chính + màu phụ (#RRGGBB) + tông nền; giao diện gợi ý cặp màu theo tông (`CUSTOM_SUGGESTIONS`).
   - 5 mẫu gốc (`CSS_THEMES`) viết tay trong `theme.css`; mẫu còn lại + custom sinh biến CSS bằng `paletteVars` — **luôn chỉnh độ sáng HSL để màu nhấn ≥ 4.5:1 trên nền** (màu người dùng nhập khó đọc vẫn được sửa cho đọc được).
 - **Nền động** (`shared/deck/backgrounds.js`, `window.DeckBg`): 10 mẫu canvas chủ đề công nghệ — network, circuit, grid, matrix, waves, hex, dots, orbits, particles, radar — hoặc `none`. Màu lấy từ biến theme; hình vẽ chỉ phụ thuộc thời điểm t (PRNG có seed) → `prefers-reduced-motion` đứng yên, PDF/ảnh bìa vẽ khung t = 0 (mọi mẫu đầy đủ ngay khung đầu). Giao diện dùng chính module này để xem trước (chỉ chạy hoạt ảnh ô đang chọn/hover).
@@ -277,3 +286,26 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
 ### Đường dẫn thân thiện
 - `/<ten-bai>/<ma 8 ký tự>/<outline|edit|view>` (vd. `/Gioi-thieu-AMIS-oneAI/s1l3sxo7/edit`): tên bài bỏ dấu, giữ hoa/thường, chỉ để dễ đọc — **định vị bằng mã**; tên sai/cũ vẫn mở đúng bài và tự sửa về tên hiện tại (`useDeckUrl`, thay tại chỗ không tải lại trang). Đường dẫn cũ `/p/:id|:code/:feature` tự chuyển hướng.
 
+## 13. Chữ định dạng, chọn bố cục / ảnh-logo, tông be-trắng, bộ nhận diện thương hiệu (2026-10-06)
+
+### Định dạng chữ trên khung xem trước
+- Bôi chữ trên khung → thanh công cụ nổi (`#rtb` trong engine): 10 màu theo theme + ô chọn màu bất kỳ, **Đậm**, **VIẾT HOA / thường / Viết Hoa Đầu Từ**, **Giữ liền** (không ngắt dòng giữa cụm), Xoá định dạng. Kết quả ghi thành thẻ `⟦…⟧` (§1) vào chuỗi.
+- **Enter = xuống dòng** ở trường nhiều dòng (`data-ml`: tiêu đề, mô tả, nội dung thẻ, trích dẫn…); trường 1 dòng Enter = xong. Ô số liệu (`data-pl`) chỉ nhận chữ thường.
+- Bảng nội dung bên phải hiện **chữ thuần** (`plainText`); sửa ở đó giữ định dạng cũ theo vị trí (`repaintRich`). Renderer: `span.rt[data-rc|data-rb|data-rn]` + `style` chỉ ghép từ giá trị đã kiểm; `\n` → `<br>`; cụm `highlight` so trên chữ thuần.
+- Ngắt dòng hợp lý: `text-wrap: balance` cho tiêu đề/nhãn, `pretty` cho đoạn văn, `n` để giữ liền cụm từ.
+
+### Chọn bố cục & ảnh/logo
+- **Kiểu trình bày** (`variant`, §9): chip trên bảng nội dung (`VARIANT_LABELS`), chip mờ khi nội dung không hợp kiểu (`fits`). **Phong cách** toàn bài (`STYLE_OPTIONS`) ở tab Màu sắc.
+- **Ảnh/logo thay biểu tượng** của mục ở bullets/cards/stats/image (`ITEM_IMAGE_LAYOUTS`): `IconPicker` (lưới biểu tượng có tìm kiếm + nút "Ảnh/logo"); `items[i].image` (lần đầu `fit: contain` — logo trọn khung trên nền trắng; `cover` = lấp đầy). Renderer `span.ib.ib-img[.is-cover]`. Bấm ô trên khung → `items.N.image` (allowlist `editPaths`) → hộp ảnh tỷ lệ 1:1, gợi ý tìm theo tên mục.
+- **Lớp chèn đè** trên mọi trang (không chỉ trang tự do): `elements[]` ở layout có cấu trúc dựng `.free.over` phía trên nội dung; bảng "Chèn lên trang" thêm Logo (ảnh `contain`, góc trên phải) / chữ / ảnh / hình.
+
+### Bộ nhận diện thương hiệu (`spec.brand`)
+- Tab **Thương hiệu** (`BrandSettings`, ở cả bước dàn ý lẫn trình soạn thảo): 6 ô ảnh — **Trang bìa**, **Trang mở đầu phần** ("trang sub"), **Trang cảm ơn / kết**, **Nền trang nội dung**, **Dải đầu trang**, **Dải chân trang** — tải lên (`POST /:id/brand`; SVG đổi PNG 3200px ở trình duyệt) hoặc chọn lại ảnh đã tải; công tắc "Hiện tên bài & số trang trên dải chân trang" (`footerText`).
+- Renderer (`brandFor`): bìa/mở đầu phần/kết có ảnh riêng → chỉ ảnh đó (trang thiết kế sẵn, lớp `bspec`, không dải, nền động ẩn); thiếu ảnh riêng → như trang nội dung = nền trang + dải đầu/chân. Chiều cao dải theo tỷ lệ ảnh trải hết bề ngang (`--bt` ≤ 26%, `--bb` ≤ 22% chiều cao trang); nội dung tự lùi vào giữa hai dải.
+- **Màu chữ theo độ sáng ảnh** (`brand.tones`): khi đặt ảnh nền toàn trang, giao diện đo độ sáng (thu nhỏ 24×14, bỏ điểm trong suốt, ngưỡng 128) → `tones[ô] = dark|light`; người dùng chỉnh tay bằng "Chữ tối / Chữ sáng" dưới mỗi ảnh. Ảnh khác tông bài → slide thêm `ink-light` (ảnh tối) / `ink-dark` (ảnh sáng) — `inkVarsCss` khai báo lại bộ biến chữ/viền/màu nhấn (kể cả `--accent` — §09) trên trang đó; kicker/chip nhấn được nâng sáng như ảnh tràn trang. Đổi/bỏ ảnh xoá tông cũ của ô đó.
+- `normalizeDesign`/`cleanBrand`: chỉ nhận UUID (strict báo lỗi), không ô nào có ảnh → `null`; `tones` chỉ giữ cho ô nền toàn trang có ảnh. `collectAssetIds`/`dropForeignAssets`/`remapAssetIds` gồm cả ảnh nhận diện + ảnh mục (sao chép bài/mẫu đổi mã đúng).
+
+### Mẫu thương hiệu (`design_templates`)
+- Lưu toàn bộ thiết kế bài (tông màu, nền, phông, logo, bộ nhận diện, phong cách) thành mẫu có tên; **ảnh được sao chép** sang kho mẫu. Mẫu **riêng tư** (chỉ mình) hoặc **công khai** (mọi người dùng áp được — vd. bộ nhận diện công ty; chỉ chủ đổi tên/chia sẻ/xoá).
+- Áp mẫu: sao chép ảnh mẫu thành asset mới của bài đích → trả `design` → giao diện gán vào thiết kế đang sửa (người dùng bấm Lưu). Bước dàn ý không có `style` → bỏ qua trường này.
+- Cô lập: mẫu riêng tư người khác → 404; ảnh khi lưu mẫu phải thuộc bài của người lưu (`FOREIGN_ASSET`); ảnh mẫu chỉ đọc qua `/api/templates/assets/:id` khi đọc được mẫu.

@@ -121,10 +121,10 @@ export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, 
     window.removeEventListener('message', onMessage);
   });
 
-  /* ---- thao tác phần tử trang tự do (dùng chung cho thanh công cụ + phím tắt trên khung) ---- */
+  /* ---- thao tác phần tử (trang tự do + lớp chèn đè trên trang có bố cục; dùng chung thanh công cụ + phím tắt trên khung) ---- */
   function addElement(el) {
     const s = slideAt(selected.value);
-    if (!s || s.layout !== 'free') return null;
+    if (!s) return null;
     s.elements = s.elements || [];
     if (s.elements.length >= SPEC_LIMITS.elements) throw new Error(`Mỗi trang tối đa ${SPEC_LIMITS.elements} phần tử`);
     s.elements.push(el);

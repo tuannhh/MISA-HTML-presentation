@@ -1,6 +1,9 @@
 // "Chỉ đạo nghệ thuật" chạy ngầm: mỗi bố cục có nhiều biến thể trình bày + phong cách toàn bài, hệ thống tự chọn theo
-// nội dung từng trang (số ý, số liệu %, có ảnh, tỷ lệ khung…) để các bài không na ná nhau. Người dùng không phải chọn.
+// nội dung từng trang (số ý, số liệu %, có ảnh, tỷ lệ khung…) để các bài không na ná nhau. Người dùng không bắt buộc chọn —
+// có thể chọn tay ở form nội dung trang (chỉ các biến thể còn hợp nội dung).
 // Hàm thuần, dùng chung server (dựng bài) và renderer (kiểm tra biến thể còn hợp nội dung sau khi người dùng sửa).
+
+import { plainText } from './rich.js';
 
 // Phần tử đầu = mặc định (giao diện gốc trước khi có biến thể).
 export const VARIANTS = Object.freeze({
@@ -30,7 +33,7 @@ const photos = (s) => (Array.isArray(s.images) ? s.images.filter((im) => im && i
 // Ảnh đồ hoạ (infographic, sơ đồ…) hiển thị trọn khung (fit contain) → không dùng kiểu cắt ảnh tràn trang / xoay / ghép mảng.
 const contain = (s) => s.image?.fit === 'contain' || (Array.isArray(s.images) && s.images.some((im) => im?.fit === 'contain'));
 const unit = (st) => String(st.suffix || '').trim().toLowerCase();
-const longest = (list, key) => Math.max(0, ...(list || []).map((x) => String(x?.[key] || '').length));
+const longest = (list, key) => Math.max(0, ...(list || []).map((x) => plainText(x?.[key] || '').length));
 
 // Điều kiện để biến thể hiển thị đẹp với nội dung hiện có (r = rộng/cao của khung). Biến thể mặc định luôn hợp.
 const FITS = {

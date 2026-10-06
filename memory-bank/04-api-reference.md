@@ -56,6 +56,8 @@ Mật khẩu: 10–128 ký tự, có cả chữ và số. `user` trả về: `{ 
 | POST | `/:id/assets/:assetId/edit` | Chỉnh sửa ảnh (ảnh/ảnh bìa của bài). Body `{ crop?:{x,y,w,h} (0–1, theo khung bao ảnh sau xoay), rotate? (−360..360), flipH?, flipV?, brightness?/saturation?/contrast? (−100..100) }` — luôn áp lên **ảnh gốc** `:assetId`. → 201 `{ asset (ảnh mới), src (mã ảnh gốc), edit (thông số đã chuẩn hoá \| null) }`; `edit=null` = không thay đổi → trả ảnh gốc. Rate-limit `media` |
 | POST | `/:id/images/generate` | Ảnh AI (Nano Banana 2 Lite `gemini-3.1-flash-lite-image`, 1K). Body `{ prompt (≤ 1000), aspect (1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 21:9) }` → 201 `{ asset, alt }`. Tắt bằng `AI_IMAGES=false` → 503 `AI_IMAGES_DISABLED`; hàng đợi đầy → 503 `QUEUE_FULL`; rate-limit `aiImage` 40/10 phút; ghi audit `presentation.ai_image` |
 | POST | `/:id/images/import` | Body `{ provider:'pixabay', id }` — máy chủ hỏi lại Pixabay theo mã ảnh (không nhận URL từ client), chỉ tải từ `pixabay.com`/`cdn.pixabay.com`, ≤ 15 MB → 201 `{ asset, alt }` |
+| POST | `/:id/brand` (multipart `file`) | Ảnh bộ nhận diện (PNG/JPEG/WebP/GIF/AVIF; giao diện tự đổi SVG → PNG 3200px trước khi gửi). Cạnh dài ≤ 3840, WebP giữ trong suốt, ≤ 120 ảnh/bài (422 `TOO_MANY_ASSETS`) → 201 asset kind `brand`. Gắn vào ô nào do client ghi `spec.brand`/`outline.design.brand` (`05` §13). Rate-limit `media` |
+| POST | `/:id/templates/:templateId/apply` | Chủ sở hữu bài, bài ở `outline`/`ready`; mẫu của mình **hoặc** mẫu công khai (riêng tư người khác → 404). Sao chép ảnh mẫu thành asset mới của bài (đổi mã) → **201** `{ design, assets[], name }` — client gán `design` vào thiết kế đang sửa rồi tự lưu (API này **không** ghi spec). Quá 120 ảnh nhận diện/bài → 422 |
 | GET | `/:id/preview` | HTML trình chiếu cho iframe. `?edit=1` (chỉ chủ sở hữu, người khác bị bỏ qua cờ) = chế độ **sửa trực tiếp** (`data-e`/`data-m`, không HUD, không chuyển động chữ). Header CSP `sandbox allow-scripts allow-popups`, nonce, `connect-src 'none'`, `frame-ancestors 'self'`, `no-store` |
 | GET | `/:id/export.html` | Tải HTML một tệp (ảnh + phông đã chọn base64, giữ chuyển động + nền động). Video tải lên nhúng base64 nếu tổng ≤ `EXPORT_VIDEO_MB`, vượt → khung ảnh bìa không phát; YouTube vẫn mở được khi có mạng. Ghi audit |
 | GET | `/:id/export.pdf` | Tải PDF (mode print, không chuyển động) qua Chromium. Ghi audit, rate-limit |
@@ -63,6 +65,16 @@ Mật khẩu: 10–128 ký tự, có cả chữ và số. `user` trả về: `{ 
 Tên tệp tải về: `Content-Disposition` có `filename` ASCII + `filename*` UTF-8 (giữ tiếng Việt).
 
 DTO bài trình bày: `{ id, code, title, ratio, visibility, status, sourceKind, sourceLabel, specVersion, outlineVersion, slideCount, thumbnailUrl, errorMessage, isOwner, authorName, createdAt, updatedAt, publishedAt, spec?, assets? }`.
+
+## Mẫu thiết kế / thương hiệu — `/api/templates` (yêu cầu đăng nhập)
+
+| Method | Path | Mô tả |
+|---|---|---|
+| GET | `/` | Mẫu của tôi + mẫu công khai của người khác → `[{ id, name, visibility, isOwner, ownerName, design, assets: { <mã ảnh>: { url, width, height, kind } }, updatedAt }]` |
+| POST | `/` | Body `{ name, presentationId, design }` — `design` chuẩn hoá **strict** (400 `details[]`); mọi ảnh trong `design` phải là ảnh (image/poster/logo/brand) **thuộc bài `presentationId` của người gọi** (khác → 422 `FOREIGN_ASSET`, không phải ảnh → 422 `INVALID_MEDIA`); ảnh được sao chép sang `template_assets`, mã mới. Tên rỗng/quá 120 → 400 `INVALID_NAME`; > 50 mẫu → 422 `TOO_MANY_TEMPLATES` → 201 DTO. Audit `template.create` |
+| PATCH | `/:id` | Chỉ chủ (người khác → 404). Body `name`, `visibility` (`private`\|`public`, sai → 400 `INVALID_VISIBILITY`). Audit `template.visibility` |
+| DELETE | `/:id` | Chỉ chủ. Xoá DB (cascade ảnh) + tệp. Audit `template.delete` |
+| GET | `/assets/:id` | Ảnh của mẫu (xem trước thumbnail) — chỉ khi đọc được mẫu (của mình hoặc công khai), không thì 404. `Cache-Control: private` |
 
 ## Tìm ảnh Internet — `/api/images`
 

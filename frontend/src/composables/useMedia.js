@@ -1,7 +1,7 @@
 // Media của 1 bài trình bày (dùng chung trang dàn ý + trình soạn thảo, desktop + mobile):
 // ảnh, logo (+ tách nền), video tải lên (+ ảnh bìa chụp ngay trên trình duyệt), video YouTube.
 // assets: ref tới mảng asset của bài (cập nhật tại chỗ khi thêm mới).
-import { postForm, post, get, uploadForm, ApiError } from '@/lib/api.js';
+import { postForm, post, get, patch, del, uploadForm, ApiError } from '@/lib/api.js';
 import { IMAGE_ACCEPT as IMG_ACCEPT, isImageFile, heicToJpeg } from '@/lib/fileKinds.js';
 
 export const MAX_IMAGE_MB = 15;
@@ -104,6 +104,32 @@ export function useMedia(id, assets) {
     return a;
   }
 
+  // Ảnh bộ nhận diện thương hiệu (bìa, nền trang, mở đầu phần, trang kết, dải đầu/chân trang): giữ độ nét cao, SVG vẽ ra PNG lớn.
+  async function uploadBrand(file) {
+    const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+    if (!isSvg && !isImageFile(file)) throw new ApiError(0, 'INVALID_IMAGE', 'Ảnh thương hiệu phải là PNG, JPEG, WebP, SVG hoặc HEIC');
+    const f = isSvg ? await rasterizeSvg(file, 3200) : await heicToJpeg(file);
+    if (f.size > MAX_IMAGE_MB * MB) throw new ApiError(0, 'FILE_TOO_LARGE', `Ảnh tối đa ${MAX_IMAGE_MB} MB`);
+    const form = new FormData();
+    form.set('file', f, f.name);
+    const a = (await postForm(`/api/presentations/${id}/brand`, form)).data;
+    push(a);
+    return a;
+  }
+
+  /* ---- mẫu thương hiệu (dùng lại giữa các bài) ---- */
+  const listTemplates = async () => (await get('/api/templates')).data || [];
+  // Lưu thiết kế đang chỉnh của bài này thành mẫu (ảnh được sao chép sang kho của mẫu).
+  const saveTemplate = async (name, design) => (await post('/api/templates', { name, presentationId: id, design })).data;
+  const updateTemplate = async (tid, fields) => (await patch(`/api/templates/${tid}`, fields)).data;
+  const deleteTemplate = (tid) => del(`/api/templates/${tid}`);
+  // Áp mẫu: máy chủ sao chép ảnh của mẫu thành asset của bài → { design (đã đổi mã ảnh), assets, name }.
+  async function applyTemplate(tid) {
+    const res = (await post(`/api/presentations/${id}/templates/${tid}/apply`)).data;
+    push(...(res.assets || []));
+    return res;
+  }
+
   async function cutoutLogo(assetId, mode = 'auto') {
     const res = (await post(`/api/presentations/${id}/logo/${assetId}/cutout`, { mode })).data;
     push(res.asset);
@@ -155,7 +181,7 @@ export function useMedia(id, assets) {
     return res;
   }
 
-  return { byId, assetUrl, ofKind, uploadImage, uploadLogo, cutoutLogo, uploadVideo, addYouTube, generateImage, searchImages, importStock, editImage };
+  return { byId, assetUrl, ofKind, uploadImage, uploadLogo, uploadBrand, listTemplates, saveTemplate, updateTemplate, deleteTemplate, applyTemplate, cutoutLogo, uploadVideo, addYouTube, generateImage, searchImages, importStock, editImage };
 }
 
 // Nguồn phát cho lớp video của ứng dụng (xem trước trong dàn ý / trình soạn thảo).

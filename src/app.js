@@ -13,6 +13,7 @@ import { MySqlSessionStore } from './repositories/sessionStore.js';
 import { authRoutes } from './routes/authRoutes.js';
 import { presentationRoutes } from './routes/presentationRoutes.js';
 import { assetRoutes } from './routes/assetRoutes.js';
+import { templateRoutes } from './routes/templateRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { imageRoutes } from './routes/imageRoutes.js';
 import { deckFontBuffer, deckFontFile, DECK_FONT_PATH } from './services/renderService.js';
@@ -87,7 +88,8 @@ export function createApp({ config, pool, repos, services }) {
   api.use(loadUser(repos.users));
   api.use(csrfProtection(config));
   api.use('/auth', authRoutes({ auth: services.auth, users: repos.users, limits }));
-  api.use('/presentations', presentationRoutes({ service: services.presentations, config, limits }));
+  api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, config, limits }));
+  api.use('/templates', templateRoutes({ service: services.templates, limits }));
   api.use('/assets', assetRoutes({ service: services.presentations }));
   api.use('/admin', adminRoutes({ auth: services.auth }));
   api.use('/images', imageRoutes({ service: services.presentations, limits }));

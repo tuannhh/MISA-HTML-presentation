@@ -2,6 +2,7 @@
 // và ghi kết quả vào bản nháp. Dùng chung desktop (dialog) + mobile (màn toàn màn hình).
 import { ref, computed } from 'vue';
 import { mediaTarget, setMedia } from '@/lib/editPaths.js';
+import { plainText } from '@shared/deck/rich.js';
 
 export function useSlideMedia(draft, selected) {
   // { index, path, kind: 'image'|'video', aspect }
@@ -19,11 +20,15 @@ export function useSlideMedia(draft, selected) {
     const s = slideOf(target.value);
     if (!s) return '';
     const firstText = (s.elements || []).find((e) => e.type === 'text' && e.text?.trim())?.text || '';
-    return String(s.layout === 'free' ? firstText || s.title : s.title || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+    // Ảnh/logo của 1 mục (thẻ) → gợi ý theo tiêu đề mục (vd. "OpenAI" → tìm logo OpenAI).
+    const item = /^items\.(\d+)\.image$/.exec(target.value.path || '');
+    const itemTitle = item ? s.items?.[Number(item[1])]?.title || '' : '';
+    return plainText(itemTitle || (s.layout === 'free' ? firstText || s.title : s.title) || '').replace(/\s+/g, ' ').trim().slice(0, 100);
   });
   const title = computed(() => {
     if (!target.value) return '';
     const n = target.value.index + 1;
+    if (/^items\.\d+\.image$/.test(target.value.path || '')) return `Ảnh / logo thay biểu tượng — trang ${n}`;
     return target.value.kind === 'video' ? `Video — trang ${n}` : `Ảnh — trang ${n}`;
   });
   // Ô có thể đổi giữa ảnh ↔ video: ô media chính của trang (không áp dụng cho bộ sưu tập / phần tử ảnh).

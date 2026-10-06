@@ -1,5 +1,6 @@
 <script setup>
-// Thiết kế toàn bài: Màu sắc · Nền động · Phông chữ · Logo (+ chân trang). Sửa trực tiếp vào object thiết kế
+// Thiết kế toàn bài: Màu sắc (+ phong cách) · Nền động · Phông chữ · Logo · Thương hiệu (ảnh nhận diện + mẫu) (+ chân trang).
+// Sửa trực tiếp vào object thiết kế
 // (outline.design ở bước dàn ý, hoặc chính spec trong trình soạn thảo — cùng các trường theme/palette/background/font/logo).
 import { computed, ref } from 'vue'
 import MTabs from '@/components/mds/MTabs.vue'
@@ -9,9 +10,10 @@ import ThemePicker from './ThemePicker.vue'
 import BackgroundPicker from './BackgroundPicker.vue'
 import FontPicker from './FontPicker.vue'
 import LogoSettings from './LogoSettings.vue'
+import BrandSettings from './BrandSettings.vue'
 import DesignPreview from './DesignPreview.vue'
 import { CUSTOM_THEME, themeTone } from '@/lib/design.js'
-import { SPEC_LIMITS as L } from '@/lib/slideModel.js'
+import { SPEC_LIMITS as L, STYLE_OPTIONS } from '@/lib/slideModel.js'
 
 const props = defineProps({
   design: { type: Object, required: true },
@@ -33,7 +35,10 @@ const TABS = [
   { key: 'bg', label: 'Nền' },
   { key: 'font', label: 'Phông chữ' },
   { key: 'logo', label: 'Logo' },
+  { key: 'brand', label: 'Thương hiệu' },
 ]
+// Phong cách hình khối chỉ có ở bài đã dựng (spec.style) — bước dàn ý chưa có.
+const hasStyle = computed(() => typeof d.value.style === 'string')
 
 const tone = computed(() => themeTone(d.value.theme, d.value.palette))
 function onTone(t) {
@@ -53,20 +58,39 @@ function onColor(key, v) {
 <template>
   <div class="flex min-w-0 flex-col gap-3">
     <DesignPreview v-if="showPreview" :design="d" :media="media" :title="title" :subtitle="subtitle" :ratio="ratio" />
-    <MTabs v-model="tab" :tabs="TABS" variant="pill" />
+    <div class="-mx-1 overflow-x-auto px-1 pb-1"><MTabs v-model="tab" :tabs="TABS" variant="pill" /></div>
 
-    <ThemePicker
-      v-if="tab === 'color'"
-      :tone="tone"
-      :theme="d.theme"
-      :primary="d.palette?.primary || ''"
-      :secondary="d.palette?.secondary || ''"
-      :compact="compact"
-      @update:tone="onTone"
-      @update:theme="onTheme"
-      @update:primary="(v) => onColor('primary', v)"
-      @update:secondary="(v) => onColor('secondary', v)"
-    />
+    <template v-if="tab === 'color'">
+      <ThemePicker
+        :tone="tone"
+        :theme="d.theme"
+        :primary="d.palette?.primary || ''"
+        :secondary="d.palette?.secondary || ''"
+        :compact="compact"
+        @update:tone="onTone"
+        @update:theme="onTheme"
+        @update:primary="(v) => onColor('primary', v)"
+        @update:secondary="(v) => onColor('secondary', v)"
+      />
+      <fieldset v-if="hasStyle" class="flex flex-col gap-2">
+        <legend class="mb-1 text-[13px] font-medium">Phong cách trình bày</legend>
+        <div role="radiogroup" aria-label="Phong cách trình bày" class="grid grid-cols-2 gap-2">
+          <button
+            v-for="o in STYLE_OPTIONS"
+            :key="o.value"
+            type="button"
+            role="radio"
+            :aria-checked="d.style === o.value"
+            class="flex flex-col items-start rounded-lg border px-3 py-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mds-brand-600)]"
+            :class="d.style === o.value ? 'border-[var(--mds-brand-600)] bg-[var(--mds-brand-50)]' : 'border-[var(--mds-border)] hover:border-[var(--mds-brand-600)]'"
+            @click="d.style = o.value"
+          >
+            <span class="text-[13px] font-medium leading-[18px]" :class="d.style === o.value ? 'text-[var(--mds-brand-700)]' : ''">{{ o.label }}</span>
+            <span class="text-[11px] leading-4 text-[var(--mds-text-secondary)]">{{ o.hint }}</span>
+          </button>
+        </div>
+      </fieldset>
+    </template>
     <div v-else-if="tab === 'bg'" class="flex flex-col gap-2">
       <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Hiệu ứng chuyển động phía sau nội dung, theo màu của tông đã chọn. {{ compact ? 'Chạm để chọn và xem chuyển động.' : 'Rê chuột để xem chuyển động.' }}</p>
       <BackgroundPicker v-model="d.background" :theme="d.theme" :palette="d.palette" :compact="compact" />
@@ -75,7 +99,8 @@ function onColor(key, v) {
       <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Phông được nhúng kèm bài trình bày — máy chiếu/máy khác không cài phông vẫn hiển thị đúng, đủ dấu tiếng Việt.</p>
       <FontPicker v-model="d.font" />
     </div>
-    <LogoSettings v-else v-model="d.logo" :media="media" :theme="d.theme" :palette="d.palette" />
+    <LogoSettings v-else-if="tab === 'logo'" v-model="d.logo" :media="media" :theme="d.theme" :palette="d.palette" />
+    <BrandSettings v-else-if="tab === 'brand'" :design="d" :media="media" :ratio="ratio" :compact="compact" />
 
     <FormField v-if="footer !== undefined" label="Chân trang" hint="Hiển thị ở góc dưới mỗi trang; để trống sẽ dùng tên bài">
       <MInput :model-value="footer" :error="(footer || '').length > L.footer ? `Tối đa ${L.footer} ký tự` : ''" @update:model-value="(v) => emit('update:footer', v)" />

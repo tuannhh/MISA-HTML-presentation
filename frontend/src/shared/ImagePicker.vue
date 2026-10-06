@@ -8,6 +8,7 @@ import MSelect from '@/components/mds/MSelect.vue'
 import MDialog from '@/components/mds/MDialog.vue'
 import { useToast } from '@/components/mds/toast.js'
 import { IMAGE_ACCEPT } from '@/lib/fileKinds.js'
+import { plainText, repaintRich } from '@shared/deck/rich.js'
 
 const props = defineProps({
   modelValue: { type: Object, default: null }, // { asset, alt, caption, fit } | null
@@ -95,7 +96,7 @@ function pick(a) {
     <template v-if="current?.asset">
       <MSelect :model-value="current.fit || 'cover'" :options="FIT" @update:model-value="(v) => set({ fit: v })" />
       <MInput :model-value="current.alt || ''" placeholder="Mô tả ảnh (cho người dùng trình đọc màn hình)" @update:model-value="(v) => set({ alt: v })" />
-      <MInput v-if="withCaption" :model-value="current.caption || ''" placeholder="Chú thích hiển thị trên ảnh" @update:model-value="(v) => set({ caption: v })" />
+      <MInput v-if="withCaption" :model-value="plainText(current.caption || '')" placeholder="Chú thích hiển thị trên ảnh" @update:model-value="(v) => set({ caption: repaintRich(current.caption || '', v) })" />
     </template>
 
     <MDialog v-model="libraryOpen" title="Chọn ảnh trong bài trình bày" width="720px">

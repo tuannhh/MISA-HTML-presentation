@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS assets (
   tenant_id        CHAR(36)      NOT NULL,
   presentation_id  CHAR(36)      NOT NULL,
   -- image: ảnh trong slide · thumbnail: ảnh bìa bài · video: video tải lên · logo: logo (gốc + bản tách nền) · poster: ảnh bìa video/YouTube
-  kind             ENUM('image','thumbnail','video','logo','poster') NOT NULL DEFAULT 'image',
+  -- brand: ảnh bộ nhận diện thương hiệu (nền trang, dải đầu/chân trang)
+  kind             ENUM('image','thumbnail','video','logo','poster','brand') NOT NULL DEFAULT 'image',
   mime             VARCHAR(80)   NOT NULL,
   bytes            INT UNSIGNED  NOT NULL,
   width            SMALLINT UNSIGNED NULL,
@@ -80,6 +81,40 @@ CREATE TABLE IF NOT EXISTS assets (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Phiên đăng nhập lưu phía server (express-session + store tự viết src/repositories/sessionStore.js).
+-- Mẫu thiết kế / bộ nhận diện thương hiệu dùng lại (changelog 20261006_200000).
+CREATE TABLE IF NOT EXISTS design_templates (
+  id          CHAR(36)      NOT NULL,
+  tenant_id   CHAR(36)      NOT NULL,
+  name        VARCHAR(120)  NOT NULL,
+  visibility  ENUM('private','public') NOT NULL DEFAULT 'private',
+  -- { theme, palette, background, font, logo, brand, style } — mã asset trỏ tới template_assets của chính mẫu.
+  design      JSON          NOT NULL,
+  created_at  DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at  DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY ix_design_templates_tenant (tenant_id, updated_at),
+  KEY ix_design_templates_public (visibility, updated_at),
+  CONSTRAINT fk_design_templates_tenant FOREIGN KEY (tenant_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS template_assets (
+  id            CHAR(36)      NOT NULL,
+  tenant_id     CHAR(36)      NOT NULL,
+  template_id   CHAR(36)      NOT NULL,
+  kind          ENUM('logo','brand','image') NOT NULL,
+  mime          VARCHAR(80)   NOT NULL,
+  bytes         INT UNSIGNED  NOT NULL,
+  width         SMALLINT UNSIGNED NULL,
+  height        SMALLINT UNSIGNED NULL,
+  storage_key   VARCHAR(255)  NOT NULL,
+  original_name VARCHAR(255)  NULL,
+  created_at    DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY ix_template_assets_template (template_id),
+  CONSTRAINT fk_template_assets_tenant FOREIGN KEY (tenant_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT fk_template_assets_template FOREIGN KEY (template_id) REFERENCES design_templates (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS sessions (
   session_id  VARCHAR(128) NOT NULL,
   expires     BIGINT UNSIGNED NOT NULL,
@@ -114,3 +149,4 @@ INSERT IGNORE INTO schema_changelog (name) VALUES ('schema.sql@2026-10-05-baseli
 -- Baseline đã gồm các changelog sau (cài mới không cần chạy lại):
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261005_170000.sql');
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261006_090000.sql');
+INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261006_200000.sql');

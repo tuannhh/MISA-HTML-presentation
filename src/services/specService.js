@@ -3,7 +3,8 @@
 //  - lenient (kết quả AI): tự cắt chuỗi quá dài, thay giá trị lạ bằng mặc định, bỏ phần tử thừa.
 //  - strict (người dùng lưu): vượt giới hạn → trả danh sách lỗi để API báo 422 (không âm thầm cắt dữ liệu người dùng).
 import { randomUUID } from 'node:crypto';
-import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE } from '../../shared/deck/render.js';
+import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE, BRAND_SLOTS } from '../../shared/deck/render.js';
+import { hasRich, canonicalRich, plainText, cutRich } from '../../shared/deck/rich.js';
 import { CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
 import { FONT_IDS, DEFAULT_FONT } from '../../shared/deck/fonts.js';
 import { ICON_NAMES } from '../../shared/deck/icons.js';
@@ -34,7 +35,18 @@ function makeCtx(strict) {
         return '';
       }
       // Bỏ ký tự điều khiển (trừ xuống dòng/tab), chuẩn hoá khoảng trắng đầu cuối.
-      const s = String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim();
+      let s = String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim();
+      // Chữ có định dạng (màu/đậm/giữ liền — shared/deck/rich.js): độ dài tính theo chữ HIỂN THỊ; thẻ sai cú pháp thành chữ thường.
+      // Trần thô (gồm thẻ) chặn chuỗi phình to vì quá nhiều đoạn định dạng.
+      if (hasRich(s)) {
+        s = canonicalRich(s);
+        const len = plainText(s).length;
+        if (len > max || s.length > max * 4 + 400) {
+          if (strict) errors.push(`${path}: tối đa ${max} ký tự`);
+          return len > max ? cutRich(s, max) : plainText(s).slice(0, max);
+        }
+        return s;
+      }
       if (s.length > max) {
         if (strict) errors.push(`${path}: tối đa ${max} ký tự`);
         return s.slice(0, max).trim();
@@ -158,7 +170,29 @@ export function cleanDesign(c, o) {
       };
     } else if (c.strict) c.errors.push('logo: mã ảnh logo không hợp lệ');
   }
-  return { theme, palette, background, font, logo };
+  return { theme, palette, background, font, logo, brand: cleanBrand(c, o.brand) };
+}
+
+// Bộ nhận diện thương hiệu: ảnh nền trang bìa / trang nội dung / trang mở đầu phần / trang kết + dải đầu trang, chân trang.
+// Mỗi ô là mã asset (ảnh của bài). footerText = vẫn hiện chữ chân trang + số trang phía trên dải chân trang.
+export function cleanBrand(c, v) {
+  if (!v) return null;
+  const o = c.obj(v);
+  const out = {};
+  let any = false;
+  for (const k of BRAND_SLOTS) {
+    if (o[k] && !uuidOrNull(o[k]) && c.strict) c.errors.push(`brand.${k}: mã ảnh không hợp lệ`);
+    out[k] = uuidOrNull(o[k]);
+    any = any || !!out[k];
+  }
+  if (!any) return null;
+  out.footerText = o.footerText !== false;
+  // Độ sáng ảnh nền toàn trang (giao diện đo khi chọn ảnh, người dùng chỉnh được) → renderer đổi màu chữ trang khác tông.
+  const tn = c.obj(o.tones);
+  const tones = {};
+  for (const k of ['cover', 'page', 'section', 'closing']) if (out[k] && (tn[k] === 'light' || tn[k] === 'dark')) tones[k] = tn[k];
+  if (Object.keys(tones).length) out.tones = tones;
+  return out;
 }
 
 const oneOf = (v, list, def) => (list.includes(v) ? v : def);
@@ -212,14 +246,20 @@ function cleanElement(c, v, path, seen) {
   });
 }
 
-function cleanItem(c, v, path) {
+function cleanItem(c, v, path, withImage = false) {
   const o = c.obj(v);
-  return {
+  const it = {
     icon: ICON_SET.has(o.icon) ? o.icon : 'sparkles',
     title: c.str(o.title, SPEC_LIMITS.itemTitle, `${path}.title`),
     text: c.str(o.text, SPEC_LIMITS.itemText, `${path}.text`),
     value: c.str(o.value, SPEC_LIMITS.itemValue, `${path}.value`),
   };
+  // Ảnh/logo thay biểu tượng của thẻ/ý (vd. logo OpenAI, Gemini…) — chỉ ở danh sách items (không ở bước quy trình).
+  if (withImage) {
+    const img = cleanImage(c, o.image, `${path}.image`);
+    if (img?.asset) it.image = img;
+  }
+  return it;
 }
 
 function cleanStat(c, v, path) {
@@ -284,7 +324,7 @@ function cleanSlide(c, v, i, seen) {
     icon: ICON_SET.has(o.icon) ? o.icon : 'sparkles',
     notes: c.str(o.notes, SPEC_LIMITS.notes, `${p}.notes`),
     tags: c.arr(o.tags, SPEC_LIMITS.tags, `${p}.tags`).map((t, k) => c.str(t, SPEC_LIMITS.tag, `${p}.tags[${k}]`)).filter(Boolean),
-    items: c.arr(o.items, SPEC_LIMITS.items, `${p}.items`).map((it, k) => cleanItem(c, it, `${p}.items[${k}]`)).filter((it) => it.title || it.text),
+    items: c.arr(o.items, SPEC_LIMITS.items, `${p}.items`).map((it, k) => cleanItem(c, it, `${p}.items[${k}]`, true)).filter((it) => it.title || it.text || it.image),
     stats: c.arr(o.stats, SPEC_LIMITS.stats, `${p}.stats`).map((it, k) => cleanStat(c, it, `${p}.stats[${k}]`)).filter((it) => it.value !== '' || it.label),
     steps: c.arr(o.steps, SPEC_LIMITS.steps, `${p}.steps`).map((it, k) => cleanItem(c, it, `${p}.steps[${k}]`)).filter((it) => it.title || it.text),
     columns: c
@@ -304,11 +344,13 @@ function cleanSlide(c, v, i, seen) {
     images: c.arr(o.images, SPEC_LIMITS.images, `${p}.images`).map((im, k) => cleanImage(c, im, `${p}.images[${k}]`)).filter(Boolean),
     video: cleanVideo(c, o.video, `${p}.video`),
   };
-  if (layout === 'free') {
+  // Phần tử đặt tự do: là toàn bộ nội dung của trang tự do; ở bố cục khác là lớp CHÈN THÊM phía trên (ảnh, logo, chữ, hình khối…).
+  if (layout === 'free' || (Array.isArray(o.elements) && o.elements.length)) {
     const seenEl = new Set();
     slide.elements = c.arr(o.elements, SPEC_LIMITS.elements, `${p}.elements`).map((e, k) => cleanElement(c, e, `${p}.elements[${k}]`, seenEl)).filter(Boolean);
+    if (layout !== 'free' && !slide.elements.length) delete slide.elements;
   }
-  if (slide.highlight && !slide.title.includes(slide.highlight)) slide.highlight = '';
+  if (slide.highlight && !plainText(slide.title).includes(slide.highlight)) slide.highlight = '';
   if (!c.strict) slide.layout = fallbackLayout(slide);
   // Biến thể trình bày do hệ thống chọn ngầm (không có trên giao diện) → giá trị lạ/không thuộc bố cục: bỏ, không báo lỗi.
   slide.variant = VARIANTS[slide.layout]?.includes(o.variant) ? o.variant : '';
@@ -344,6 +386,7 @@ export function collectAssetIds(spec) {
   for (const s of spec.slides || []) {
     img(s.image);
     for (const im of s.images || []) img(im);
+    for (const it of s.items || []) img(it.image);
     add(s.video?.asset);
     add(s.video?.poster);
     for (const e of s.elements || []) {
@@ -355,6 +398,8 @@ export function collectAssetIds(spec) {
   const lg = spec.logo || spec.design?.logo;
   add(lg?.asset);
   add(lg?.cutout);
+  const br = spec.brand || spec.design?.brand;
+  for (const k of BRAND_SLOTS) add(br?.[k]);
   return ids;
 }
 
@@ -379,6 +424,10 @@ export function dropForeignAssets(spec, allowedIds) {
   for (const s of spec.slides) {
     s.image = keep(s.image);
     s.images = (s.images || []).map(keep);
+    for (const it of s.items || []) {
+      if (it.image) it.image = keep(it.image);
+      if (it.image && !it.image.asset) delete it.image;
+    }
     s.video = keepVideo(s.video);
     for (const e of s.elements || []) {
       if (e.image) e.image = keep(e.image);
@@ -389,6 +438,10 @@ export function dropForeignAssets(spec, allowedIds) {
   if (holder.logo) {
     if (!ok(holder.logo.asset)) holder.logo = null;
     else if (holder.logo.cutout && !ok(holder.logo.cutout)) holder.logo = { ...holder.logo, cutout: null, removeBg: false };
+  }
+  if (holder.brand) {
+    for (const k of BRAND_SLOTS) if (holder.brand[k] && !ok(holder.brand[k])) holder.brand[k] = null;
+    if (!BRAND_SLOTS.some((k) => holder.brand[k])) holder.brand = null;
   }
   return spec;
 }
@@ -414,6 +467,10 @@ export function remapAssetIds(doc, map) {
   for (const s of doc.slides || []) {
     img(s.image);
     for (const im of s.images || []) img(im);
+    for (const it of s.items || []) {
+      img(it.image);
+      if (it.image && !it.image.asset) delete it.image;
+    }
     s.video = vid(s.video);
     for (const e of s.elements || []) {
       img(e.image);
@@ -425,6 +482,10 @@ export function remapAssetIds(doc, map) {
     holder.logo.asset = m(holder.logo.asset);
     holder.logo.cutout = m(holder.logo.cutout);
     if (!holder.logo.asset) holder.logo = null;
+  }
+  if (holder.brand) {
+    for (const k of BRAND_SLOTS) holder.brand[k] = m(holder.brand[k]) || null;
+    if (!BRAND_SLOTS.some((k) => holder.brand[k])) holder.brand = null;
   }
   return doc;
 }
@@ -441,4 +502,12 @@ export function capSlides(spec, max) {
 export function themeForTone(theme, tone, toneThemes) {
   const allowed = toneThemes[tone];
   return allowed && !allowed.includes(theme) ? allowed[0] : theme;
+}
+
+// Thiết kế độc lập (mẫu thiết kế / bộ nhận diện thương hiệu): tông màu, nền, phông, logo, ảnh thương hiệu + phong cách bài.
+export function normalizeDesign(input, { strict = false } = {}) {
+  const c = makeCtx(strict);
+  const o = c.obj(input);
+  const design = { ...cleanDesign(c, o), style: STYLES.includes(o.style) ? o.style : STYLES[0] };
+  return { design, errors: c.errors.slice(0, 20) };
 }

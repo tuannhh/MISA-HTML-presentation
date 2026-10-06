@@ -373,18 +373,247 @@
   function post(msg) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* bỏ qua */ } }
   function slideIndex(el) { return slides.indexOf(el && el.closest ? el.closest('.slide') : null); }
   function edEl(t) { return t && t.closest ? t.closest('[data-e]') : null; }
+  // plaintext-only: trình duyệt không tự chèn định dạng (dán/kéo thả HTML) — định dạng chỉ qua thanh công cụ (span.rt dựng lại từ mô hình).
+  function editable(el) { el.contentEditable = PT ? 'plaintext-only' : 'true'; el.spellcheck = false; }
+  function bindEditables(root) {
+    Array.prototype.forEach.call(root.querySelectorAll('[data-e]'), function (el) { if (!el.closest('.fe')) editable(el); });
+  }
+  // Chữ thuần (trường số liệu/chân trang có data-pl, hoặc để đếm độ dài).
   function textOf(el) {
     var t = (el.innerText || el.textContent || '').replace(/ /g, ' ').replace(/\r/g, '');
     if (!el.hasAttribute('data-ml')) return t.replace(/\s*\n+\s*/g, ' ');
     return t.replace(/\n$/, '');
   }
-  function editable(el) { el.contentEditable = PT ? 'plaintext-only' : 'true'; el.spellcheck = false; }
-  function bindEditables(root) {
-    Array.prototype.forEach.call(root.querySelectorAll('[data-e]'), function (el) { if (!el.closest('.fe')) editable(el); });
+
+  /* ---- chữ có định dạng (cùng cú pháp với shared/deck/rich.js): ⟦màu,b,n⟧chữ⟦/⟧, xuống dòng = \n ---- */
+  // Mô hình = mảng ký tự {t, c, b, n}; đọc từ DOM, sửa theo vị trí, dựng lại DOM (chỉ text node, span, br — không innerHTML).
+  var RC = { text: 'var(--text)', accent: 'var(--accent)', 'accent-2': 'var(--accent-2)', amber: 'var(--amber)', mint: 'var(--mint)', coral: 'var(--coral)', violet: 'var(--violet)', muted: 'var(--muted)', white: '#FFFFFF', dark: '#111111' };
+  var HEXC = /^#[0-9a-f]{6}$/i;
+  function okColor(c) { return c && (Object.prototype.hasOwnProperty.call(RC, c) || HEXC.test(c)) ? c : null; }
+  function isRich(el) { return !!el && !el.hasAttribute('data-pl'); }
+  var NOFMT = { c: null, b: false, n: false };
+  // Đọc DOM → ký tự. Khối (div/p do trình duyệt chèn) = xuống dòng trước nó; <br> = xuống dòng.
+  function domChars(root) {
+    var out = [];
+    (function walk(node, f) {
+      Array.prototype.forEach.call(node.childNodes, function (n, i) {
+        if (n.nodeType === 3) {
+          var t = n.nodeValue.replace(/ /g, ' ').replace(/\r/g, '').replace(/[⟦⟧]/g, '');
+          for (var k = 0; k < t.length; k++) out.push({ t: t[k], c: f.c, b: f.b, n: f.n && t[k] !== '\n' });
+        } else if (n.nodeType === 1) {
+          if (n.tagName === 'BR') { out.push({ t: '\n', c: null, b: false, n: false }); return; }
+          if (n.classList && n.classList.contains('fe-h')) return;
+          var block = /^(DIV|P)$/.test(n.tagName);
+          if (block && i > 0 && out.length && out[out.length - 1].t !== '\n') out.push({ t: '\n', c: null, b: false, n: false });
+          var g = { c: f.c, b: f.b, n: f.n };
+          if (n.classList && n.classList.contains('rt')) {
+            g.c = okColor(n.getAttribute('data-rc')) || f.c;
+            if (n.hasAttribute('data-rb')) g.b = true;
+            if (n.hasAttribute('data-rn')) g.n = true;
+          }
+          walk(n, g);
+        }
+      });
+    })(root, NOFMT);
+    return out;
+  }
+  function trimTail(chars) { if (chars.length && chars[chars.length - 1].t === '\n') chars.pop(); return chars; }
+  function keyOf(x) { return [x.c || '', x.b ? 'b' : '', x.n ? 'n' : ''].filter(Boolean).join(','); }
+  function serialize(chars) {
+    var out = '', run = '', buf = '';
+    function flush() { if (!buf) return; out += run ? '⟦' + run + '⟧' + buf + '⟦/⟧' : buf; buf = ''; }
+    chars.forEach(function (x) { var k = keyOf(x); if (k !== run) { flush(); run = k; } buf += x.t; });
+    flush();
+    return out;
+  }
+  // Dựng lại DOM từ ký tự (thêm <br> cuối để dòng trống cuối hiện được khi đang gõ).
+  function buildDom(el, chars) {
+    while (el.firstChild) el.removeChild(el.firstChild);
+    var i = 0;
+    while (i < chars.length) {
+      var k = keyOf(chars[i]), j = i;
+      while (j < chars.length && keyOf(chars[j]) === k) j++;
+      var host = el;
+      if (k) {
+        var x = chars[i], sp = document.createElement('span');
+        sp.className = 'rt';
+        if (x.c) { sp.setAttribute('data-rc', x.c); sp.style.color = RC[x.c] || x.c; }
+        if (x.b) { sp.setAttribute('data-rb', ''); sp.style.fontWeight = '800'; }
+        if (x.n) { sp.setAttribute('data-rn', ''); sp.style.whiteSpace = 'nowrap'; }
+        el.appendChild(sp); host = sp;
+      }
+      var txt = '';
+      for (var m = i; m < j; m++) {
+        if (chars[m].t === '\n') { if (txt) host.appendChild(document.createTextNode(txt)); txt = ''; host.appendChild(document.createElement('br')); }
+        else txt += chars[m].t;
+      }
+      if (txt) host.appendChild(document.createTextNode(txt));
+      i = j;
+    }
+    if (chars.length && chars[chars.length - 1].t === '\n') el.appendChild(document.createElement('br'));
+  }
+  function valueOf(el) { return isRich(el) ? serialize(trimTail(domChars(el))) : textOf(el); }
+  function lenOf(el) { return isRich(el) ? trimTail(domChars(el)).length : textOf(el).length; }
+  // Vị trí (theo ký tự của mô hình) của 1 điểm DOM trong el.
+  function offsetAt(el, node, off) {
+    try {
+      var r = document.createRange(); r.selectNodeContents(el); r.setEnd(node, off);
+      var box = document.createElement('div'); box.appendChild(r.cloneContents());
+      return domChars(box).length;
+    } catch (e) { return 0; }
+  }
+  function selRange(el) {
+    var sl = getSelection();
+    if (!sl || !sl.rangeCount) return null;
+    var r = sl.getRangeAt(0);
+    if (!el.contains(r.startContainer) || !el.contains(r.endContainer)) return null;
+    var a = offsetAt(el, r.startContainer, r.startOffset), b = offsetAt(el, r.endContainer, r.endOffset);
+    return { s: Math.min(a, b), e: Math.max(a, b) };
+  }
+  // Điểm DOM ứng với vị trí ký tự idx (ưu tiên cuối text node phía trước → chữ gõ tiếp nhận định dạng đứng trước).
+  function pointAt(el, idx) {
+    var pos = 0, found = null;
+    (function walk(node) {
+      for (var i = 0; i < node.childNodes.length && !found; i++) {
+        var n = node.childNodes[i];
+        if (n.nodeType === 3) { if (idx <= pos + n.nodeValue.length) { found = { node: n, off: idx - pos }; return; } pos += n.nodeValue.length; }
+        else if (n.tagName === 'BR') { if (idx <= pos) { found = { node: node, off: i }; return; } pos += 1; }
+        else walk(n);
+      }
+    })(el);
+    return found || { node: el, off: el.childNodes.length };
+  }
+  function setSel(el, s, e) {
+    var a = pointAt(el, s), b = pointAt(el, e === undefined ? s : e);
+    var r = document.createRange();
+    try { r.setStart(a.node, a.off); r.setEnd(b.node, b.off); } catch (err) { return; }
+    var sl = getSelection(); sl.removeAllRanges(); sl.addRange(r);
   }
   function sendEdit(el, final) {
-    post({ type: 'deck:edit', index: slideIndex(el), path: el.getAttribute('data-e'), value: textOf(el), final: !!final });
+    post({ type: 'deck:edit', index: slideIndex(el), path: el.getAttribute('data-e'), value: valueOf(el), final: !!final });
   }
+  // Chèn chữ (Enter, dán) theo mô hình — không phụ thuộc cách từng trình duyệt tự chèn <div>/<br>.
+  function insertText(el, text) {
+    var r = selRange(el) || { s: 0, e: 0 };
+    var chars = domChars(el);
+    var max = +(el.getAttribute('data-max') || 0);
+    text = String(text || '').replace(/\r\n?/g, '\n');
+    if (!el.hasAttribute('data-ml')) text = text.replace(/\s*\n+\s*/g, ' ');
+    if (max) text = text.slice(0, Math.max(0, max - (trimTail(domChars(el)).length - (r.e - r.s))));
+    if (!text && r.e === r.s) return;
+    var f = chars[r.s - 1] || chars[r.e] || NOFMT;
+    if (f.t === '\n') f = NOFMT;
+    var add = text.split('').map(function (t) { return { t: t, c: f.c, b: f.b, n: f.n && t !== '\n' }; });
+    chars.splice.apply(chars, [r.s, r.e - r.s].concat(add));
+    buildDom(el, chars);
+    setSel(el, r.s + add.length);
+    sendEdit(el, false);
+    var fe = el.closest('.fe'); if (fe) fitFree(fe);
+    placeToolbar();
+  }
+
+  /* ---- thanh định dạng nổi (chỉ ở trường chữ có định dạng đang sửa) ---- */
+  var tb = null, tbEl = null, tbSel = null, tbInp = null;
+  var TB_COLORS = ['text', 'accent', 'accent-2', 'amber', 'mint', 'coral', 'muted', 'white', 'dark'];
+  var TB_NAMES = { text: 'Màu chữ mặc định', accent: 'Màu nhấn', 'accent-2': 'Màu nhấn phụ', amber: 'Màu pha', mint: 'Xanh lá', coral: 'Đỏ', muted: 'Xám', white: 'Trắng', dark: 'Đen' };
+  function tbBtn(label, title, cmd, cls) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'tb-b' + (cls ? ' ' + cls : ''); b.textContent = label; b.title = title;
+    b.setAttribute('aria-label', title); b.setAttribute('data-cmd', cmd);
+    return b;
+  }
+  function sep() { var i = document.createElement('i'); i.className = 'tb-sep'; return i; }
+  function paintSwatches() {
+    if (!tb) return;
+    var cs = getComputedStyle(document.documentElement);
+    Array.prototype.forEach.call(tb.querySelectorAll('.tb-sw'), function (b) {
+      var c = b.getAttribute('data-cmd').slice(2), css = RC[c];
+      var v = css.indexOf('var(') === 0 ? cs.getPropertyValue(css.slice(4, -1)).trim() : css;
+      b.style.setProperty('--sw', v || '#888');
+    });
+  }
+  function buildToolbar() {
+    tb = document.createElement('div');
+    tb.id = 'rtb'; tb.setAttribute('role', 'toolbar'); tb.setAttribute('aria-label', 'Định dạng chữ');
+    TB_COLORS.forEach(function (c) { tb.appendChild(tbBtn('', TB_NAMES[c], 'c:' + c, 'tb-sw')); });
+    var pick = document.createElement('label');
+    pick.className = 'tb-b tb-pick'; pick.title = 'Màu tuỳ chọn (mã màu thương hiệu)';
+    tbInp = document.createElement('input');
+    tbInp.type = 'color'; tbInp.value = '#2563eb'; tbInp.setAttribute('aria-label', 'Màu tuỳ chọn');
+    tbInp.addEventListener('input', function () { applyFmt({ c: tbInp.value.toUpperCase() }, true); });
+    tbInp.addEventListener('change', function () { applyFmt({ c: tbInp.value.toUpperCase() }, false); });
+    pick.appendChild(tbInp); tb.appendChild(pick);
+    tb.appendChild(sep());
+    tb.appendChild(tbBtn('B', 'Chữ đậm', 'b', 'tb-bold'));
+    tb.appendChild(tbBtn('AA', 'VIẾT HOA TOÀN BỘ', 'u:upper'));
+    tb.appendChild(tbBtn('aa', 'viết thường', 'u:lower'));
+    tb.appendChild(tbBtn('Aa', 'Viết Hoa Đầu Mỗi Từ', 'u:title'));
+    tb.appendChild(sep());
+    tb.appendChild(tbBtn('⟷', 'Giữ liền cụm từ (không ngắt xuống dòng giữa cụm)', 'n'));
+    tb.appendChild(tbBtn('⌫', 'Xoá định dạng', 'clear'));
+    var hint = document.createElement('span'); hint.className = 'tb-hint'; hint.textContent = 'Bôi chữ để áp riêng · Enter xuống dòng';
+    tb.appendChild(hint);
+    // Giữ vùng chọn trong ô đang sửa khi bấm thanh công cụ (nút không lấy focus) — trừ ô chọn màu (cần mở bảng màu).
+    tb.addEventListener('pointerdown', function (e) {
+      if (!tbEl) return;
+      tbSel = selRange(tbEl) || tbSel;
+      if (!e.target.closest('.tb-pick')) e.preventDefault();
+    });
+    tb.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-cmd]');
+      if (!b || !tbEl) return;
+      e.preventDefault();
+      var cmd = b.getAttribute('data-cmd');
+      if (cmd.indexOf('c:') === 0) applyFmt({ c: cmd === 'c:text' ? null : cmd.slice(2) });
+      else if (cmd === 'b') applyFmt({ b: 'toggle' });
+      else if (cmd === 'n') applyFmt({ n: 'toggle' });
+      else if (cmd.indexOf('u:') === 0) applyFmt({ upper: cmd.slice(2) });
+      else if (cmd === 'clear') applyFmt({ c: null, b: false, n: false });
+    });
+    document.body.appendChild(tb);
+    paintSwatches();
+  }
+  // Áp định dạng cho đoạn đang bôi; không bôi gì → cả ô. keepOpen = đang kéo bảng chọn màu (không trả focus về ô).
+  function applyFmt(p, keepOpen) {
+    var el = tbEl;
+    if (!el) return;
+    var chars = trimTail(domChars(el));
+    var r = tbSel && tbSel.e > tbSel.s ? { s: tbSel.s, e: Math.min(tbSel.e, chars.length) } : { s: 0, e: chars.length };
+    var seg = chars.slice(r.s, r.e).filter(function (x) { return x.t !== '\n'; });
+    if (p.b === 'toggle') p.b = !seg.every(function (x) { return x.b; });
+    if (p.n === 'toggle') p.n = !seg.every(function (x) { return x.n; });
+    for (var i = r.s; i < r.e; i++) {
+      var x = chars[i], prev = i === 0 ? ' ' : chars[i - 1].t;
+      if ('c' in p) x.c = okColor(p.c);
+      if ('b' in p) x.b = !!p.b;
+      if ('n' in p) x.n = !!p.n && x.t !== '\n';
+      // Giữ đúng 1 ký tự/vị trí (vd. 'ß' viết hoa thành 'SS' → lấy ký tự đầu) để vùng chọn không lệch.
+      var u = p.upper === 'upper' ? x.t.toLocaleUpperCase('vi') : p.upper === 'lower' ? x.t.toLocaleLowerCase('vi')
+        : p.upper === 'title' ? (/\s/.test(prev) ? x.t.toLocaleUpperCase('vi') : x.t.toLocaleLowerCase('vi')) : x.t;
+      x.t = u.length === 1 ? u : x.t;
+    }
+    buildDom(el, chars);
+    sendEdit(el, false);
+    if (!keepOpen) { el.focus(); setSel(el, r.s, r.e); tbSel = r; }
+    var fe = el.closest('.fe'); if (fe) fitFree(fe);
+    placeToolbar();
+  }
+  function placeToolbar() {
+    if (!tb || !tbEl) return;
+    var r = tbEl.getBoundingClientRect(), h = tb.offsetHeight || 40, w = tb.offsetWidth || 420;
+    var top = r.top - h - 10;
+    if (top < 6) top = Math.min(innerHeight - h - 6, r.bottom + 10);
+    tb.style.top = Math.max(6, top) + 'px';
+    tb.style.left = Math.max(6, Math.min(innerWidth - w - 6, r.left)) + 'px';
+  }
+  function showToolbar(el) {
+    if (!isRich(el)) { hideToolbar(); return; }
+    if (!tb) buildToolbar();
+    else paintSwatches();
+    tbEl = el; tbSel = null; tb.classList.add('on'); placeToolbar();
+  }
+  function hideToolbar() { tbEl = null; tbSel = null; if (tb) tb.classList.remove('on'); }
+
   function caretAt(x, y) {
     var r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
     if (!r && document.caretPositionFromPoint) { var p = document.caretPositionFromPoint(x, y); if (p) { r = document.createRange(); r.setStart(p.offsetNode, p.offset); } }
@@ -493,6 +722,8 @@
     // của khung vẫn trỏ vào ô cũ → nếu chỉ xét activeElement, mọi lần dựng lại sau đó bị hoãn mãi.
     var a = document.activeElement;
     if (a && a.isContentEditable && deck.contains(a) && document.hasFocus()) { pending = d; return; }
+    // Đang chọn màu trên thanh định dạng (focus ở ô màu) → chờ, không thay slide dưới tay người dùng.
+    if (tbEl && tb && tb.contains(a)) { pending = d; return; }
     pending = null;
     if (typeof d.css === 'string' && d.css !== lastCss) {
       if (!liveCss) { liveCss = document.createElement('style'); if (NONCE) liveCss.nonce = NONCE; document.head.appendChild(liveCss); }
@@ -528,6 +759,7 @@
     var idx = Number.isInteger(d.index) ? d.index : cur;
     if (changed.length || idx !== cur) show(clamp(idx, 0, Math.max(0, N - 1)), true);
     selFe = null;
+    if (tbEl && !deck.contains(tbEl)) hideToolbar();
     if (selId) { var again = slides[cur] && slides[cur].querySelector('.fe[data-el="' + selId.replace(/[^a-z0-9-]/gi, '') + '"]'); if (again) selectFe(again, false); }
   }
 
@@ -542,36 +774,52 @@
     deck.addEventListener('beforeinput', function (e) {
       var el = edEl(e.target); if (!el) return;
       var it = e.inputType || '';
-      if ((it === 'insertParagraph' || it === 'insertLineBreak') && !el.hasAttribute('data-ml')) { e.preventDefault(); return; }
+      // Xuống dòng: tự chèn theo mô hình (trường 1 dòng: bỏ qua). Lệnh định dạng của trình duyệt (Ctrl+B/I/U…) bị chặn —
+      // định dạng chỉ qua thanh công cụ để luôn lưu được.
+      if (it === 'insertParagraph' || it === 'insertLineBreak') { e.preventDefault(); if (el.hasAttribute('data-ml')) insertText(el, '\n'); return; }
+      if (it.indexOf('format') === 0) { e.preventDefault(); return; }
       var max = +(el.getAttribute('data-max') || 0);
       if (max && it.indexOf('insert') === 0) {
-        var add = e.data || (e.dataTransfer && e.dataTransfer.getData('text/plain')) || (it === 'insertParagraph' || it === 'insertLineBreak' ? '\n' : '');
+        var add = e.data || (e.dataTransfer && e.dataTransfer.getData('text/plain')) || '';
         var cur0 = String(getSelection() || '').length;
-        if (textOf(el).length - cur0 + add.length > max) e.preventDefault();
+        if (lenOf(el) - cur0 + add.length > max) e.preventDefault();
       }
     });
-    deck.addEventListener('input', function (e) { var el = edEl(e.target); if (!el) return; sendEdit(el, false); var fe = el.closest('.fe'); if (fe) fitFree(fe); });
+    deck.addEventListener('input', function (e) { var el = edEl(e.target); if (!el) return; sendEdit(el, false); var fe = el.closest('.fe'); if (fe) fitFree(fe); placeToolbar(); });
     deck.addEventListener('paste', function (e) {
-      var el = edEl(e.target); if (!el || PT) return;
+      var el = edEl(e.target); if (!el) return;
       e.preventDefault();
-      var t = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
-      if (!el.hasAttribute('data-ml')) t = t.replace(/\s*\n+\s*/g, ' ');
-      document.execCommand('insertText', false, t);
+      insertText(el, e.clipboardData ? e.clipboardData.getData('text/plain') : '');
     });
     deck.addEventListener('focusin', function (e) {
       var el = edEl(e.target); if (!el) return;
       // Số liệu: sửa trên giá trị thô (270000), không phải chuỗi đã định dạng (270.000).
-      if (el.hasAttribute('data-raw')) el.textContent = el.getAttribute('data-raw');
+      if (el.hasAttribute('data-raw') && tbEl !== el) el.textContent = el.getAttribute('data-raw');
+      showToolbar(el);
     });
-    deck.addEventListener('focusout', function (e) {
-      var el = edEl(e.target); if (!el) return;
+    // Kết thúc sửa 1 ô: gửi bản cuối, co chữ, áp lệnh dựng lại đã hoãn.
+    function finishEdit(el) {
       sendEdit(el, true);
       if (el.hasAttribute('data-raw')) el.setAttribute('data-raw', textOf(el));
       if (el.closest('.fe')) el.removeAttribute('contenteditable');
+      hideToolbar();
       var s = el.closest('.slide'); if (s) fitSlide(s);
       // Lệnh dựng lại bị hoãn trong lúc gõ → áp dụng sau khi rời ô (chờ sự kiện focus kế tiếp xử lý xong).
       setTimeout(function () { if (pending) applyRender(pending); }, 0);
+    }
+    deck.addEventListener('focusout', function (e) {
+      var el = edEl(e.target); if (!el) return;
+      // Chuyển sang thanh định dạng (ô chọn màu) → vẫn đang sửa ô này.
+      if (e.relatedTarget && tb && tb.contains(e.relatedTarget)) return;
+      finishEdit(el);
     });
+    // Rời ô chọn màu sang chỗ khác (không quay lại ô chữ) → kết thúc sửa.
+    document.addEventListener('focusout', function (e) {
+      if (!tb || !tb.contains(e.target) || !tbEl) return;
+      var el = tbEl;
+      setTimeout(function () { var a = document.activeElement; if (tbEl === el && a !== el && !(tb && tb.contains(a))) finishEdit(el); }, 0);
+    });
+    addEventListener('resize', placeToolbar);
     addEventListener('keydown', function (e) {
       var el = edEl(e.target);
       // Ctrl/Cmd+S trong khung → nhờ ứng dụng lưu (gửi nốt nội dung đang gõ trước).
@@ -582,7 +830,12 @@
         return;
       }
       if (el && el.isContentEditable) {
-        if ((e.key === 'Enter' && !el.hasAttribute('data-ml') && !e.isComposing) || e.key === 'Escape') { e.preventDefault(); el.blur(); }
+        if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
+        else if (e.key === 'Enter' && !e.isComposing) {
+          e.preventDefault();
+          // Trường nhiều dòng: Enter = xuống dòng; trường 1 dòng (nhãn, số liệu…): Enter = xong.
+          if (el.hasAttribute('data-ml')) insertText(el, '\n'); else el.blur();
+        } else if ((e.key === 'b' || e.key === 'B') && (e.metaKey || e.ctrlKey) && tbEl === el) { e.preventDefault(); tbSel = selRange(el); applyFmt({ b: 'toggle' }); }
         return;
       }
       if (!selFe) return;

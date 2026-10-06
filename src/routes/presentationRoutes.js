@@ -16,7 +16,7 @@ function disposition(title, ext) {
   return `attachment; filename="${ascii}.${ext}"; filename*=UTF-8''${encodeURIComponent(base)}.${ext}`;
 }
 
-export function presentationRoutes({ service, config, limits }) {
+export function presentationRoutes({ service, templates, config, limits }) {
   const r = Router();
   // Tệp nguồn: ghi thẳng ra đĩa (tổng tới MAX_UPLOAD_MB, không giữ trong RAM); tên tệp do server sinh (UUID).
   const maxSourceBytes = config.limits.maxUploadMb * 1048576;
@@ -127,6 +127,12 @@ export function presentationRoutes({ service, config, limits }) {
     const body = pick(req.body, ['provider', 'id']);
     ok(res, await service.importStockImage(req.user, req.params.id, body), null, 201);
   });
+
+  // Ảnh bộ nhận diện thương hiệu (nền trang, dải đầu/chân trang) — độ phân giải cao, giữ nền trong suốt.
+  r.post('/:id/brand', auth, id, limits.media, imageUpload.single('file'), async (req, res) => ok(res, await service.addBrand(req.user, req.params.id, req.file), null, 201));
+
+  // Áp mẫu thiết kế / bộ nhận diện: sao chép ảnh của mẫu thành asset của bài → trả thiết kế để ghép vào bản nháp.
+  r.post('/:id/templates/:templateId/apply', auth, id, uuidParam('templateId'), limits.media, async (req, res) => ok(res, await templates.apply(req.user, req.params.id, req.params.templateId), null, 201));
 
   r.post('/:id/logo', auth, id, imageUpload.single('file'), async (req, res) => ok(res, await service.addLogo(req.user, req.params.id, req.file), null, 201));
 

@@ -15,7 +15,7 @@ import RangeField from './RangeField.vue'
 import VideoPicker from './VideoPicker.vue'
 import { useToast } from '@/components/mds/toast.js'
 import { newElement, TEXT_STYLES, TEXT_COLORS, FILLS, SHAPES, SHAPE_FILLS, TABLE_STYLES, RADII, SIZE_RANGE } from '@shared/deck/free.js'
-import { SPEC_LIMITS as L } from '@/lib/slideModel.js'
+import { SPEC_LIMITS as L, ratioNum } from '@/lib/slideModel.js'
 
 const props = defineProps({
   slide: { type: Object, required: true },
@@ -24,8 +24,13 @@ const props = defineProps({
   media: { type: Object, required: true },
   videoLibrary: { type: Array, default: () => [] },
   compact: { type: Boolean, default: false },
+  // Trang có bố cục (không phải trang tự do): phần tử là LỚP CHÈN ĐÈ lên bố cục — logo, ảnh, chữ, hình khối.
+  overlay: { type: Boolean, default: false },
+  ratio: { type: String, default: '16:9' },
 })
 const emit = defineEmits(['media'])
+// Tỷ lệ khung (rộng/cao) — đổi % rộng/cao của phần tử ra tỷ lệ ảnh khi mở hộp chọn ảnh.
+const ratio = computed(() => ratioNum(props.ratio))
 const toast = useToast()
 
 const els = computed(() => props.slide.elements || [])
@@ -44,7 +49,9 @@ const TYPE_ICON = { text: 'typography', image: 'photo', video: 'video', table: '
 const label = (e) => (e.type === 'text' ? (e.text || '').trim().slice(0, 40) || 'Chữ (trống)' : TYPE_LABEL[e.type])
 
 // Phần tử mới đặt so le để không chồng khít lên phần tử trước.
-const ADD = [
+const ADD_ALL = [
+  // Logo: ảnh hiển thị trọn khung (không cắt), không bo góc, góc trên phải — kéo thả để đổi chỗ.
+  { key: 'logo', label: 'Logo', icon: 'building', make: (o) => newElement('image', { radius: 'none', image: { asset: null, alt: 'Logo', caption: '', fit: 'contain' }, x: 82 - o, y: 5 + o, w: 12, h: 14 }) },
   { key: 'title', label: 'Tiêu đề', icon: 'typography', make: (o) => newElement('text', { style: 'heading', text: 'Tiêu đề', x: 8 + o, y: 8 + o, w: 60, h: 14 }) },
   { key: 'text', label: 'Đoạn văn', icon: 'align-left', make: (o) => newElement('text', { text: 'Nhập nội dung', x: 10 + o, y: 28 + o, w: 45, h: 28 }) },
   { key: 'image', label: 'Ảnh', icon: 'photo', make: (o) => newElement('image', { x: 50 + o, y: 22 + o, w: 38, h: 50 }) },
@@ -52,12 +59,15 @@ const ADD = [
   { key: 'table', label: 'Bảng', icon: 'table', make: (o) => newElement('table', { x: 8 + o, y: 26 + o, w: 70, h: 40 }) },
   { key: 'shape', label: 'Hình khối', icon: 'square-rounded', make: (o) => newElement('shape', { x: 30 + o, y: 30 + o, w: 30, h: 30 }) },
 ]
+// Lớp chèn đè: logo, chữ, ảnh, hình khối (bảng/video dùng trang tự do hoặc ô media của bố cục).
+const OVERLAY_KEYS = new Set(['logo', 'text', 'image', 'shape'])
+const ADD = computed(() => ADD_ALL.filter((a) => (props.overlay ? OVERLAY_KEYS.has(a.key) : true)))
 function add(a) {
   try {
     const o = (els.value.length % 5) * 2
     const e = props.live.addElement(a.make(o))
     // Ảnh/video mới → mở ngay hộp chọn nguồn.
-    if (e && (e.type === 'image' || e.type === 'video')) setTimeout(() => emit('media', { path: `elements.${e.id}`, kind: e.type, aspect: (e.w * 16) / (e.h * 9) }), 50)
+    if (e && (e.type === 'image' || e.type === 'video')) setTimeout(() => emit('media', { path: `elements.${e.id}`, kind: e.type, aspect: (e.w * ratio.value) / e.h }), 50)
   } catch (err) {
     toast.error(err.message)
   }
@@ -91,8 +101,9 @@ function delCol() {
 <template>
   <div class="flex min-w-0 flex-col gap-4">
     <section>
-      <h3 class="mb-2 text-[13px] font-semibold">Thêm phần tử</h3>
-      <div class="grid grid-cols-3 gap-2">
+      <h3 class="mb-1 text-[13px] font-semibold">{{ overlay ? 'Chèn lên trang' : 'Thêm phần tử' }}</h3>
+      <p v-if="overlay" class="mb-2 text-[12px] leading-4 text-[var(--mds-text-secondary)]">Logo, ảnh, chữ hoặc hình khối nằm đè lên bố cục — kéo thả trên khung xem trước để đặt chỗ.</p>
+      <div class="grid gap-2" :class="overlay ? 'grid-cols-4' : 'grid-cols-3'">
         <button
           v-for="a in ADD"
           :key="a.key"
@@ -175,11 +186,11 @@ function delCol() {
 
       <!-- Ảnh -->
       <template v-else-if="el.type === 'image'">
-        <button type="button" class="relative grid aspect-video w-full place-items-center overflow-hidden rounded-lg border border-[var(--mds-border)] bg-[var(--mds-bg-page)] hover:border-[var(--mds-brand-600)]" @click="emit('media', { path: `elements.${el.id}`, kind: 'image', aspect: (el.w * 16) / (el.h * 9) })">
+        <button type="button" class="relative grid aspect-video w-full place-items-center overflow-hidden rounded-lg border border-[var(--mds-border)] bg-[var(--mds-bg-page)] hover:border-[var(--mds-brand-600)]" @click="emit('media', { path: `elements.${el.id}`, kind: 'image', aspect: (el.w * ratio.value) / el.h })">
           <img v-if="imgUrl" :src="imgUrl" alt="" class="h-full w-full object-cover" />
           <span v-else class="flex flex-col items-center gap-1 text-[12px] text-[var(--mds-text-secondary)]"><MIcon name="photo" :size="28" />Chọn ảnh</span>
         </button>
-        <MButton variant="outline" @click="emit('media', { path: `elements.${el.id}`, kind: 'image', aspect: (el.w * 16) / (el.h * 9) })"><template #icon><MIcon name="adjustments" :size="16" /></template>{{ imgUrl ? 'Đổi / chỉnh sửa ảnh' : 'Chọn ảnh' }}</MButton>
+        <MButton variant="outline" @click="emit('media', { path: `elements.${el.id}`, kind: 'image', aspect: (el.w * ratio.value) / el.h })"><template #icon><MIcon name="adjustments" :size="16" /></template>{{ imgUrl ? 'Đổi / chỉnh sửa ảnh' : 'Chọn ảnh' }}</MButton>
         <FormField label="Bo góc"><MSelect v-model="el.radius" :options="RADIUS_OPTS" /></FormField>
         <MInput v-if="el.image" v-model="el.image.alt" placeholder="Mô tả ảnh (cho trình đọc màn hình)" />
       </template>

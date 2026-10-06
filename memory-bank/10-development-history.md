@@ -1,5 +1,38 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-06 — Màu chữ / xuống dòng / VIẾT HOA trên khung, chọn bố cục + ảnh-logo, tông be-trắng, bộ nhận diện thương hiệu + mẫu
+
+### Yêu cầu
+(1) Sửa được màu chữ, Enter xuống dòng, ngắt chữ hợp lý, nút VIẾT HOA khi bôi chữ; (2) chọn bố cục, chèn thêm ảnh hoặc logo
+(ảnh chụp: thẻ OpenAI/Gemini/Grok/Claude/DeepSeek chỉ có tên biểu tượng); (3) thêm tông nền sáng be/trắng vẫn "công nghệ";
+(4) template theo nhận diện công ty/chiến dịch: tải lên trang bìa, nền, header, footer, trang sub, trang cảm ơn.
+
+### Thay đổi (chi tiết `05` §13)
+- `shared/deck/rich.js` (mới): chữ định dạng `⟦màu,b,n⟧…⟦/⟧` + `\n` lưu trong chuỗi; normalize đếm theo chữ hiển thị; renderer `span.rt`, `data-ml`/`data-pl`.
+  Engine: thanh định dạng nổi `#rtb` (màu theme + chọn màu, đậm, HOA/thường/Hoa Đầu Từ, giữ liền, xoá), Enter xuống dòng ở trường nhiều dòng.
+- Chọn bố cục: chip "Kiểu trình bày" + "Phong cách trình bày"; `IconPicker` (lưới biểu tượng + ảnh/logo thay biểu tượng `items[].image`, `.ib-img`);
+  lớp chèn đè `elements[]` trên mọi trang (`.free.over`, thêm Logo/chữ/ảnh/hình).
+- 6 tông sáng mới sand, latte, linen, pearl, frost, blossom (`palette.js`); chữ trên màu nhấn tự chọn trắng/đậm theo tương phản.
+- Bộ nhận diện `spec.brand` (6 ô ảnh + `footerText` + `tones`), asset kind `brand`, `POST /:id/brand`; renderer `brandFor` (bìa/sub/kết riêng; trang nội dung = nền + dải đầu/chân, chiều cao theo ảnh, có trần).
+  Màu chữ theo độ sáng ảnh: giao diện đo khi đặt ảnh → `tones` → `ink-light`/`ink-dark` + `inkVarsCss`.
+- Mẫu thương hiệu: bảng `design_templates` + `template_assets` (changelog `20261006_200000`, `REQUIRED_CHANGELOGS`, baseline), `/api/templates` (list/create/patch/delete/assets) + `POST /:id/templates/:templateId/apply` (201); ảnh sao chép khi lưu/áp.
+- Giao diện: `BrandSettings` (tab Thương hiệu ở `DesignPanel`, dùng cả bước dàn ý), `DesignPreview` vẽ bộ nhận diện; `useMedia` thêm API thương hiệu/mẫu; desktop + mobile.
+- Sửa phát hiện khi kiểm thử (`09`): engine mất `editable/bindEditables` sau khi chèn khối định dạng; lớp `.ib.im` trùng `.im` (ô ảnh cao 420px) → `ib-img`;
+  bìa thương hiệu ép mất cột ảnh → `:has(> .cv-art)`; trang kết ảnh tối trên bài sáng không đọc được → `tones`; `--accent` chốt giá trị gốc → khai báo lại trong `inkVarsCss`.
+
+### Đã kiểm chứng
+- Unit 103/103 (mới `brand-rich.test.js` 15 test: rich parse/an toàn/cắt/repaint/formatRange, normalize theo chữ hiển thị, renderer `span.rt`/`data-ml`/`data-pl`, ảnh mục `.ib-img`,
+  chèn đè `.free.over`, brand normalize/collect/drop/remap, dải đầu/chân `--bt`/`--bb`, `tones` + `ink-light/ink-dark` + tương phản `inkVarsCss` mọi tông, tông sáng mới,
+  `editPaths`, variants theo chữ thuần, `templateService` với repo giả: sao chép ảnh, `FOREIGN_ASSET`, `INVALID_MEDIA`, 404, `INVALID_NAME`, áp riêng tư/công khai, không phải chủ sửa/xoá → 404).
+- `npm run build` OK; Docker: changelog chạy 2 lần (idempotent), smoke **TẤT CẢ ĐẠT**.
+- `tmp/brand-api.mjs` (2 tenant, Gemini thật): dựng bài, tải ảnh nhận diện ở bước dàn ý + sau dựng, lưu spec, ảnh tenant khác → 422, xem trước/xuất HTML có dải + chữ màu, mẫu riêng tư/công khai/áp/nhân bản, thu hồi → 404 — **TẤT CẢ ĐẠT**.
+- Puppeteer trên Docker: `tmp/ui-brand.mjs` (bôi chữ → màu vàng + VIẾT HOA + Enter → Ctrl+S lưu đúng `⟦amber⟧DOANH NGHIỆP⟦/⟧\nHà Nội 2026`; chip Bento; IconPicker; chèn đè; tab Thương hiệu 6 ô + mẫu; tông sáng; mobile 390px tab Thương hiệu — nút Chữ tối/sáng cao 44px, không cuộn ngang `tmp/mobile-ink.mjs`),
+  `tmp/ui-tones.mjs` (tải ảnh trang kết tối qua hộp chọn tệp thật → tự chọn "Chữ sáng" → lưu `tones.closing='dark'` → khung có `ink-light`; chọn "Chữ tối" → bỏ lớp), `tmp/brand-export-shots.mjs` (5 trang bản xuất HTML: bìa, dải đầu/chân, bento có logo, trang kết đọc rõ).
+
+### Còn để ngỏ
+- Bài đặt ảnh nhận diện trước khi có `tones` (hoặc qua API) giữ màu chữ theo tông bài cho tới khi người dùng chọn "Chữ sáng/Chữ tối" hoặc đặt lại ảnh.
+- Dữ liệu thử trên MySQL Docker (người dùng `brand-a-*`/`brand-b-*`, vài mẫu công khai thử) chưa dọn.
+
 ## 2026-10-06 — Bản cập nhật lớn: sửa trực tiếp trên khung xem trước, trang tự do, ảnh AI / Internet, chỉnh sửa ảnh, đường dẫn thân thiện
 
 ### Yêu cầu
