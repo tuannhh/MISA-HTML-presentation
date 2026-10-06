@@ -14,6 +14,7 @@ import { authRoutes } from './routes/authRoutes.js';
 import { presentationRoutes } from './routes/presentationRoutes.js';
 import { assetRoutes } from './routes/assetRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
+import { imageRoutes } from './routes/imageRoutes.js';
 import { deckFontBuffer, deckFontFile, DECK_FONT_PATH } from './services/renderService.js';
 import { ok } from './lib/validate.js';
 
@@ -89,6 +90,7 @@ export function createApp({ config, pool, repos, services }) {
   api.use('/presentations', presentationRoutes({ service: services.presentations, config, limits }));
   api.use('/assets', assetRoutes({ service: services.presentations }));
   api.use('/admin', adminRoutes({ auth: services.auth }));
+  api.use('/images', imageRoutes({ service: services.presentations, limits }));
   api.use(notFoundApi);
   app.use('/api', api);
 

@@ -42,6 +42,7 @@
 - `/api/presentations/:id/preview` trả CSP: `sandbox allow-scripts allow-popups` (origin `null` — script trong bài không đọc được cookie/DOM ứng dụng), script/style chỉ chạy với **nonce**, `connect-src 'none'` (không gọi mạng), `frame-ancestors 'self'`.
 - iframe phía giao diện cũng đặt `sandbox="allow-scripts allow-popups"` — không cấp `allow-same-origin`/fullscreen; video phát ở lớp phủ của app (xem 05 §8).
 - Vì iframe không có cookie, ảnh/video dùng **URL ký HMAC** (`lib/signedUrl.js`, khoá = `SESSION_SECRET`, có hạn `exp`) — so sánh chữ ký bằng `timingSafeEqual`.
+- Chế độ sửa (`?edit=1`, chỉ chủ sở hữu): khung nhận `deck:render` (HTML slide do renderer dùng chung của **ứng dụng** sinh từ bản nháp — mọi chuỗi đã `esc()`) chỉ từ `window.parent`, chèn bằng `<template>.innerHTML` (script không chạy khi chèn kiểu này; CSP nonce chặn thuộc tính sự kiện). Chiều ngược lại ứng dụng coi khung là **không tin cậy**: đường dẫn trường qua allowlist (`lib/editPaths.js`, map không prototype), toạ độ kẹp số hữu hạn, id phần tử phải có trong bản nháp; máy chủ vẫn chuẩn hoá strict khi lưu.
 - Chromium (PDF/thumbnail): chặn mọi request trừ `data:`/`about:blank`; nội dung đã inline sẵn (ảnh, phông, ảnh bìa video).
 
 ## Bí mật
@@ -53,7 +54,12 @@
 
 ## Rate limit
 
-Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube), xuất PDF (bảo vệ CPU Chromium). Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503.
+Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube), xuất PDF (bảo vệ CPU Chromium). Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503. Ảnh AI: `aiImage` 40 lượt/10 phút/người + hàng đợi `AI_IMAGES_CONCURRENCY`, quá 12 chờ → 503; tìm ảnh: `imageSearch` 40/phút.
+
+## Nguồn bên ngoài (ảnh Internet)
+
+- Pixabay: khoá `PIXABAY_API_KEY` chỉ ở máy chủ (logger che, không trả client). Nhập ảnh = máy chủ **hỏi lại API theo mã ảnh** rồi tải đúng URL API trả về — không bao giờ tải URL do client gửi (chống SSRF); chỉ nhận `https` + host `pixabay.com`/`cdn.pixabay.com`, `redirect: 'error'`, ≤ 15 MB, rồi chuẩn hoá qua sharp như ảnh tải lên.
+- CSP ứng dụng `img-src` thêm `https://pixabay.com https://cdn.pixabay.com` để hiện ảnh xem trước kết quả tìm (`referrerpolicy=no-referrer`).
 
 ## Kiểm toán
 

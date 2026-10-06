@@ -26,6 +26,7 @@ Mỗi người dùng đồng thời là **một tenant** (`presentations.tenant_
 |---|---|---|---|
 | id | CHAR(36) | PK | |
 | tenant_id | CHAR(36) | FK → users.id ON DELETE CASCADE | Chủ sở hữu |
+| short_code | CHAR(8) | UNIQUE `uq_presentations_code`, NULL được | Mã ngắn `[a-z0-9]{8}` cho đường dẫn `/<ten-bai>/<ma>/<tinh-nang>`; sinh ngẫu nhiên khi tạo/nhân bản (trùng → thử lại). Tra mã **không** lọc tenant (chỉ ra UUID; quyền vẫn kiểm ở service) |
 | title | VARCHAR(200) | NOT NULL | Tên bài (hiển thị danh sách) |
 | ratio | ENUM('16:9','4:3','2:1','3:1') | default '16:9' | Đổi được bất kỳ lúc nào (không cần render lại spec) |
 | visibility | ENUM('private','public') | default 'private' | |
@@ -79,3 +80,4 @@ users 1 ──< presentations 1 ──< assets
 
 - 2026-10-05: baseline đầu tiên.
 - 2026-10-05 (`changelog_database_20261005_170000.sql`, idempotent): trạng thái `outlining`/`outline`, cột `outline` + `outline_version`, asset kind `video`/`logo`/`poster`. Baseline `schema.sql` đã gồm sẵn.
+- 2026-10-06 (`changelog_database_20261006_090000.sql`, idempotent): cột `presentations.short_code` + backfill mã ngẫu nhiên cho bài cũ + unique key `uq_presentations_code`. Có trong `REQUIRED_CHANGELOGS` (app từ chối khởi động nếu chưa chạy). Baseline đã gồm sẵn.

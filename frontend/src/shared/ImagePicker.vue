@@ -15,8 +15,10 @@ const props = defineProps({
   upload: { type: Function, required: true },
   withCaption: { type: Boolean, default: false },
   maxImageMb: { type: Number, default: 15 },
+  // Có trang cha xử lý → hiện nút mở "Đổi / chỉnh sửa ảnh" (tìm ảnh Internet, tạo ảnh AI, cắt/xoay/màu).
+  studio: { type: Boolean, default: false },
 })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'studio'])
 const toast = useToast()
 const fileInput = ref(null)
 const uploading = ref(false)
@@ -58,13 +60,24 @@ function pick(a) {
 <template>
   <div class="flex min-w-0 flex-col gap-2">
     <div class="relative grid aspect-video w-full place-items-center overflow-hidden rounded-lg border border-[var(--mds-border)] bg-[var(--mds-bg-page)]">
-      <img v-if="url" :src="url" alt="" class="h-full w-full" :class="current?.fit === 'contain' ? 'object-contain' : 'object-cover'" />
+      <img
+        v-if="url"
+        :src="url"
+        alt=""
+        class="h-full w-full"
+        :class="current?.fit === 'contain' ? 'object-contain' : 'object-cover'"
+        :style="current?.pos || current?.zoom > 1 ? { objectPosition: `${current.pos?.x ?? 50}% ${current.pos?.y ?? 50}%`, scale: String(current.zoom || 1), transformOrigin: `${current.pos?.x ?? 50}% ${current.pos?.y ?? 50}%` } : null"
+      />
       <div v-else class="flex flex-col items-center gap-1 text-[var(--mds-text-secondary)]">
         <MIcon name="photo" :size="32" />
         <span class="text-[12px]">Chưa có ảnh</span>
       </div>
     </div>
     <div class="flex flex-wrap gap-2">
+      <MButton v-if="studio" variant="primary" @click="emit('studio')">
+        <template #icon><MIcon name="adjustments" :size="16" /></template>
+        {{ url ? 'Đổi / chỉnh sửa' : 'Chọn ảnh' }}
+      </MButton>
       <MButton :loading="uploading" @click="fileInput?.click()">
         <template #icon><MIcon name="upload" :size="16" /></template>
         {{ url ? 'Thay ảnh' : 'Tải ảnh lên' }}

@@ -21,8 +21,10 @@ const props = defineProps({
   // useMedia() — có thì ô media nhận cả video (tải lên / YouTube).
   media: { type: Object, default: null },
   videoLibrary: { type: Array, default: () => [] },
+  // Trang cha có "Đổi / chỉnh sửa ảnh" (ImageStudio) → nút mở ở từng ô ảnh; phát 'media' như khi bấm ảnh trên khung xem trước.
+  studio: { type: Boolean, default: false },
 })
-const emit = defineEmits(['change-layout'])
+const emit = defineEmits(['change-layout', 'media'])
 
 const s = computed(() => props.slide)
 // Ô ảnh chỉ nhận ảnh (asset cũ không có kind = ảnh).
@@ -202,13 +204,13 @@ function setGalleryImage(i, v) {
       <div class="flex min-w-0 flex-col gap-2">
         <MTabs v-if="media" v-model="mediaTab" :tabs="MEDIA_TABS" variant="pill" />
         <VideoPicker v-if="media && mediaTab === 'video'" :model-value="s.video" :media="media" :library="videoLibrary" :with-caption="s.layout === 'image'" @update:model-value="setVideo" />
-        <ImagePicker v-else :model-value="s.image" :assets="imageAssets" :upload="upload" :with-caption="s.layout === 'image'" @update:model-value="setImage" />
+        <ImagePicker v-else :model-value="s.image" :assets="imageAssets" :upload="upload" :with-caption="s.layout === 'image'" :studio="studio" @update:model-value="setImage" @studio="emit('media', { path: 'slot', kind: 'image' })" />
       </div>
     </FormField>
     <section v-if="has('images')" class="flex flex-col gap-3">
       <h3 class="text-[14px] font-semibold">Ảnh ({{ s.images.length }}/{{ L.images }})</h3>
       <div v-for="(im, i) in s.images" :key="i" class="rounded-lg border border-[var(--mds-border)] p-3">
-        <ImagePicker :model-value="im" :assets="imageAssets" :upload="upload" with-caption @update:model-value="(v) => setGalleryImage(i, v)" />
+        <ImagePicker :model-value="im" :assets="imageAssets" :upload="upload" with-caption :studio="studio" @update:model-value="(v) => setGalleryImage(i, v)" @studio="emit('media', { path: `images.${i}`, kind: 'image' })" />
       </div>
       <MButton v-if="s.images.length < L.images" variant="outline" @click="s.images.push({ asset: null, alt: '', caption: '', fit: 'cover' })"><template #icon><MIcon name="plus" :size="16" /></template>Thêm ô ảnh</MButton>
     </section>

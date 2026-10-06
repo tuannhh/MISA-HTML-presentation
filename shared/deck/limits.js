@@ -31,6 +31,15 @@ export const SPEC_LIMITS = Object.freeze({
   alt: 200,
   images: 6,
   videoTitle: 200,
+  // Trang tự do (layout 'free'): phần tử đặt tự do (chữ, ảnh, video, bảng, hình khối) — toạ độ % của khung slide.
+  elements: 30,
+  elText: 1500,
+  tableRows: 12,
+  tableCols: 8,
+  cell: 300,
+  // Ảnh do AI tạo (Nano Banana) theo câu lệnh người dùng; tìm ảnh trên Internet theo từ khoá.
+  aiPrompt: 1000,
+  searchQuery: 100,
   // Dàn ý (bước duyệt trước khi dựng bài): mỗi trang là tiêu đề + các dòng nội dung sẽ hiển thị.
   outlineSlides: 40,
   outlinePoints: 12,

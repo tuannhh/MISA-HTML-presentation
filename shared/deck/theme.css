@@ -661,3 +661,75 @@ body.print .V-band .sec-no { background: linear-gradient(150deg, var(--accent), 
 body.print .V-ghost .sec-no { color: color-mix(in srgb, var(--accent) 13%, transparent); }
 body.print .V-minimal .cl-t { color: var(--text); }
 body.print .im-glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(6, 10, 22, .8); }
+
+/* ---------- trang tự do (layout 'free'): phần tử đặt theo % khung slide ---------- */
+.L-free { padding: 0; }
+.free { position: absolute; inset: 0; }
+.fe { position: absolute; min-width: 0; min-height: 0; }
+.fe-text { display: flex; flex-direction: column; padding: calc(14px * var(--fk, 1)) calc(20px * var(--fk, 1)); border-radius: 24px; }
+.fe-text.va-middle { justify-content: center; }
+.fe-text.va-bottom { justify-content: flex-end; }
+.fe-t {
+  font-family: var(--f-sans); font-size: calc(var(--fs) * var(--fz, 1) * var(--fk, 1)); font-weight: var(--fw, 400);
+  line-height: 1.32; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1em; outline: none;
+}
+.ts-title .fe-t, .ts-heading .fe-t { font-family: var(--f-head, var(--f-sans)); line-height: 1.12; letter-spacing: -.02em; text-wrap: balance; }
+.ts-label .fe-t { text-transform: uppercase; letter-spacing: .16em; }
+.ts-caption .fe-t { color: var(--muted); }
+.al-center .fe-t { text-align: center; } .al-right .fe-t { text-align: right; }
+.fe-text.fill-panel { background: linear-gradient(180deg, var(--panel-a), var(--panel-b)); border: 1.5px solid var(--line); box-shadow: var(--shadow); padding: 40px 48px; }
+.fe-text.fill-soft { background: color-mix(in srgb, var(--accent) 12%, transparent); padding: 40px 48px; }
+.fe-text.fill-accent { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, var(--accent-2))); padding: 40px 48px; }
+.fe-text.fill-dark { background: rgba(5, 8, 18, .72); padding: 40px 48px; }
+.fe-fig { position: relative; margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--panel-b); }
+.fe-fig img { display: block; width: 100%; height: 100%; }
+.fe-fig.r-md { border-radius: 28px; } .fe-fig.r-lg { border-radius: 64px; } .fe-fig.r-circle { border-radius: 50%; }
+.fe-fig.empty { border: 3px dashed var(--line-2); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.fe-fig .ph, .fe-video .ph { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 18px; align-items: center; justify-content: center; color: var(--muted); font: 600 30px/1.2 var(--f-sans); text-align: center; }
+.fe-fig .ph .ic { width: 96px; height: 96px; }
+.fe-video > .vbox, .fe-video .media { width: 100%; height: 100%; }
+.fe-tb { width: 100%; border-collapse: separate; border-spacing: 0; font-size: calc(30px * var(--fz, 1) * var(--fk, 1)); line-height: 1.35; color: var(--text); background: var(--panel-a); border-radius: 22px; overflow: hidden; border: 1.5px solid var(--line); }
+.fe-tb th, .fe-tb td { padding: .62em .9em; text-align: left; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
+.fe-tb th { background: var(--accent); color: var(--on-accent); font-weight: 700; }
+.fe-tb.tb-striped tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.fe-tb.tb-grid th, .fe-tb.tb-grid td { border-right: 1.5px solid var(--line); border-bottom: 1.5px solid var(--line); }
+.fe-tb.tb-grid tr > :last-child { border-right: 0; }
+.fe-tb.tb-lines td { border-top: 1.5px solid var(--line); }
+.fe-sh { width: 100%; height: 100%; background: var(--sf); }
+.fe-sh.sh-round { border-radius: 40px; } .fe-sh.sh-circle { border-radius: 50%; }
+.fe-sh.sh-line { height: 6px; position: relative; top: calc(50% - 3px); border-radius: 3px; }
+.fe-empty { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); color: var(--dim); font: 500 34px/1.4 var(--f-sans); border: 3px dashed var(--line-2); border-radius: 32px; padding: 48px 72px; white-space: nowrap; }
+.pimg { overflow: hidden; }
+
+/* ---------- chế độ sửa trực tiếp trên khung xem trước (chỉ trình soạn thảo) ---------- */
+body.edit .slide { transition: none; }
+body.edit [data-e] { cursor: text; border-radius: 6px; transition: box-shadow .12s; }
+body.edit [data-e]:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 55%, transparent); }
+body.edit [data-e]:focus { outline: none; box-shadow: 0 0 0 4px var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+body.edit [data-e]:empty::before { content: attr(data-ph); color: var(--dim); }
+body.edit .bleed { pointer-events: auto; }
+body.edit [data-m] { cursor: pointer; }
+body.edit [data-m]::after {
+  content: "Bấm để đổi"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 3;
+  font: 600 30px/1 var(--f-sans); color: #fff; background: rgba(5, 8, 18, .72); padding: 18px 28px; border-radius: 999px;
+  opacity: 0; transition: opacity .15s; pointer-events: none; white-space: nowrap;
+}
+body.edit [data-m]:hover::after { opacity: 1; }
+body.edit .fe-video [data-m]::after, body.edit .vid[data-m]::after { content: "Bấm để đổi video"; }
+body.edit .vplay { pointer-events: none; }
+body.edit .fe { cursor: move; touch-action: none; }
+body.edit .pola-i { position: relative; }
+body.edit .fe:hover { outline: 3px dashed color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 4px; }
+body.edit .fe.sel { outline: 4px solid var(--accent); outline-offset: 4px; z-index: 5; }
+body.edit .fe.sel .fe-fig[data-m]::after { content: "Bấm đúp để đổi"; }
+/* Ô trống đã có chữ hướng dẫn riêng (.ph) → không chồng thêm nhãn "Bấm để đổi". */
+body.edit .fe-fig.empty[data-m]::after { display: none; }
+body.edit .fe .fe-t:not([contenteditable]), body.edit .fe .fe-tb [data-e]:not([contenteditable]) { cursor: inherit; }
+body.edit .fe [data-e]:not([contenteditable]):hover { box-shadow: none; }
+.fe-h { position: absolute; width: 30px; height: 30px; background: #fff; border: 4px solid var(--accent); border-radius: 50%; z-index: 6; transform: translate(-50%, -50%); }
+.fe-h[data-h="nw"] { left: 0; top: 0; cursor: nwse-resize; } .fe-h[data-h="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+.fe-h[data-h="sw"] { left: 0; top: 100%; cursor: nesw-resize; } .fe-h[data-h="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+.fe-h[data-h="n"] { left: 50%; top: 0; cursor: ns-resize; } .fe-h[data-h="s"] { left: 50%; top: 100%; cursor: ns-resize; }
+.fe-h[data-h="w"] { left: 0; top: 50%; cursor: ew-resize; } .fe-h[data-h="e"] { left: 100%; top: 50%; cursor: ew-resize; }
+.fe-guide { position: absolute; z-index: 7; background: #FF3B8B; pointer-events: none; }
+.fe-guide.v { top: 0; bottom: 0; width: 3px; } .fe-guide.h { left: 0; right: 0; height: 3px; }

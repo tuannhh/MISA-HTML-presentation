@@ -8,11 +8,13 @@ import { surface } from '@/lib/surface.js';
 
 const route = useRoute();
 const page = computed(() => route.meta?.[surface.value] || null);
+// Trang bài trình bày định danh theo mã (không theo tên bài trên đường dẫn) → đổi tên bài cập nhật URL không dựng lại trang.
+const pageKey = (r) => (r.params.code ? `${r.matched[0]?.path}|${r.params.code}` : r.path);
 </script>
 
 <template>
   <RouterView v-slot="{ route: r }">
-    <component :is="page" v-if="page" :key="`${surface}:${r.path}`" />
+    <component :is="page" v-if="page" :key="`${surface}:${pageKey(r)}`" />
   </RouterView>
   <MToast />
   <VideoOverlay />

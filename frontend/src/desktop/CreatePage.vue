@@ -1,4 +1,5 @@
 <script setup>
+import { deckPath } from '@/lib/deckPath.js'
 // Tạo bài trình bày (desktop): nguồn nội dung → tuỳ chọn (tỷ lệ, tông màu, số trang) → AI lập dàn ý (chạy nền);
 // chuyển sang bước duyệt dàn ý để theo dõi tiến trình, sửa nội dung, gắn media, chọn thiết kế.
 import { useRouter } from 'vue-router'
@@ -6,6 +7,7 @@ import DesktopShell from './DesktopShell.vue'
 import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
+import MCheckbox from '@/components/mds/MCheckbox.vue'
 import ThemePicker from '@/shared/ThemePicker.vue'
 import MRadioGroup from '@/components/mds/MRadioGroup.vue'
 import MTabs from '@/components/mds/MTabs.vue'
@@ -22,7 +24,7 @@ const { form, errors, submitting, progress, submitError, totalBytes, submit, fil
 
 async function onSubmit() {
   const res = await submit()
-  if (res) router.push(`/p/${res.id}/outline`)
+  if (res) router.push(deckPath(res, 'outline'))
 }
 </script>
 
@@ -95,6 +97,9 @@ async function onSubmit() {
           <FormField label="Tông màu" group hint="Gợi ý bảng màu theo nền tối/sáng; Tuỳ chỉnh tự đảm bảo chữ đủ tương phản. Đổi lại được ở bước duyệt dàn ý.">
             <ThemePicker v-model:tone="form.tone" v-model:theme="form.theme" v-model:primary="form.primary" v-model:secondary="form.secondary" allow-auto />
             <p v-if="errors.theme" class="text-[12px] text-[var(--mds-danger)]">{{ errors.theme }}</p>
+          </FormField>
+          <FormField label="Ảnh minh hoạ AI" group hint="Chỉ thêm ảnh cho trang cần minh hoạ mà chưa có ảnh/ảnh chụp giao diện của bạn (tối đa 6 ảnh, ~10–30 giây mỗi ảnh). Đổi/chỉnh sửa được ở trình soạn thảo.">
+            <MCheckbox v-model="form.aiImages" label="AI tạo ảnh minh hoạ phù hợp nội dung (Nano Banana 2 Lite)" input-aria-label="AI tạo ảnh minh hoạ phù hợp nội dung" />
           </FormField>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField

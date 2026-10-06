@@ -6,7 +6,8 @@ import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
 import { deckCsp } from '../middleware/security.js';
 import { ok, pick, paging, uuidParam } from '../lib/validate.js';
-import { tooLarge } from '../lib/httpError.js';
+import { tooLarge, notFound } from '../lib/httpError.js';
+import { isUuid } from '../repositories/tenantScope.js';
 
 // Tên file tải về: bỏ ký tự cấm, kèm filename* UTF-8 để giữ tiếng Việt.
 function disposition(title, ext) {
@@ -53,7 +54,19 @@ export function presentationRoutes({ service, config, limits }) {
     return next();
   };
   const auth = requireAuth();
-  const id = uuidParam('id');
+  // :id nhận UUID hoặc mã ngắn 8 ký tự (đường dẫn /tên-bài/<mã>/…) — đổi về UUID trước khi vào service.
+  // Mã không tồn tại → 404 giống bài không có quyền (service vẫn kiểm tra quyền như cũ).
+  const id = async (req, _res, next) => {
+    const v = String(req.params.id || '');
+    if (isUuid(v)) {
+      req.params.id = v.toLowerCase();
+      return next();
+    }
+    const real = await service.idByCode(v.toLowerCase());
+    if (!real) return next(notFound('Không tìm thấy bài trình bày'));
+    req.params.id = real;
+    return next();
+  };
 
   r.get('/', auth, async (req, res) => {
     const { page, pageSize } = paging(req.query, { maxPageSize: 48, defaultPageSize: 24 });
@@ -63,7 +76,7 @@ export function presentationRoutes({ service, config, limits }) {
   });
 
   r.post('/', auth, limits.generate, capSourceBody, upload, async (req, res) => {
-    const body = pick(req.body, ['url', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title']);
+    const body = pick(req.body, ['url', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title', 'aiImages']);
     // 'file' (1 tệp) giữ cho client cũ; giao diện mới gửi 'files' (nhiều tệp).
     const files = [...(req.files?.files || []), ...(req.files?.file || [])];
     const result = await service.create(req.user, { ...body, files, media: req.files?.media || [], posters: req.files?.posters || [] }, req.ip);
@@ -97,6 +110,24 @@ export function presentationRoutes({ service, config, limits }) {
 
   r.post('/:id/assets', auth, id, imageUpload.single('file'), async (req, res) => ok(res, await service.addAsset(req.user, req.params.id, req.file), null, 201));
 
+  // Chỉnh sửa ảnh (cắt, xoay, lật, màu) → ảnh mới; luôn áp lên ảnh gốc assetId.
+  r.post('/:id/assets/:assetId/edit', auth, id, uuidParam('assetId'), limits.media, async (req, res) => {
+    const body = pick(req.body, ['crop', 'rotate', 'flipH', 'flipV', 'brightness', 'saturation', 'contrast']);
+    ok(res, await service.editImage(req.user, req.params.id, req.params.assetId, body), null, 201);
+  });
+
+  // Ảnh minh hoạ AI (Nano Banana 2 Lite) theo mô tả của người dùng.
+  r.post('/:id/images/generate', auth, id, limits.aiImage, async (req, res) => {
+    const body = pick(req.body, ['prompt', 'aspect']);
+    ok(res, await service.generateImage(req.user, req.params.id, body, req.ip), null, 201);
+  });
+
+  // Ảnh tìm trên Internet (Pixabay): máy chủ tải ảnh về theo mã ảnh (không nhận URL từ client).
+  r.post('/:id/images/import', auth, id, limits.media, async (req, res) => {
+    const body = pick(req.body, ['provider', 'id']);
+    ok(res, await service.importStockImage(req.user, req.params.id, body), null, 201);
+  });
+
   r.post('/:id/logo', auth, id, imageUpload.single('file'), async (req, res) => ok(res, await service.addLogo(req.user, req.params.id, req.file), null, 201));
 
   r.post('/:id/logo/:assetId/cutout', auth, id, uuidParam('assetId'), limits.media, async (req, res) => {
@@ -118,7 +149,7 @@ export function presentationRoutes({ service, config, limits }) {
   // Trang trình chiếu: HTML do renderer sinh, chạy trong CSP sandbox (origin null) + nonce.
   r.get('/:id/preview', auth, id, async (req, res) => {
     const nonce = randomBytes(16).toString('base64');
-    const html = await service.preview(req.user, req.params.id, nonce);
+    const html = await service.preview(req.user, req.params.id, nonce, { edit: req.query.edit === '1' });
     const origin = `${req.protocol}://${req.get('host')}`;
     res.set({
       'Content-Security-Policy': deckCsp(nonce, origin),

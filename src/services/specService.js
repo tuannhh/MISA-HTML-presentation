@@ -10,6 +10,7 @@ import { ICON_NAMES } from '../../shared/deck/icons.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 import { VARIANTS, STYLES } from '../../shared/deck/variants.js';
+import { FREE_TYPES, TEXT_STYLES, TEXT_ALIGNS, TEXT_VALIGNS, TEXT_COLORS, FILLS, SHAPES, SHAPE_FILLS, TABLE_STYLES, RADII, SIZE_RANGE } from '../../shared/deck/free.js';
 
 export { SPEC_LIMITS };
 
@@ -58,6 +59,37 @@ function makeCtx(strict) {
   };
 }
 
+const num = (v, min, max, dp = 2) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const k = 10 ** dp;
+  return Math.round(Math.min(max, Math.max(min, n)) * k) / k;
+};
+
+// Thông số chỉnh ảnh (đã "nướng" vào ảnh mới ở server; giữ lại để mở trình chỉnh sửa tiếp tục từ ảnh gốc `src`).
+// crop: vùng cắt theo tỷ lệ 0–1 của ảnh SAU khi lật + xoay; rotate: độ; brightness/saturation/contrast: -100…100.
+export function cleanImageEdit(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const out = {};
+  const cr = v.crop && typeof v.crop === 'object' ? v.crop : null;
+  if (cr) {
+    const x = num(cr.x, 0, 1, 4) ?? 0;
+    const y = num(cr.y, 0, 1, 4) ?? 0;
+    const w = num(cr.w, 0.02, 1 - x, 4);
+    const h = num(cr.h, 0.02, 1 - y, 4);
+    if (w && h && (x > 0 || y > 0 || w < 1 || h < 1)) out.crop = { x, y, w, h };
+  }
+  const r = num(v.rotate, -360, 360, 1);
+  if (r && r % 360 !== 0) out.rotate = r;
+  if (v.flipH === true) out.flipH = true;
+  if (v.flipV === true) out.flipV = true;
+  for (const k of ['brightness', 'saturation', 'contrast']) {
+    const n = num(v[k], -100, 100, 0);
+    if (n) out[k] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 function cleanImage(c, v, path) {
   const o = c.obj(v);
   const asset = typeof o.asset === 'string' && isUuid(o.asset) ? o.asset.toLowerCase() : null;
@@ -65,6 +97,17 @@ function cleanImage(c, v, path) {
   const img = { asset, alt: c.str(o.alt, SPEC_LIMITS.alt, `${path}.alt`), caption: c.str(o.caption, SPEC_LIMITS.caption, `${path}.caption`), fit: o.fit === 'contain' ? 'contain' : 'cover' };
   // Khung trình duyệt cho ảnh giao diện phần mềm (chỉ với ảnh trọn khung).
   if (o.frame === 'browser' && img.fit === 'contain') img.frame = 'browser';
+  // Ảnh đã chỉnh sửa: src = ảnh gốc, edit = thông số đã áp (để chỉnh tiếp không giảm chất lượng qua nhiều lần nén).
+  const src = uuidOrNull(o.src);
+  const edit = src && src !== asset ? cleanImageEdit(o.edit) : null;
+  if (asset && edit) Object.assign(img, { src, edit });
+  // Vị trí ảnh trong khung (object-position %) + phóng to — khung giữ nguyên, ảnh dịch/zoom bên trong (hiển thị bằng CSS).
+  const p = c.obj(o.pos);
+  const px = num(p.x, 0, 100, 1);
+  const py = num(p.y, 0, 100, 1);
+  if (px !== null && py !== null && (px !== 50 || py !== 50)) img.pos = { x: px, y: py };
+  const zoom = num(o.zoom, 1, 4, 2);
+  if (zoom && zoom > 1) img.zoom = zoom;
   return img.asset || img.alt || img.caption ? img : null;
 }
 
@@ -118,6 +161,57 @@ export function cleanDesign(c, o) {
   return { theme, palette, background, font, logo };
 }
 
+const oneOf = (v, list, def) => (list.includes(v) ? v : def);
+const ELEMENT_ID_RE = /^e-[a-z0-9]{1,20}$/;
+
+// Phần tử trang tự do: toạ độ % khung slide (cho phép tràn mép một chút để làm ảnh tràn viền).
+function cleanElement(c, v, path, seen) {
+  const o = c.obj(v);
+  if (!FREE_TYPES.includes(o.type)) {
+    if (c.strict) c.errors.push(`${path}.type: loại phần tử không hợp lệ`);
+    return null;
+  }
+  let id = typeof o.id === 'string' && ELEMENT_ID_RE.test(o.id) ? o.id : '';
+  if (!id || seen.has(id)) id = `e-${randomUUID().slice(0, 8)}`;
+  seen.add(id);
+  const el = {
+    id,
+    type: o.type,
+    x: num(o.x, -50, 100, 2) ?? 10,
+    y: num(o.y, -50, 100, 2) ?? 10,
+    w: num(o.w, 2, 150, 2) ?? 30,
+    h: num(o.h, 2, 150, 2) ?? 20,
+  };
+  const size = num(o.size, SIZE_RANGE.min, SIZE_RANGE.max, 2) ?? 1;
+  if (o.type === 'text') {
+    return Object.assign(el, {
+      text: c.str(o.text, SPEC_LIMITS.elText, `${path}.text`),
+      style: oneOf(o.style, Object.keys(TEXT_STYLES), 'body'),
+      align: oneOf(o.align, TEXT_ALIGNS, 'left'),
+      valign: oneOf(o.valign, TEXT_VALIGNS, 'top'),
+      color: oneOf(o.color, Object.keys(TEXT_COLORS), 'text'),
+      fill: oneOf(o.fill, Object.keys(FILLS), 'none'),
+      size,
+    });
+  }
+  if (o.type === 'image') return Object.assign(el, { image: cleanImage(c, o.image, `${path}.image`), radius: oneOf(o.radius, Object.keys(RADII), 'md') });
+  if (o.type === 'video') return Object.assign(el, { video: cleanVideo(c, o.video, `${path}.video`) });
+  if (o.type === 'table') {
+    const rows = c.arr(o.rows, SPEC_LIMITS.tableRows, `${path}.rows`).map((r, i) =>
+      c.arr(r, SPEC_LIMITS.tableCols, `${path}.rows[${i}]`).map((cell, k) => c.str(cell, SPEC_LIMITS.cell, `${path}.rows[${i}][${k}]`)),
+    );
+    // Bảng luôn hình chữ nhật: thiếu ô thì bù ô trống theo hàng dài nhất.
+    const cols = Math.max(1, ...rows.map((r) => r.length));
+    const grid = (rows.length ? rows : [['']]).map((r) => [...r, ...Array(cols - r.length).fill('')]);
+    return Object.assign(el, { rows: grid, header: o.header !== false, style: oneOf(o.style, Object.keys(TABLE_STYLES), 'striped'), size });
+  }
+  return Object.assign(el, {
+    shape: oneOf(o.shape, Object.keys(SHAPES), 'round'),
+    fill: oneOf(o.fill, Object.keys(SHAPE_FILLS), 'soft'),
+    opacity: num(o.opacity, 0.05, 1, 2) ?? 1,
+  });
+}
+
 function cleanItem(c, v, path) {
   const o = c.obj(v);
   return {
@@ -159,6 +253,7 @@ function fallbackLayout(s) {
     quote: !!s.quote.text,
     image: !!s.image?.asset || !!s.video,
     gallery: s.images.some((im) => im.asset),
+    free: true,
   };
   if (!(s.layout in has) || has[s.layout]) return s.layout;
   if (s.layout === 'image' && s.items.length) return 'bullets';
@@ -209,6 +304,10 @@ function cleanSlide(c, v, i, seen) {
     images: c.arr(o.images, SPEC_LIMITS.images, `${p}.images`).map((im, k) => cleanImage(c, im, `${p}.images[${k}]`)).filter(Boolean),
     video: cleanVideo(c, o.video, `${p}.video`),
   };
+  if (layout === 'free') {
+    const seenEl = new Set();
+    slide.elements = c.arr(o.elements, SPEC_LIMITS.elements, `${p}.elements`).map((e, k) => cleanElement(c, e, `${p}.elements[${k}]`, seenEl)).filter(Boolean);
+  }
   if (slide.highlight && !slide.title.includes(slide.highlight)) slide.highlight = '';
   if (!c.strict) slide.layout = fallbackLayout(slide);
   // Biến thể trình bày do hệ thống chọn ngầm (không có trên giao diện) → giá trị lạ/không thuộc bố cục: bỏ, không báo lỗi.
@@ -238,11 +337,20 @@ export function normalizeSpec(input, { strict = false } = {}) {
 export function collectAssetIds(spec) {
   const ids = new Set();
   const add = (v) => v && ids.add(v);
+  const img = (im) => {
+    add(im?.asset);
+    add(im?.src);
+  };
   for (const s of spec.slides || []) {
-    add(s.image?.asset);
-    for (const im of s.images || []) add(im.asset);
+    img(s.image);
+    for (const im of s.images || []) img(im);
     add(s.video?.asset);
     add(s.video?.poster);
+    for (const e of s.elements || []) {
+      img(e.image);
+      add(e.video?.asset);
+      add(e.video?.poster);
+    }
   }
   const lg = spec.logo || spec.design?.logo;
   add(lg?.asset);
@@ -253,13 +361,28 @@ export function collectAssetIds(spec) {
 // Bỏ tham chiếu tới asset không thuộc bài trình bày (phòng spec trỏ sang asset của tenant khác).
 export function dropForeignAssets(spec, allowedIds) {
   const ok = (v) => !!v && allowedIds.has(v);
-  const keep = (im) => (im && im.asset && !ok(im.asset) ? { ...im, asset: null } : im);
+  const keep = (im) => {
+    if (!im) return im;
+    let out = im.asset && !ok(im.asset) ? { ...im, asset: null } : im;
+    if (out.src && !ok(out.src)) {
+      out = { ...out };
+      delete out.src;
+      delete out.edit;
+    }
+    return out;
+  };
+  const keepVideo = (v) => {
+    if (!v) return v;
+    if (v.provider === 'file' && !ok(v.asset)) return null;
+    return v.poster && !ok(v.poster) ? { ...v, poster: null } : v;
+  };
   for (const s of spec.slides) {
     s.image = keep(s.image);
     s.images = (s.images || []).map(keep);
-    if (s.video) {
-      if (s.video.provider === 'file' && !ok(s.video.asset)) s.video = null;
-      else if (s.video.poster && !ok(s.video.poster)) s.video = { ...s.video, poster: null };
+    s.video = keepVideo(s.video);
+    for (const e of s.elements || []) {
+      if (e.image) e.image = keep(e.image);
+      if (e.video) e.video = keepVideo(e.video);
     }
   }
   const holder = spec.design || spec;
@@ -273,13 +396,28 @@ export function dropForeignAssets(spec, allowedIds) {
 // Đổi toàn bộ mã asset theo bảng ánh xạ (nhân bản bài: asset được sao chép sang mã mới).
 export function remapAssetIds(doc, map) {
   const m = (v) => (v ? map.get(v) || null : v);
+  const img = (im) => {
+    if (!im) return;
+    if (im.asset) im.asset = m(im.asset);
+    if (im.src) im.src = m(im.src);
+    if (!im.src) {
+      delete im.src;
+      delete im.edit;
+    }
+  };
+  const vid = (v) => {
+    if (!v) return v;
+    if (v.asset) v.asset = m(v.asset);
+    if (v.poster) v.poster = m(v.poster);
+    return v.provider === 'file' && !v.asset ? null : v;
+  };
   for (const s of doc.slides || []) {
-    if (s.image?.asset) s.image.asset = m(s.image.asset);
-    for (const im of s.images || []) if (im.asset) im.asset = m(im.asset);
-    if (s.video) {
-      if (s.video.asset) s.video.asset = m(s.video.asset);
-      if (s.video.poster) s.video.poster = m(s.video.poster);
-      if (s.video.provider === 'file' && !s.video.asset) s.video = null;
+    img(s.image);
+    for (const im of s.images || []) img(im);
+    s.video = vid(s.video);
+    for (const e of s.elements || []) {
+      img(e.image);
+      if (e.video) e.video = vid(e.video);
     }
   }
   const holder = doc.design || doc;

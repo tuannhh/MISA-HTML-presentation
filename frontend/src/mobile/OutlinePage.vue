@@ -3,6 +3,7 @@
 // Màn native: segmented "Nội dung | Thiết kế" dính dưới top bar (thay cho 2 cột desktop), footer sticky Lưu nháp | Dựng bài.
 // Logic (tải, theo dõi tiến trình, lưu, dựng, thao tác trang) nằm ở useOutline — trang chỉ bố trí.
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { deckPath } from '@/lib/deckPath.js'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import MobileShell from './MobileShell.vue'
 import ActionSheet from './ActionSheet.vue'
@@ -19,14 +20,16 @@ import MSpinner from '@/components/mds/MSpinner.vue'
 import MEmptyState from '@/components/mds/MEmptyState.vue'
 import { useToast } from '@/components/mds/toast.js'
 import { useOutline } from '@/composables/useOutline.js'
+import { useDeckUrl } from '@/composables/useDeckUrl.js'
 import { SPEC_LIMITS } from '@/lib/slideModel.js'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const id = route.params.id
-const ol = useOutline(id, { onReady: () => router.replace(`/p/${id}/edit`) })
+const id = route.params.code || route.params.id
+const ol = useOutline(id, { onReady: (d) => router.replace(deckPath(d, 'edit')) })
 const { deck, draft, slides, media, videoLibrary, loading, saving, building, loadError, saveError, dirty } = ol
+useDeckUrl(deck, 'outline')
 
 // Chỉ hiện trình sửa khi bài đang chờ duyệt (sau "Dựng bài" draft vẫn còn nhưng trạng thái đã là generating).
 const editing = computed(() => !loading.value && !loadError.value && !!deck.value?.isOwner && deck.value.status === 'outline' && !!draft.value)
@@ -156,7 +159,7 @@ async function doRemove() {
 
 const leaveTo = ref(null)
 onBeforeRouteLeave((to) => {
-  if (dirty.value && !saving.value && !building.value && to.path !== `/p/${id}/edit`) {
+  if (dirty.value && !saving.value && !building.value && !to.path.endsWith('/edit')) {
     leaveTo.value = to.fullPath
     return false
   }
@@ -194,7 +197,7 @@ onMounted(ol.load)
       <p class="text-[14px] leading-5 text-[var(--mds-text-secondary)]">
         {{ deck.status === 'outlining'
           ? 'Đọc tư liệu (kể cả PDF scan, ảnh, ghi âm) và đề xuất nội dung từng trang — thường mất 30 giây đến vài phút. Xong bạn sẽ được xem và sửa dàn ý trước khi dựng giao diện.'
-          : 'Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn — thường dưới 1 phút. Xong sẽ tự mở trình soạn thảo.' }}
+          : 'Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn, tạo ảnh minh hoạ AI (nếu bật) — thường 1–2 phút. Xong sẽ tự mở trình soạn thảo.' }}
       </p>
       <p class="text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">Màn hình tự cập nhật. Bạn có thể rời đi, AI vẫn tiếp tục.</p>
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>

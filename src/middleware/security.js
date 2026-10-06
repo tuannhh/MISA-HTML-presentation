@@ -39,7 +39,8 @@ export function securityHeaders() {
         'default-src': ["'self'"],
         'script-src': ["'self'"],
         'style-src': ["'self'", "'unsafe-inline'"],
-        'img-src': ["'self'", 'data:', 'blob:'],
+        // Ảnh xem trước trong ô "Tìm ảnh" hiển thị trực tiếp từ Pixabay (chọn ảnh → máy chủ tải về thành asset).
+        'img-src': ["'self'", 'data:', 'blob:', 'https://pixabay.com', 'https://cdn.pixabay.com'],
         'font-src': ["'self'", 'data:'],
         'connect-src': ["'self'"],
         // Video tải lên (và ảnh bìa chụp từ video ở trình duyệt qua blob:); YouTube phát trong lớp phủ của ứng dụng.
@@ -94,6 +95,9 @@ export function rateLimits() {
     build: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 60, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã dựng bài quá nhiều lần trong 1 giờ, vui lòng thử lại sau', 'BUILD_RATE_LIMITED') }),
     // Tải video, đọc link YouTube, tách nền logo — tốn băng thông/CPU hơn thao tác thường.
     media: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 120, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn thêm media quá nhanh, vui lòng thử lại sau ít phút', 'MEDIA_RATE_LIMITED') }),
+    // Tạo ảnh AI tốn chi phí model → hạn mức riêng; tìm ảnh Pixabay (API giới hạn ~100 lượt/phút/khoá).
+    aiImage: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 40, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn tạo ảnh AI quá nhanh, vui lòng thử lại sau ít phút', 'AI_IMAGE_RATE_LIMITED') }),
+    imageSearch: rateLimit({ ...base, windowMs: 60_000, limit: 40, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn tìm ảnh quá nhanh, vui lòng thử lại sau', 'SEARCH_RATE_LIMITED') }),
     exportPdf: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 20, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn xuất PDF quá nhiều lần, thử lại sau ít phút', 'EXPORT_RATE_LIMITED') }),
   };
 }

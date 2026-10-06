@@ -2,7 +2,7 @@
 // = của tôi HOẶC (public + ready). Không hàm nào cho phép đọc bản private của tenant khác.
 import { tenantClause } from './tenantScope.js';
 
-const LIST_COLS = `p.id, p.tenant_id, p.title, p.ratio, p.visibility, p.status, p.source_kind, p.source_label,
+const LIST_COLS = `p.id, p.tenant_id, p.short_code, p.title, p.ratio, p.visibility, p.status, p.source_kind, p.source_label,
   p.spec_version, p.outline_version, p.slide_count, p.thumbnail_asset_id, p.error_message, p.created_at, p.updated_at, p.published_at`;
 
 function parseSpec(row) {
@@ -21,11 +21,12 @@ export function createPresentationRepository(pool) {
     async createForTenant(tenantId, p) {
       const t = tenantClause(tenantId);
       await pool.execute(
-        `INSERT INTO presentations (id, tenant_id, title, ratio, visibility, status, source_kind, source_label, instructions, spec, spec_version, slide_count)
-         VALUES (?, ?, ?, ?, 'private', ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO presentations (id, tenant_id, short_code, title, ratio, visibility, status, source_kind, source_label, instructions, spec, spec_version, slide_count)
+         VALUES (?, ?, ?, ?, ?, 'private', ?, ?, ?, ?, ?, ?, ?)`,
         [
           p.id,
           t.params[0],
+          p.code,
           p.title,
           p.ratio,
           p.status || 'generating',
@@ -46,6 +47,13 @@ export function createPresentationRepository(pool) {
         [id, ...t.params],
       );
       return parseSpec(rows[0]);
+    },
+
+    // Mã ngắn → id. KHÔNG lọc theo tenant (cố ý): chỉ đổi định danh trên đường dẫn, mọi thao tác sau đó vẫn kiểm tra quyền
+    // bằng findOwned/findReadable (bài không đọc được → 404 giống mã không tồn tại, không lộ thông tin).
+    async findIdByCode(code) {
+      const [rows] = await pool.execute('SELECT id FROM presentations WHERE short_code = ? LIMIT 1', [code]);
+      return rows[0]?.id || null;
     },
 
     // Đọc được: chủ sở hữu hoặc bản công khai đã sẵn sàng (mọi tenant đã đăng nhập).
@@ -132,9 +140,9 @@ export function createPresentationRepository(pool) {
     async createCopy(tenantId, p) {
       const t = tenantClause(tenantId);
       await pool.execute(
-        `INSERT INTO presentations (id, tenant_id, title, ratio, visibility, status, source_kind, source_label, spec, spec_version, slide_count, outline, outline_version)
-         VALUES (?, ?, ?, ?, 'private', 'ready', 'copy', ?, ?, 1, ?, ?, ?)`,
-        [p.id, t.params[0], p.title, p.ratio, p.sourceLabel || null, JSON.stringify(p.spec), p.spec.slides.length, p.outline ? JSON.stringify(p.outline) : null, p.outline ? 1 : 0],
+        `INSERT INTO presentations (id, tenant_id, short_code, title, ratio, visibility, status, source_kind, source_label, spec, spec_version, slide_count, outline, outline_version)
+         VALUES (?, ?, ?, ?, ?, 'private', 'ready', 'copy', ?, ?, 1, ?, ?, ?)`,
+        [p.id, t.params[0], p.code, p.title, p.ratio, p.sourceLabel || null, JSON.stringify(p.spec), p.spec.slides.length, p.outline ? JSON.stringify(p.outline) : null, p.outline ? 1 : 0],
       );
     },
 

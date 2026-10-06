@@ -1,10 +1,16 @@
 <script setup>
-// Trình soạn thảo desktop: danh sách trang | xem trước (bản đã lưu, có chuyển động) | nội dung trang đang chọn.
-// Sửa chữ/ảnh trên bản nháp → Lưu → server chuẩn hoá + render lại → khung xem trước tải lại.
-import { computed, onMounted, ref, watch } from 'vue'
+// Trình soạn thảo desktop: danh sách trang | xem trước SỬA TRỰC TIẾP | nội dung trang đang chọn.
+// Khung xem trước dựng lại ngay từ bản nháp (useLiveDeck): bấm vào chữ để sửa tại chỗ, bấm ảnh/video để đổi hoặc chỉnh sửa,
+// trang tự do kéo thả/đổi cỡ phần tử. Lưu (hoặc Ctrl/Cmd+S) → máy chủ chuẩn hoá + lưu; trang khác làm tiếp như vậy.
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { deckPath } from '@/lib/deckPath.js'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import DesktopShell from './DesktopShell.vue'
 import SlideFields from '@/shared/SlideFields.vue'
+import FreeElementsPanel from '@/shared/FreeElementsPanel.vue'
+import InsertSlidePanel from '@/shared/InsertSlidePanel.vue'
+import ImageStudio from '@/shared/ImageStudio.vue'
+import VideoPicker from '@/shared/VideoPicker.vue'
 import DesignPanel from '@/shared/DesignPanel.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import MButton from '@/components/mds/MButton.vue'
@@ -19,21 +25,28 @@ import MSpinner from '@/components/mds/MSpinner.vue'
 import MTooltip from '@/components/mds/MTooltip.vue'
 import MEmptyState from '@/components/mds/MEmptyState.vue'
 import { useToast } from '@/components/mds/toast.js'
-import { useEditor, usePreviewSync } from '@/composables/useEditor.js'
-import { LAYOUTS, LAYOUT_LABEL, LAYOUT_ICON, SPEC_LIMITS } from '@/lib/slideModel.js'
+import { useEditor } from '@/composables/useEditor.js'
+import { useDeckUrl } from '@/composables/useDeckUrl.js'
+import { useLiveDeck } from '@/composables/useLiveDeck.js'
+import { useSlideMedia } from '@/composables/useSlideMedia.js'
+import { LAYOUT_LABEL, LAYOUT_ICON, SPEC_LIMITS } from '@/lib/slideModel.js'
 import { RATIO_OPTIONS, ratioCss } from '@/lib/format.js'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const id = route.params.id
-const ed = useEditor(id, { onOutline: () => router.replace(`/p/${id}/outline`) })
+// :code = mã ngắn 8 ký tự (API nhận cả mã ngắn lẫn UUID).
+const id = route.params.code || route.params.id
+const ed = useEditor(id, { onOutline: (d) => router.replace(deckPath(d, 'outline')) })
 const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, media, videoLibrary } = ed
+useDeckUrl(deck, 'edit')
 
 const frame = ref(null)
-const { goto } = usePreviewSync(frame, selected)
-watch(selected, (i) => goto(i))
-const onFrameLoad = () => goto(selected.value)
+const sm = useSlideMedia(draft, selected)
+const live = useLiveDeck(frame, { draft, deck, selected, assets: ed.assets, onMedia: sm.open, onSave: () => onSave() })
+// Phần tử trang tự do đang chọn (chỉ khi thuộc trang đang mở).
+const selectedElId = computed(() => (live.selectedEl.value?.index === selected.value ? live.selectedEl.value.id : ''))
+const isFree = computed(() => slide.value?.layout === 'free')
 
 const panel = ref('slide')
 const PANELS = [
@@ -41,7 +54,11 @@ const PANELS = [
   { key: 'deck', label: 'Thiết lập bài' },
 ]
 
-const addMenu = LAYOUTS.map((l) => ({ key: l.value, label: l.label, icon: l.icon }))
+const insertOpen = ref(false)
+function onInsert({ layout, template }) {
+  insertOpen.value = false
+  guard(() => ed.addSlide(layout, template))
+}
 const moreMenu = [
   { key: 'duplicate', label: 'Nhân bản bài', icon: 'copy' },
   { key: 'd', divider: true },
@@ -68,9 +85,22 @@ function guard(fn) {
 }
 
 async function onSave() {
+  if (!dirty.value || saving.value) return
   if (titleError.value) return toast.error(titleError.value)
-  if (await ed.save()) toast.success('Đã lưu và render lại bài trình bày')
+  if (await ed.save()) {
+    toast.success('Đã lưu bài trình bày')
+    // Đổi tên bài → useDeckUrl tự cập nhật đường dẫn /ten-bai/ma/edit.
+  }
 }
+// Ctrl/Cmd+S ngoài khung xem trước (trong khung: engine gửi 'deck:save').
+function onKeydown(e) {
+  if ((e.key === 's' || e.key === 'S') && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault()
+    onSave()
+  }
+}
+window.addEventListener('keydown', onKeydown)
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 async function onRatio(ratio) {
   try {
@@ -114,7 +144,7 @@ async function onMore(key) {
     try {
       const copy = await ed.duplicate()
       toast.success('Đã tạo bản sao riêng tư')
-      router.push(`/p/${copy.id}/edit`)
+      router.push(deckPath(copy, 'edit'))
     } catch (err) {
       toast.error(err.message)
     }
@@ -163,7 +193,7 @@ onMounted(ed.load)
     <div v-else-if="deck && !deck.isOwner" class="flex flex-1 items-center justify-center p-6">
       <MEmptyState title="Bạn chỉ có quyền xem bài này" description="Nhân bản về bài của bạn để chỉnh sửa.">
         <template #actions>
-          <MButton variant="outline" @click="router.push(`/p/${id}/view`)">Trình chiếu</MButton>
+          <MButton variant="outline" @click="router.push(deckPath(deck, 'view'))">Trình chiếu</MButton>
           <MButton variant="primary" @click="onMore('duplicate')">Nhân bản</MButton>
         </template>
       </MEmptyState>
@@ -173,7 +203,7 @@ onMounted(ed.load)
       <MSpinner :size="40" />
       <div>
         <h1 class="text-[18px] font-semibold leading-6">AI đang dựng “{{ deck.title }}” theo dàn ý</h1>
-        <p class="mt-1 max-w-[520px] text-[13px] text-[var(--mds-text-secondary)]">Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn — thường dưới 1 phút. Bạn có thể rời trang, bài vẫn tiếp tục được dựng.</p>
+        <p class="mt-1 max-w-[520px] text-[13px] text-[var(--mds-text-secondary)]">Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn, tạo ảnh minh hoạ AI (nếu bật) — thường 1–2 phút. Bạn có thể rời trang, bài vẫn tiếp tục được dựng.</p>
       </div>
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>
     </div>
@@ -200,7 +230,7 @@ onMounted(ed.load)
         <div class="ml-auto flex items-center gap-2">
           <div class="w-[200px]"><MSelect :model-value="deck.ratio" :options="RATIO_OPTIONS" aria-label="Tỷ lệ khung hình" @update:model-value="onRatio" /></div>
           <MSwitch :model-value="deck.visibility === 'public'" :disabled="visibilityBusy" label="Công khai" @update:model-value="onVisibility" />
-          <MButton variant="outline" @click="router.push(`/p/${id}/view`)"><template #icon><MIcon name="eye" :size="16" /></template>Trình chiếu</MButton>
+          <MButton variant="outline" @click="router.push(deckPath(deck, 'view'))"><template #icon><MIcon name="eye" :size="16" /></template>Trình chiếu</MButton>
           <MDropdownMenu :items="exportMenu" @select="onExport">
             <template #activator>
               <MButton variant="outline" :loading="!!exporting" aria-haspopup="menu"><template #icon><MIcon name="download" :size="16" /></template>Tải xuống<MIcon name="chevron-down" :size="16" /></MButton>
@@ -215,11 +245,7 @@ onMounted(ed.load)
         <aside class="flex w-[248px] shrink-0 flex-col border-r border-[var(--mds-border)] bg-[var(--mds-bg)]" aria-label="Danh sách trang">
           <div class="flex items-center justify-between px-3 py-2">
             <span class="text-[13px] font-semibold">{{ draft.spec.slides.length }} trang</span>
-            <MDropdownMenu :items="addMenu" placement="bottom-start" @select="(k) => guard(() => ed.addSlide(k))">
-              <template #activator>
-                <MButton variant="outline" aria-haspopup="menu"><template #icon><MIcon name="plus" :size="16" /></template>Thêm trang</MButton>
-              </template>
-            </MDropdownMenu>
+            <MButton variant="outline" aria-haspopup="dialog" @click="insertOpen = true"><template #icon><MIcon name="plus" :size="16" /></template>Thêm trang</MButton>
           </div>
           <ol class="relative flex-1 overflow-y-auto px-2 pb-2">
             <li v-for="(s, i) in draft.spec.slides" :key="s.id || i">
@@ -265,18 +291,17 @@ onMounted(ed.load)
                 data-deck-frame
                 :key="previewUrl"
                 :src="previewUrl"
-                title="Xem trước bài trình bày"
+                title="Xem trước và sửa trực tiếp bài trình bày"
                 sandbox="allow-scripts allow-popups"
                 allow="fullscreen"
                 class="absolute inset-0 h-full w-full border-0"
-                @load="onFrameLoad"
               />
-              <div v-if="saving" class="absolute inset-0 grid place-items-center bg-black/40"><MSpinner :size="32" /></div>
+              <div v-if="!live.ready.value" class="absolute inset-0 grid place-items-center"><MSpinner :size="32" /></div>
             </div>
             <p class="mt-2 flex items-center gap-1 text-[12px] text-[var(--mds-text-secondary)]">
               <MIcon name="info-circle" :size="16" />
-              <span v-if="dirty">Khung xem trước đang hiển thị bản đã lưu. Bấm <strong>Lưu</strong> để render lại với thay đổi mới.</span>
-              <span v-else>Bấm vào khung rồi dùng ← → để chuyển trang, F để toàn màn hình.</span>
+              <span v-if="isFree">Kéo phần tử để di chuyển, kéo góc để đổi cỡ (Shift giữ tỷ lệ, Alt tắt hít lề) · bấm đúp để sửa chữ/đổi ảnh · Delete xóa · Ctrl+D nhân bản.</span>
+              <span v-else>Bấm vào chữ trên khung để sửa trực tiếp · bấm vào ảnh/video để đổi hoặc chỉnh sửa · <strong>Ctrl+S</strong> để lưu.</span>
             </p>
           </div>
         </section>
@@ -287,7 +312,17 @@ onMounted(ed.load)
           <div class="relative flex-1 overflow-y-auto p-4">
             <template v-if="panel === 'slide'">
               <p v-if="slide" class="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--mds-text-secondary)]">Trang {{ selected + 1 }} · {{ LAYOUT_LABEL[slide.layout] }}</p>
-              <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="ed.assets.value" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" @change-layout="ed.changeLayout" />
+              <FreeElementsPanel
+                v-if="slide && isFree"
+                class="mb-4"
+                :slide="slide"
+                :selected-id="selectedElId"
+                :live="live"
+                :media="media"
+                :video-library="videoLibrary"
+                @media="(m) => sm.open({ ...m, index: selected })"
+              />
+              <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="ed.assets.value" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" studio @change-layout="ed.changeLayout" @media="(m) => sm.open({ ...m, index: selected })" />
             </template>
             <div v-else class="flex flex-col gap-4">
               <DesignPanel v-model:footer="draft.spec.footer" :design="draft.spec" :media="media" :title="draft.title" :subtitle="draft.spec.slides[0]?.subtitle || ''" :ratio="deck.ratio" />
@@ -310,12 +345,37 @@ onMounted(ed.load)
           <button v-if="saveError.status === 409" type="button" class="mt-1 font-medium text-[var(--mds-brand-600)] hover:underline" @click="ed.load()">Tải lại bản mới nhất (bỏ thay đổi của tôi)</button>
         </FormAlert>
         <div class="flex items-center justify-end gap-2">
-          <span class="mr-auto text-[12px] text-[var(--mds-text-secondary)]">{{ dirty ? 'Có thay đổi chưa lưu' : 'Mọi thay đổi đã được lưu' }}</span>
+          <span class="mr-auto text-[12px] text-[var(--mds-text-secondary)]">{{ dirty ? 'Có thay đổi chưa lưu — khung xem trước đang hiển thị bản nháp' : 'Mọi thay đổi đã được lưu' }}</span>
           <MButton variant="outline" :disabled="!dirty || saving" @click="ed.discard()">Hủy thay đổi</MButton>
-          <MButton variant="primary" :loading="saving" :disabled="!dirty" @click="onSave"><template #icon><MIcon name="device-floppy" :size="16" /></template>Lưu</MButton>
+          <MTooltip content="Lưu" shortcut="Ctrl+S">
+            <MButton variant="primary" :loading="saving" :disabled="!dirty" @click="onSave"><template #icon><MIcon name="device-floppy" :size="16" /></template>Lưu</MButton>
+          </MTooltip>
         </div>
       </div>
     </template>
+
+    <MDialog v-model="insertOpen" title="Thêm trang" width="880px">
+      <InsertSlidePanel @pick="onInsert" />
+      <template #footer><span /></template>
+    </MDialog>
+    <ImageStudio
+      v-if="draft"
+      v-model="sm.imageOpen.value"
+      :title="sm.title.value"
+      :image="sm.image.value"
+      :aspect="sm.aspect.value"
+      :media="media"
+      :assets="ed.assets.value"
+      :suggest="sm.suggest.value"
+      @apply="sm.applyImage"
+    />
+    <MDialog v-model="sm.videoOpen.value" :title="sm.title.value" width="560px">
+      <VideoPicker v-if="sm.videoOpen.value" :model-value="sm.video.value" :media="media" :library="videoLibrary" @update:model-value="sm.applyVideo" />
+      <template #footer>
+        <MButton v-if="sm.canSwitch.value" variant="ghost" class="mr-auto" @click="sm.switchTo('image')"><template #icon><MIcon name="photo" :size="16" /></template>Dùng ảnh thay video</MButton>
+        <MButton variant="primary" @click="sm.close()">Xong</MButton>
+      </template>
+    </MDialog>
 
     <MDialog v-model="confirmRemove" type="danger" title="Xóa bài trình bày?" confirm-text="Xóa" @confirm="doRemove">
       <p class="text-[14px] leading-5">Bài cùng toàn bộ ảnh sẽ bị xóa vĩnh viễn. Không thể khôi phục.</p>

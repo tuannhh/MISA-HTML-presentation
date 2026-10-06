@@ -1,3 +1,5 @@
+import { deckPath } from './deckPath.js';
+
 // Thao tác trên 1 bài trình bày theo quyền: chủ sở hữu có đủ thao tác; bài công khai của người khác chỉ xem/nhân bản/tải.
 export function deckMenuItems(d) {
   const ready = d.status === 'ready';
@@ -33,6 +35,6 @@ export function deckMenuItems(d) {
 // Đích khi bấm vào bài: chủ sở hữu → bước duyệt dàn ý (đang lập/chờ duyệt/đang dựng) hoặc trình soạn thảo;
 // người khác → trình chiếu.
 const OUTLINE_STATUSES = ['outlining', 'outline', 'generating'];
-export const deckTarget = (d) => (!d.isOwner ? `/p/${d.id}/view` : OUTLINE_STATUSES.includes(d.status) ? `/p/${d.id}/outline` : `/p/${d.id}/edit`);
+export const deckTarget = (d) => deckPath(d, !d.isOwner ? 'view' : OUTLINE_STATUSES.includes(d.status) ? 'outline' : 'edit');
 
 export const VISIBILITY_LABEL = { private: 'Riêng tư', public: 'Công khai' };

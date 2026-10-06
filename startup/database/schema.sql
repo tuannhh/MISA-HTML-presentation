@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS presentations (
   id                CHAR(36)      NOT NULL,
   tenant_id         CHAR(36)      NOT NULL,
+  -- Mã ngắn 8 ký tự [a-z0-9] cho đường dẫn /tên-bài/<mã>/<tính năng> (chỉ định vị, không thay kiểm tra quyền).
+  short_code        CHAR(8)       NULL,
   title             VARCHAR(200)  NOT NULL,
   ratio             ENUM('16:9','4:3','2:1','3:1') NOT NULL DEFAULT '16:9',
   visibility        ENUM('private','public') NOT NULL DEFAULT 'private',
@@ -50,6 +52,7 @@ CREATE TABLE IF NOT EXISTS presentations (
   updated_at        DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   published_at      DATETIME(3)   NULL,
   PRIMARY KEY (id),
+  UNIQUE KEY uq_presentations_code (short_code),
   KEY ix_presentations_tenant_updated (tenant_id, updated_at),
   KEY ix_presentations_public (visibility, status, published_at),
   CONSTRAINT fk_presentations_tenant FOREIGN KEY (tenant_id) REFERENCES users (id) ON DELETE CASCADE
@@ -110,3 +113,4 @@ CREATE TABLE IF NOT EXISTS schema_changelog (
 INSERT IGNORE INTO schema_changelog (name) VALUES ('schema.sql@2026-10-05-baseline');
 -- Baseline đã gồm các changelog sau (cài mới không cần chạy lại):
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261005_170000.sql');
+INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261006_090000.sql');

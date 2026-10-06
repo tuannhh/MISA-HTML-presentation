@@ -2,6 +2,7 @@
 // Dùng chung cho trình soạn thảo desktop và mobile (chỉ dữ liệu, không DOM).
 import { SPEC_LIMITS } from '@shared/deck/limits.js';
 import { ICON_NAMES } from '@shared/deck/icons.js';
+import { elementsFromTemplate } from '@shared/deck/free.js';
 
 export { SPEC_LIMITS };
 
@@ -19,6 +20,7 @@ export const LAYOUTS = [
   { value: 'quote', label: 'Trích dẫn', icon: 'message' },
   { value: 'comparison', label: 'So sánh', icon: 'copy' },
   { value: 'closing', label: 'Trang kết', icon: 'circle-check' },
+  { value: 'free', label: 'Trang tự do', icon: 'layout-board' },
 ];
 export const LAYOUT_LABEL = Object.fromEntries(LAYOUTS.map((l) => [l.value, l.label]));
 export const LAYOUT_ICON = Object.fromEntries(LAYOUTS.map((l) => [l.value, l.icon]));
@@ -38,6 +40,8 @@ export const LAYOUT_FIELDS = {
   quote: ['kicker', 'title', 'highlight', 'quote', 'image'],
   comparison: [...HEAD, 'columns'],
   closing: ['kicker', 'title', 'subtitle', 'tags', 'caption'],
+  // Trang tự do: nội dung là các phần tử (xem FreeElementsPanel) — tiêu đề chỉ dùng cho danh sách trang/ghi chú.
+  free: ['title'],
 };
 
 export const ICON_OPTIONS = ICON_NAMES.map((n) => ({ label: n, value: n }));
@@ -57,11 +61,13 @@ export const emptyItem = () => ({ icon: 'sparkles', title: '', text: '', value: 
 export const emptyStat = () => ({ value: '', prefix: '', suffix: '', label: '' });
 export const emptyColumn = () => ({ title: '', subtitle: '', tone: 'neutral', points: [''] });
 
-export function newSlide(layout = 'bullets') {
+// template: mẫu bố cục trang tự do (shared/deck/free.js) — chỉ dùng khi layout = 'free'.
+export function newSlide(layout = 'bullets', template = 'blank') {
   const s = {
-    id: newId(), layout, kicker: '', title: 'Tiêu đề mới', highlight: '', subtitle: '', caption: '', icon: 'sparkles', notes: '',
+    id: newId(), layout, kicker: '', title: layout === 'free' ? 'Trang tự do' : 'Tiêu đề mới', highlight: '', subtitle: '', caption: '', icon: 'sparkles', notes: '',
     tags: [], items: [], stats: [], steps: [], columns: [], quote: { text: '', author: '', role: '' }, image: null, images: [], video: null,
   };
+  if (layout === 'free') s.elements = elementsFromTemplate(template);
   return ensureLayoutContent(s);
 }
 
@@ -72,6 +78,7 @@ export function ensureLayoutContent(s) {
   if (['timeline', 'process'].includes(s.layout) && !s.steps.length) s.steps = [emptyItem(), emptyItem(), emptyItem()];
   if (s.layout === 'comparison' && s.columns.length < 2) s.columns = [emptyColumn(), emptyColumn()];
   if (s.layout === 'quote' && !s.quote) s.quote = { text: '', author: '', role: '' };
+  if (s.layout === 'free' && !Array.isArray(s.elements)) s.elements = [];
   return s;
 }
 

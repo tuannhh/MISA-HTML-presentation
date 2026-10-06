@@ -36,10 +36,12 @@ Mật khẩu: 10–128 ký tự, có cả chữ và số. `user` trả về: `{ 
 
 ## Bài trình bày — `/api/presentations` (yêu cầu đăng nhập)
 
+`:id` nhận **UUID hoặc mã ngắn 8 ký tự** (`short_code`) — middleware đổi mã → UUID trước khi vào service. DTO có thêm `code`.
+
 | Method | Path | Mô tả |
 |---|---|---|
 | GET | `/?scope=mine\|public&q=&page=&pageSize=` | `mine`: bài của tôi (mọi trạng thái). `public`: bài công khai **đã ready** của mọi người, kèm `authorName`. pageSize tối đa 48 |
-| POST | `/` (multipart) | Tạo bằng AI. Nguồn (đúng 1 loại): `files` (nhiều tệp, ≤ `MAX_UPLOAD_FILES`, **tổng** ≤ `MAX_UPLOAD_MB` — không giới hạn riêng từng tệp; `file` 1 tệp vẫn nhận cho client cũ) **hoặc** `url` **hoặc** `text`. Tệp: pptx/docx/xlsx/pdf (cả bản scan)/odt·odp·ods/txt/md/csv·tsv (UTF-8, UTF-16, Windows-1258)/ảnh png·jpeg·webp·gif·avif/ghi âm mp3·m4a·mp4·wav·ogg·flac·aac·aiff·webm (nhận diện magic bytes). .doc/.xls/.ppt đời cũ, HEIC → 415 kèm hướng dẫn lưu lại/đổi JPEG. `ratio`, `tone` (`dark`\|`light`, mặc định `dark`), `theme` (`auto` — AI chọn mẫu hợp tông — \| id mẫu màu \| `custom` kèm `primary` + `secondary` dạng `#RRGGBB`), `slideCount` (`auto` = AI chọn ≤ 25 trang — mặc định; hoặc 3–40 = đúng số trang), `instructions` (≤ 2000), `title` (≤ 200). **Media gửi kèm** (tuỳ chọn, mọi loại nguồn — giao diện chỉ mở ở tab Nhập nội dung): `media` (ảnh PNG/JPEG/WebP/GIF/AVIF ≤ `MAX_IMAGE_UPLOAD_MB`, video MP4/MOV/WebM ≤ `MAX_VIDEO_MB`; ≤ `MAX_CREATE_MEDIA` tệp, ≤ `MAX_VIDEOS_PER_DECK` video) + `posters` (ảnh bìa video do trình duyệt chụp, tên `poster-<vị trí trong media>.jpg`) — tổng dung lượng tệp + media ≤ `MAX_UPLOAD_MB`; luôn được đưa vào dàn ý (`05` §10). → **202** `{ id, status:'outlining' }` (AI **lập dàn ý**, chưa dựng slide). Lỗi: 413 `UPLOAD_TOO_LARGE` (chặn sớm theo Content-Length), 400 `TOO_MANY_FILES`/`EMPTY_FILE`/`SOURCE_REQUIRED`, 415 `UNSUPPORTED_FILE` (nêu tên tệp). |
+| POST | `/` (multipart) | Tạo bằng AI. Nguồn (đúng 1 loại): `files` (nhiều tệp, ≤ `MAX_UPLOAD_FILES`, **tổng** ≤ `MAX_UPLOAD_MB` — không giới hạn riêng từng tệp; `file` 1 tệp vẫn nhận cho client cũ) **hoặc** `url` **hoặc** `text`. Tệp: pptx/docx/xlsx/pdf (cả bản scan)/odt·odp·ods/txt/md/csv·tsv (UTF-8, UTF-16, Windows-1258)/ảnh png·jpeg·webp·gif·avif/ghi âm mp3·m4a·mp4·wav·ogg·flac·aac·aiff·webm (nhận diện magic bytes). .doc/.xls/.ppt đời cũ, HEIC → 415 kèm hướng dẫn lưu lại/đổi JPEG. `ratio`, `tone` (`dark`\|`light`, mặc định `dark`), `theme` (`auto` — AI chọn mẫu hợp tông — \| id mẫu màu \| `custom` kèm `primary` + `secondary` dạng `#RRGGBB`), `slideCount` (`auto` = AI chọn ≤ 25 trang — mặc định; hoặc 3–40 = đúng số trang), `instructions` (≤ 2000), `title` (≤ 200), `aiImages` (`1`/`0`, mặc định bật — AI tạo ảnh minh hoạ khi dựng bài, `05` §12). **Media gửi kèm** (tuỳ chọn, mọi loại nguồn — giao diện chỉ mở ở tab Nhập nội dung): `media` (ảnh PNG/JPEG/WebP/GIF/AVIF ≤ `MAX_IMAGE_UPLOAD_MB`, video MP4/MOV/WebM ≤ `MAX_VIDEO_MB`; ≤ `MAX_CREATE_MEDIA` tệp, ≤ `MAX_VIDEOS_PER_DECK` video) + `posters` (ảnh bìa video do trình duyệt chụp, tên `poster-<vị trí trong media>.jpg`) — tổng dung lượng tệp + media ≤ `MAX_UPLOAD_MB`; luôn được đưa vào dàn ý (`05` §10). → **202** `{ id, status:'outlining' }` (AI **lập dàn ý**, chưa dựng slide). Lỗi: 413 `UPLOAD_TOO_LARGE` (chặn sớm theo Content-Length), 400 `TOO_MANY_FILES`/`EMPTY_FILE`/`SOURCE_REQUIRED`, 415 `UNSUPPORTED_FILE` (nêu tên tệp). |
 | GET | `/:id` | Chi tiết + `spec` (NULL khi chưa dựng). Chủ sở hữu có thêm `outline`, `outlineVersion`, `assets[]` (`{id, kind, url, width, height, name, mime, bytes}`, URL ký; mọi kind trừ thumbnail). Người khác chỉ đọc được nếu bài `public` + `ready`; nếu không → 404 |
 | PATCH | `/:id` | Chủ sở hữu. Body: `title`, `ratio`, `visibility`, `spec` + `specVersion` (bắt buộc đi kèm spec). Spec được chuẩn hoá **strict** → 400 với `details: string[]` nếu sai. Version lệch → 409 `VERSION_CONFLICT`. Không sửa được khi chưa `ready` |
 | DELETE | `/:id` | Chủ sở hữu. Xoá DB (cascade asset) + thư mục tệp |
@@ -51,13 +53,22 @@ Mật khẩu: 10–128 ký tự, có cả chữ và số. `user` trả về: `{ 
 | POST | `/:id/logo/:assetId/cutout` | Body `{ mode: auto\|color\|ai }`. Tách nền → 201 `{ asset, method: color\|ai\|none, note }` (asset logo mới; `none` = logo đã trong suốt → trả logo gốc). Hàng đợi 1 việc, quá 5 chờ → 503 |
 | POST | `/:id/videos` (multipart `file` + `poster` tuỳ chọn) | Video MP4/MOV/WebM (magic bytes, ≤ `MAX_VIDEO_MB`, ≤ `MAX_VIDEOS_PER_DECK`/bài); `poster` = ảnh bìa chụp ở trình duyệt → 201 `{ video:{provider:'file', asset, poster, title}, assets[] }` |
 | POST | `/:id/youtube` | Body `{ url }` (watch/youtu.be/shorts/embed/live/nocookie). Lấy ảnh bìa 16:9 + tiêu đề (oEmbed) → 201 `{ video:{provider:'youtube', id, poster, title}, assets[] }`; link lạ 400, video không tồn tại/không cho nhúng 422 |
-| GET | `/:id/preview` | HTML trình chiếu cho iframe. Header CSP `sandbox allow-scripts allow-popups`, nonce, `connect-src 'none'`, `frame-ancestors 'self'`, `no-store` |
+| POST | `/:id/assets/:assetId/edit` | Chỉnh sửa ảnh (ảnh/ảnh bìa của bài). Body `{ crop?:{x,y,w,h} (0–1, theo khung bao ảnh sau xoay), rotate? (−360..360), flipH?, flipV?, brightness?/saturation?/contrast? (−100..100) }` — luôn áp lên **ảnh gốc** `:assetId`. → 201 `{ asset (ảnh mới), src (mã ảnh gốc), edit (thông số đã chuẩn hoá \| null) }`; `edit=null` = không thay đổi → trả ảnh gốc. Rate-limit `media` |
+| POST | `/:id/images/generate` | Ảnh AI (Nano Banana 2 Lite `gemini-3.1-flash-lite-image`, 1K). Body `{ prompt (≤ 1000), aspect (1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 21:9) }` → 201 `{ asset, alt }`. Tắt bằng `AI_IMAGES=false` → 503 `AI_IMAGES_DISABLED`; hàng đợi đầy → 503 `QUEUE_FULL`; rate-limit `aiImage` 40/10 phút; ghi audit `presentation.ai_image` |
+| POST | `/:id/images/import` | Body `{ provider:'pixabay', id }` — máy chủ hỏi lại Pixabay theo mã ảnh (không nhận URL từ client), chỉ tải từ `pixabay.com`/`cdn.pixabay.com`, ≤ 15 MB → 201 `{ asset, alt }` |
+| GET | `/:id/preview` | HTML trình chiếu cho iframe. `?edit=1` (chỉ chủ sở hữu, người khác bị bỏ qua cờ) = chế độ **sửa trực tiếp** (`data-e`/`data-m`, không HUD, không chuyển động chữ). Header CSP `sandbox allow-scripts allow-popups`, nonce, `connect-src 'none'`, `frame-ancestors 'self'`, `no-store` |
 | GET | `/:id/export.html` | Tải HTML một tệp (ảnh + phông đã chọn base64, giữ chuyển động + nền động). Video tải lên nhúng base64 nếu tổng ≤ `EXPORT_VIDEO_MB`, vượt → khung ảnh bìa không phát; YouTube vẫn mở được khi có mạng. Ghi audit |
 | GET | `/:id/export.pdf` | Tải PDF (mode print, không chuyển động) qua Chromium. Ghi audit, rate-limit |
 
 Tên tệp tải về: `Content-Disposition` có `filename` ASCII + `filename*` UTF-8 (giữ tiếng Việt).
 
-DTO bài trình bày: `{ id, title, ratio, visibility, status, sourceKind, sourceLabel, specVersion, outlineVersion, slideCount, thumbnailUrl, errorMessage, isOwner, authorName, createdAt, updatedAt, publishedAt, spec?, assets? }`.
+DTO bài trình bày: `{ id, code, title, ratio, visibility, status, sourceKind, sourceLabel, specVersion, outlineVersion, slideCount, thumbnailUrl, errorMessage, isOwner, authorName, createdAt, updatedAt, publishedAt, spec?, assets? }`.
+
+## Tìm ảnh Internet — `/api/images`
+
+| Method | Path | Mô tả |
+|---|---|---|
+| GET | `/search?q=&page=&orientation=horizontal\|vertical` | Đăng nhập. Tìm ảnh Pixabay (`safesearch`, có dấu tiếng Việt → `lang=vi`), 24 ảnh/trang, nhớ đệm 24 giờ. → `data: [{ id, preview, thumb, width, height, tags, author, pageUrl }]`, `meta: { page, total (≤ 500), hasNext, source:'pixabay' }`. Thiếu `PIXABAY_API_KEY` → 503 `STOCK_NOT_CONFIGURED`; Pixabay quá tải → 429 `STOCK_QUOTA`. Rate-limit `imageSearch` 40/phút. Khoá API không bao giờ trả về client |
 
 ## Ảnh / video — `/api/assets/:id`
 

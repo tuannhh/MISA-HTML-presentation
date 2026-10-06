@@ -64,6 +64,21 @@ export function loadConfig() {
       // Chuyển thể ghi âm dài / đọc PDF lớn chậm hơn nhiều so với dựng bài.
       mediaTimeoutMs: int('GEMINI_MEDIA_TIMEOUT_MS', 900000, { min: 60000, max: 1800000 }),
       baseUrl: str('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
+      // Tạo ảnh minh hoạ (Nano Banana 2 Lite) — ảnh 1K theo câu lệnh; dùng chung GEMINI_API_KEY.
+      imageModel: str('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-lite-image'),
+      imageSize: str('GEMINI_IMAGE_SIZE', '1K'),
+      imageTimeoutMs: int('GEMINI_IMAGE_TIMEOUT_MS', 90000, { min: 10000, max: 300000 }),
+    }),
+    // Ảnh minh hoạ do AI tạo: tự động khi dựng bài (tuỳ chọn lúc tạo bài, mặc định bật) + theo yêu cầu trong trình soạn thảo.
+    aiImages: Object.freeze({
+      enabled: bool('AI_IMAGES', true),
+      perDeck: int('AI_IMAGES_PER_DECK', 6, { min: 0, max: 20 }),
+      concurrency: int('AI_IMAGES_CONCURRENCY', 3, { min: 1, max: 8 }),
+    }),
+    // Tìm ảnh trên Internet theo từ khoá (Pixabay API — ảnh miễn phí bản quyền, tải về máy chủ khi người dùng chọn).
+    pixabay: Object.freeze({
+      apiKey: str('PIXABAY_API_KEY'),
+      baseUrl: str('PIXABAY_BASE_URL', 'https://pixabay.com/api/'),
     }),
     google: Object.freeze({
       apiKey: str('GOOGLE_API_KEY'),

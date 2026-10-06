@@ -28,6 +28,8 @@ export function useCreate() {
   const form = reactive({
     mode: 'file', files: [], media: [], url: '', text: '', ratio: '16:9', tone: 'dark', theme: 'auto', primary: '', secondary: '',
     slideMode: 'auto', slideCount: 12, instructions: '', title: '',
+    // AI tạo ảnh minh hoạ (Nano Banana 2 Lite) cho trang cần ảnh mà chưa có ảnh thật — mặc định bật.
+    aiImages: true,
   });
   const errors = reactive({});
   const submitting = ref(false);
@@ -85,6 +87,7 @@ export function useCreate() {
         });
       }
       fd.set('ratio', form.ratio);
+      fd.set('aiImages', form.aiImages ? '1' : '0');
       fd.set('tone', form.tone);
       fd.set('theme', form.theme);
       if (form.theme === 'custom') {

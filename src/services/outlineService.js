@@ -2,7 +2,7 @@
 // người dùng duyệt/sửa, gắn media (ảnh, video, YouTube), chọn thiết kế → bước 2 AI dựng bài theo đúng dàn ý.
 // Hàm thuần (không DB/HTTP): chuẩn hoá dàn ý, gắn media vào slide, dựng slide dự phòng khi AI thiếu trang.
 import { randomUUID } from 'node:crypto';
-import { LAYOUTS, MEDIA_LAYOUTS } from '../../shared/deck/render.js';
+import { AI_LAYOUTS as LAYOUTS, MEDIA_LAYOUTS } from '../../shared/deck/render.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { cleanDesign, cleanVideo } from './specService.js';
@@ -102,7 +102,7 @@ export function normalizeOutline(input, { strict = false, options } = {}) {
     version: 1,
     title: c.str(o.title, SPEC_LIMITS.deckTitle, 'title') || slides[0]?.title || 'Bài trình bày',
     footer: c.str(o.footer, SPEC_LIMITS.footer, 'footer'),
-    options: { tone: opt.tone === 'light' ? 'light' : 'dark', autoSlides: opt.autoSlides !== false, slideCount: Number.isInteger(opt.slideCount) ? opt.slideCount : null },
+    options: { tone: opt.tone === 'light' ? 'light' : 'dark', autoSlides: opt.autoSlides !== false, slideCount: Number.isInteger(opt.slideCount) ? opt.slideCount : null, aiImages: opt.aiImages === true },
     design: cleanDesign(c, c.obj(o.design)),
     slides,
   };

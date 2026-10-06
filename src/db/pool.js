@@ -3,7 +3,7 @@ import mysql from 'mysql2/promise';
 
 const REQUIRED_TABLES = ['users', 'presentations', 'assets', 'sessions', 'audit_logs', 'schema_changelog'];
 // Changelog mà code hiện tại phụ thuộc (baseline schema.sql đã gồm sẵn; DB cũ phải chạy thủ công).
-const REQUIRED_CHANGELOGS = ['changelog_database_20261005_170000.sql'];
+const REQUIRED_CHANGELOGS = ['changelog_database_20261005_170000.sql', 'changelog_database_20261006_090000.sql'];
 
 export function createPool(dbConfig) {
   return mysql.createPool({

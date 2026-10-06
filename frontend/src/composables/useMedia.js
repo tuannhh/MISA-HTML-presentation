@@ -1,7 +1,7 @@
 // Media của 1 bài trình bày (dùng chung trang dàn ý + trình soạn thảo, desktop + mobile):
 // ảnh, logo (+ tách nền), video tải lên (+ ảnh bìa chụp ngay trên trình duyệt), video YouTube.
 // assets: ref tới mảng asset của bài (cập nhật tại chỗ khi thêm mới).
-import { postForm, post, uploadForm, ApiError } from '@/lib/api.js';
+import { postForm, post, get, uploadForm, ApiError } from '@/lib/api.js';
 import { IMAGE_ACCEPT as IMG_ACCEPT, isImageFile, heicToJpeg } from '@/lib/fileKinds.js';
 
 export const MAX_IMAGE_MB = 15;
@@ -127,7 +127,35 @@ export function useMedia(id, assets) {
     return res.video;
   }
 
-  return { byId, assetUrl, ofKind, uploadImage, uploadLogo, cutoutLogo, uploadVideo, addYouTube };
+  // Ảnh AI (Nano Banana 2 Lite) theo mô tả → asset mới của bài; trả { asset, alt }.
+  async function generateImage(prompt, aspect = '16:9') {
+    const res = (await post(`/api/presentations/${id}/images/generate`, { prompt, aspect })).data;
+    push(res.asset);
+    return res;
+  }
+
+  // Tìm ảnh trên Internet (Pixabay) — chỉ là kết quả xem trước, chọn ảnh nào thì mới tải về thành asset (importStock).
+  async function searchImages(q, { page = 1, orientation = '', signal } = {}) {
+    const qs = new URLSearchParams({ q, page: String(page) });
+    if (orientation) qs.set('orientation', orientation);
+    const res = await get(`/api/images/search?${qs}`, { signal });
+    return { hits: res.data || [], hasNext: !!res.meta?.hasNext, total: res.meta?.total || 0, page: res.meta?.page || page };
+  }
+
+  async function importStock(stockId) {
+    const res = (await post(`/api/presentations/${id}/images/import`, { provider: 'pixabay', id: stockId })).data;
+    push(res.asset);
+    return res;
+  }
+
+  // Chỉnh sửa ảnh (cắt/xoay/lật/sáng/rực/tương phản) — máy chủ luôn áp lên ảnh gốc srcId; trả { asset, src, edit }.
+  async function editImage(srcId, edit) {
+    const res = (await post(`/api/presentations/${id}/assets/${srcId}/edit`, edit || {})).data;
+    push(res.asset);
+    return res;
+  }
+
+  return { byId, assetUrl, ofKind, uploadImage, uploadLogo, cutoutLogo, uploadVideo, addYouTube, generateImage, searchImages, importStock, editImage };
 }
 
 // Nguồn phát cho lớp video của ứng dụng (xem trước trong dàn ý / trình soạn thảo).

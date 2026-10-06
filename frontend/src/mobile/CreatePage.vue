@@ -1,4 +1,5 @@
 <script setup>
+import { deckPath } from '@/lib/deckPath.js'
 // Tạo bài (mobile): form một cột, footer sticky Hủy | Lập dàn ý bằng AI.
 // AI lập dàn ý chạy nền → chuyển sang bước duyệt dàn ý để theo dõi tiến trình, sửa nội dung, gắn media, chọn thiết kế.
 import { useRouter } from 'vue-router'
@@ -6,6 +7,7 @@ import MobileShell from './MobileShell.vue'
 import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
+import MCheckbox from '@/components/mds/MCheckbox.vue'
 import ThemePicker from '@/shared/ThemePicker.vue'
 import MRadioGroup from '@/components/mds/MRadioGroup.vue'
 import MTabs from '@/components/mds/MTabs.vue'
@@ -24,7 +26,7 @@ const MODES = SOURCE_MODES.map((m) => ({ ...m, label: SHORT[m.key] }))
 
 async function onSubmit() {
   const res = await submit()
-  if (res) router.push(`/p/${res.id}/outline`)
+  if (res) router.push(deckPath(res, 'outline'))
 }
 </script>
 
@@ -84,6 +86,9 @@ async function onSubmit() {
       <FormField label="Tông màu" group hint="Đổi lại được ở bước duyệt dàn ý.">
         <ThemePicker v-model:tone="form.tone" v-model:theme="form.theme" v-model:primary="form.primary" v-model:secondary="form.secondary" name="theme-m" compact allow-auto />
         <p v-if="errors.theme" class="text-[13px] text-[var(--mds-danger)]">{{ errors.theme }}</p>
+      </FormField>
+      <FormField label="Ảnh minh hoạ AI" group hint="Chỉ thêm ảnh cho trang chưa có ảnh của bạn, tối đa 6 ảnh.">
+        <MCheckbox v-model="form.aiImages" label="AI tạo ảnh minh hoạ phù hợp nội dung (Nano Banana 2 Lite)" input-aria-label="AI tạo ảnh minh hoạ phù hợp nội dung" />
       </FormField>
       <FormField label="Số trang mong muốn" group :hint="form.slideMode === 'auto' ? `AI tự chọn, tối đa ${AUTO_MAX_SLIDES} trang` : '3–40 trang'">
         <div class="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2">

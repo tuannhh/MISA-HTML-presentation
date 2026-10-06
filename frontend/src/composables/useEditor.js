@@ -25,7 +25,8 @@ export function useEditor(id, { onOutline } = {}) {
 
   const dirty = computed(() => !!draft.value && JSON.stringify({ t: draft.value.title, s: draft.value.spec }) !== baseline.value);
   const slide = computed(() => draft.value?.spec?.slides?.[selected.value] || null);
-  const previewUrl = computed(() => (deck.value?.status === 'ready' ? `/api/presentations/${id}/preview?v=${previewKey.value}` : ''));
+  // edit=1: khung xem trước sửa trực tiếp (chỉ chủ sở hữu) — nội dung khung được dựng lại từ bản nháp (useLiveDeck).
+  const previewUrl = computed(() => (deck.value?.status === 'ready' ? `/api/presentations/${id}/preview?edit=1&v=${previewKey.value}` : ''));
 
   // Video đã dùng trong bài + video tải lên chưa gắn trang nào (thư viện "Video trong bài").
   const videoLibrary = computed(() => {
@@ -91,7 +92,7 @@ export function useEditor(id, { onOutline } = {}) {
       const body = { spec, specVersion: deck.value.specVersion };
       if (draft.value.title !== deck.value.title) body.title = draft.value.title.trim();
       adopt((await patch(`/api/presentations/${id}`, body)).data);
-      previewKey.value = Date.now();
+      // Khung xem trước đã hiển thị bản nháp (dựng trực tiếp) → không cần tải lại khung sau khi lưu.
       return true;
     } catch (err) {
       saveError.value = err;
@@ -115,9 +116,10 @@ export function useEditor(id, { onOutline } = {}) {
 
   /* ---- thao tác slide ---- */
   const slides = () => draft.value.spec.slides;
-  function addSlide(layout = 'bullets') {
+  // template: mẫu bố cục cho trang tự do (trang trắng, tiêu đề + nội dung, ảnh trái – chữ phải…).
+  function addSlide(layout = 'bullets', template = 'blank') {
     if (slides().length >= SPEC_LIMITS.slides) throw new ApiError(0, 'LIMIT', `Tối đa ${SPEC_LIMITS.slides} trang`);
-    slides().splice(selected.value + 1, 0, newSlide(layout));
+    slides().splice(selected.value + 1, 0, newSlide(layout, template));
     selected.value += 1;
   }
   function copySlide(i = selected.value) {

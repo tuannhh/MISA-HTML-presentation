@@ -76,7 +76,7 @@
 |---|---|---|
 | `MInput.vue`, `MTextarea.vue` | `defineOptions({ inheritAttrs: false })` + `useAttrs()`: `class`/`style` ở wrapper, mọi attr khác (`id`, `name`, `autocomplete`, `aria-*`, `maxlength`, `inputmode`…) chuyển xuống thẻ input/textarea thật | Bản gốc gắn attr lên `div` bọc ngoài → mất autocomplete, label `for` không liên kết, trình đọc màn hình không đọc nhãn |
 | `MDataTable.vue` | Prop `hideTools: ('refresh'\|'export'\|'columns'\|'filter')[]`; hàng hiện nút thao tác cả khi `group-focus-within` | Ẩn nút không có chức năng; dùng được bằng bàn phím |
-| `iconRegistry.generated.js` | Thêm icon `video`, `player-play`, `brand-youtube`, `scissors`, `palette`, `typography` (Tabler, nối trước `export const ICON_NAMES`) | MDS chưa có icon cho video/tách nền/thiết kế; sinh lại registry sẽ mất |
+| `iconRegistry.generated.js` | Thêm icon `video`, `player-play`, `brand-youtube`, `scissors`, `palette`, `typography`; đợt 2026-10-06 thêm `layout-board`, `table`, `square-rounded`, `sparkles`, `crop`, `rotate`, `rotate-clockwise`, `flip-horizontal`, `flip-vertical`, `sun`, `droplet`, `contrast`, `zoom-in`, `arrows-move`, `adjustments`, `stack`, `align-left/center/right`, `world-search`, `row-insert-bottom`, `column-insert-right` (Tabler, nối CUỐI object `ICON_REGISTRY` trước `})`) | MDS chưa có icon cho video/tách nền/thiết kế; sinh lại registry sẽ mất |
 | `MUpload.vue` | Prop `block` (dropzone rộng hết khung, có icon + dòng `hint`), `sizeHint` (thay chú thích "Dung lượng tối đa…") | Form tạo bài 1 cột rộng; giới hạn theo **tổng** dung lượng nhiều tệp, không theo từng tệp |
 | `MUpload.vue` | Dropzone là `div role=button` (tabindex, Enter/Space), `<input type=file>` đặt NGOÀI dropzone, bỏ `@click.prevent` | Bản gốc: `<label @click.prevent>` bọc input → `input.click()` nổi bọt lên label bị `preventDefault` → trình duyệt huỷ hộp chọn tệp, bấm không mở cửa sổ (lỗi "không tải được tệp" ở tab Tải tệp lên) |
 
@@ -100,6 +100,17 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 
 ### Browser pane của Claude desktop chặn iframe
 - Trong khung trình duyệt tích hợp của Claude desktop, iframe preview báo `ERR_BLOCKED_BY_CLIENT` — là giới hạn của khung đó, **không phải lỗi app**. Mở thẳng URL preview cũng vậy: trang sandbox (origin `null`) bị pane chặn mọi request ảnh/video. Kiểm chứng slide bằng Chrome thật hoặc puppeteer trên HTML xuất (`tmp/check-export.mjs`).
+
+### Khung sửa trực tiếp: hoãn dựng lại phải xét `document.hasFocus()`
+- Engine hoãn `deck:render` khi người dùng đang gõ trong khung. Bấm sang ô bên ngoài (ứng dụng) thì `document.activeElement` của khung **vẫn trỏ vào ô cũ** → nếu chỉ xét activeElement, mọi lần dựng lại sau đó bị hoãn mãi (sửa ở bảng bên phải không thấy trên khung). Điều kiện đúng: `isContentEditable && deck.contains(a) && document.hasFocus()`.
+
+### Kéo phần tử: `setPointerCapture` đổi đích của `dblclick`
+- Khối `.fe` gọi `setPointerCapture` khi nhấn → `click`/`dblclick` sau đó có `e.target` là **chính khối**, không phải chữ/ảnh bên trong → `closest('[data-m]')` rỗng, bấm đúp không mở gì. Lấy phần tử thật bằng `document.elementFromPoint` (nằm trong khối), không thấy thì lấy `[data-m]`/`[data-e]` đầu tiên của khối.
+- Puppeteer: `mouse.click(x, y, { clickCount: 2 })` chỉ phát **1** lần nhấn (đặt `detail`); bấm đúp thật dùng `{ count: 2 }`.
+
+### sharp: thứ tự phép biến đổi cố định, không theo thứ tự gọi
+- Xoay góc 90° luôn chạy **trước** `flip/flop` dù gọi sau; trình duyệt (Cropper/CSS) lật theo trục ảnh gốc rồi mới xoay → lật ở lượt riêng trước khi xoay.
+- `modulate({ brightness })` nhân độ sáng trong không gian LCh (xanh dương đậm gần như không tối đi) ≠ CSS `brightness()` nhân RGB → dùng `linear`/`recomb` theo công thức bộ lọc CSS, mỗi bước 1 lượt (sharp chỉ giữ 1 phép `linear`/lượt).
 
 ### Video/YouTube không phát được trong iframe sandbox
 - iframe preview không có `allow-same-origin`/fullscreen → không `requestFullscreen` được, YouTube cũng từ chối nhúng trong origin `null`. **Cách làm:** engine chỉ gửi `postMessage({type:'deck:video'})`, app (`VideoOverlay`) phát. Đừng "sửa" bằng cách thêm `allow-same-origin` vào sandbox — script trong bài sẽ đọc được cookie/DOM app.

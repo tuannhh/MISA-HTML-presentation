@@ -1,5 +1,42 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-06 — Bản cập nhật lớn: sửa trực tiếp trên khung xem trước, trang tự do, ảnh AI / Internet, chỉnh sửa ảnh, đường dẫn thân thiện
+
+### Yêu cầu
+(1) Sửa chữ ngay trên bản xem trước thay vì form từng trang, lưu từng trang rồi làm tiếp; (2) chèn trang trắng — gợi ý/chọn bố cục,
+thêm bảng, ảnh, video, chỉnh cỡ/vị trí; (3) ảnh: AI tự sinh ảnh hợp nội dung bằng Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`, 1K),
+bấm ảnh để đổi — tải lên / tìm Internet theo từ khoá (chốt dùng **Pixabay**) / tạo bằng AI theo mô tả; AI tự tạo ảnh khi dựng bài là
+**tuỳ chọn ở màn Tạo, mặc định bật**; (4) công cụ sửa ảnh đơn giản kiểu Gamma (cắt, xoay, sáng/tối, độ rực, giữ khung nhưng dịch/zoom ảnh),
+không dùng AI; (5) đường dẫn `/ten-bai/<8 ký tự ngẫu nhiên>/tinh-nang`.
+
+### Thay đổi (chi tiết `05` §12)
+- DB: `presentations.short_code` (changelog `20261006_090000`, `REQUIRED_CHANGELOGS`), route `:id` nhận UUID hoặc mã; router giao diện
+  `/:slug/:code/(outline|edit|view)` + chuyển hướng `/p/:id/...`; `useDeckUrl` tự sửa tên bài trên URL.
+- Renderer dùng được cả trên trình duyệt (`deckParts`), chế độ `edit` (`data-e`/`data-m`), layout `free` (`shared/deck/free.js`, ngoài `AI_LAYOUTS`),
+  ảnh có `src`/`edit`/`pos`/`zoom`. Engine: chế độ sửa (contenteditable, chọn/kéo/đổi cỡ/hít lề, phím tắt, `deck:render` thay slide tại chỗ,
+  Ctrl/Cmd+S). Giao diện: `useLiveDeck`, `useSlideMedia`, `ImageStudio(Panel)`, `ImageEditor` (Cropper.js), `InsertSlidePanel`,
+  `FreeElementsPanel`, `RangeField`, `mobile/FullScreenSheet`; màn Tạo có ô "Ảnh minh hoạ AI".
+- Máy chủ: `geminiService.generateImage` + `imagePrompt` trong `designDeck`; `illustrate()` khi dựng bài; `stockImageService` (Pixabay);
+  `applyImageEdit` (sharp); API `assets/:id/edit`, `images/generate`, `images/import`, `GET /api/images/search`; rate-limit `aiImage`,
+  `imageSearch`; CSP ứng dụng cho ảnh xem trước Pixabay. 22 icon Tabler mới (`09`).
+- Sửa phát hiện khi kiểm thử (`09`): sharp luôn xoay 90° trước khi lật → lật ở lượt riêng; `modulate` lệch màu so với CSS → công thức bộ lọc CSS;
+  `applyFrameEdit` nhận nhầm khoá `__proto__` (map thường có prototype — không gây ô nhiễm nhưng trả "đã sửa") → map không prototype;
+  khung hoãn dựng lại mãi sau khi người dùng bấm ra ngoài → thêm `document.hasFocus()`; bấm đúp phần tử trang tự do không ăn do
+  `setPointerCapture` → lấy phần tử dưới con trỏ.
+
+### Đã kiểm chứng
+- Unit 88/88 (mới `live-edit.test.js` 13 test: mẫu trang tự do, chuẩn hoá phần tử, ảnh `src/edit/pos/zoom`, asset trong phần tử, renderer
+  edit vs trình chiếu + escape, `applyFrameEdit` allowlist, `mediaTarget/setMedia`, `slugify/deckPath/newShortCode`, Pixabay giả lập fetch
+  (lang=vi, nhớ đệm, chặn host lạ/ảnh quá lớn/thiếu khoá), `applyImageEdit` lật+xoay/cắt/sáng/rực/alpha).
+- Docker: changelog chạy trên MySQL Docker (51 bài được cấp mã, không trùng); log khởi động che `PIXABAY_API_KEY`.
+- Gemini thật: tạo bài từ văn bản với ảnh AI bật → dàn ý 7 trang → dựng 35 giây, 1 ảnh AI (bìa, 4:3, 4,9 giây).
+- Puppeteer trên Docker (`tmp/ui-live-edit.mjs`, `tmp/ui-export.mjs`): `/p/<mã>/edit` → `/Ke-hoach-…/<mã>/edit`; gõ tiêu đề trên khung → bản nháp
+  + "chưa lưu"; Ctrl+S trong khung → PATCH 200; sửa nhãn ở bảng → khung cập nhật trước khi lưu; Thêm trang "Ảnh trái – chữ phải" → 3 phần tử;
+  kéo → toạ độ đổi; bấm đúp chữ → đang sửa; bấm đúp ô ảnh → hộp ảnh; Pixabay 24 kết quả → nhập 201; chỉnh sửa (vừa khung, xoay 90°, sáng −30,
+  phóng 140%) → 201, spec lưu `src/edit/zoom`; tạo ảnh AI 201; lưu + tải lại giữ nguyên; mobile 390px: khung + màn con Thêm trang; trình chiếu
+  trang tự do không còn chữ hướng dẫn sửa; xuất HTML (có phần tử tự do) + PDF 200; URL tên sai tự sửa.
+- Smoke Docker: TẤT CẢ ĐẠT (lần này bước dựng bài xong trong ngưỡng chờ).
+
 ## 2026-10-06 — Ảnh giao diện phần mềm từ PDF, tấm nền ảnh, màu nhấn rực hơn
 
 ### Yêu cầu

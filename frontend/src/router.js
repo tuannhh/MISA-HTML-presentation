@@ -3,6 +3,8 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { defineAsyncComponent, h } from 'vue';
 import { session, loadSession, isAdmin } from './lib/session.js';
+import { get } from './lib/api.js';
+import { deckPath } from './lib/deckPath.js';
 
 const lazy = (loader) => defineAsyncComponent(loader);
 const pair = (d, m) => ({ desktop: lazy(d), mobile: lazy(m) });
@@ -17,9 +19,12 @@ const routes = [
   { path: '/decks', component: Holder, meta: { auth: true, nav: 'mine', title: 'Bài của tôi', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },
   { path: '/public', component: Holder, meta: { auth: true, nav: 'public', title: 'Thư viện công khai', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },
   { path: '/create', component: Holder, meta: { auth: true, nav: 'create', title: 'Tạo bài trình bày', ...pair(() => import('./desktop/CreatePage.vue'), () => import('./mobile/CreatePage.vue')) } },
-  { path: '/p/:id/outline', component: Holder, meta: { auth: true, nav: 'mine', title: 'Duyệt dàn ý', ...pair(() => import('./desktop/OutlinePage.vue'), () => import('./mobile/OutlinePage.vue')) } },
-  { path: '/p/:id/edit', component: Holder, meta: { auth: true, nav: 'mine', title: 'Chỉnh sửa', ...pair(() => import('./desktop/EditorPage.vue'), () => import('./mobile/EditorPage.vue')) } },
-  { path: '/p/:id/view', component: Holder, meta: { auth: true, nav: 'public', title: 'Trình chiếu', ...pair(() => import('./desktop/ViewerPage.vue'), () => import('./mobile/ViewerPage.vue')) } },
+  // Bài trình bày: /<tên-bài>/<mã 8 ký tự>/<tính năng> (tên chỉ để đọc; định vị bằng mã — xem lib/deckPath.js).
+  { path: '/:slug/:code([a-z0-9]{8})/outline', component: Holder, meta: { auth: true, nav: 'mine', title: 'Duyệt dàn ý', ...pair(() => import('./desktop/OutlinePage.vue'), () => import('./mobile/OutlinePage.vue')) } },
+  { path: '/:slug/:code([a-z0-9]{8})/edit', component: Holder, meta: { auth: true, nav: 'mine', title: 'Chỉnh sửa', ...pair(() => import('./desktop/EditorPage.vue'), () => import('./mobile/EditorPage.vue')) } },
+  { path: '/:slug/:code([a-z0-9]{8})/view', component: Holder, meta: { auth: true, nav: 'public', title: 'Trình chiếu', ...pair(() => import('./desktop/ViewerPage.vue'), () => import('./mobile/ViewerPage.vue')) } },
+  // Đường dẫn cũ /p/<uuid>/<tính năng> (liên kết đã chia sẻ trước đây) → chuyển sang đường dẫn mới (xem beforeEach).
+  { path: '/p/:id/:feature(outline|edit|view)', component: Holder, meta: { auth: true, legacyDeck: true, title: 'Bài trình bày', ...pair(() => import('./desktop/NotFoundPage.vue'), () => import('./mobile/NotFoundPage.vue')) } },
   { path: '/account', component: Holder, meta: { auth: true, nav: 'account', title: 'Tài khoản', ...pair(() => import('./desktop/AccountPage.vue'), () => import('./mobile/AccountPage.vue')) } },
   { path: '/admin/users', component: Holder, meta: { auth: true, admin: true, nav: 'admin', title: 'Quản trị người dùng', ...pair(() => import('./desktop/AdminUsersPage.vue'), () => import('./mobile/AdminUsersPage.vue')) } },
   { path: '/403', component: Holder, meta: { auth: true, title: 'Không có quyền', ...pair(() => import('./desktop/ForbiddenPage.vue'), () => import('./mobile/ForbiddenPage.vue')) } },
@@ -48,6 +53,14 @@ router.beforeEach(async (to) => {
   if (to.meta.auth && !user) return { path: '/login', query: to.fullPath !== '/decks' ? { next: to.fullPath } : {} };
   if (user?.mustChangePassword && to.meta.auth && !to.meta.allowMustChange) return '/change-password';
   if (to.meta.admin && !isAdmin()) return { path: '/403', replace: true };
+  if (to.meta.legacyDeck) {
+    try {
+      const d = (await get(`/api/presentations/${encodeURIComponent(to.params.id)}`)).data;
+      if (d.code) return { path: deckPath(d, to.params.feature), replace: true };
+    } catch {
+      /* không tìm thấy / không có quyền → trang "Không tìm thấy" */
+    }
+  }
   return true;
 });
 

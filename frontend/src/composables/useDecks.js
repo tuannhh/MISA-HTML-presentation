@@ -1,5 +1,6 @@
 // Danh sách bài trình bày (của tôi / công khai) + thao tác nhanh — dùng chung desktop/mobile.
 import { deckTarget } from '@/lib/deckActions.js';
+import { deckPath } from '@/lib/deckPath.js';
 import { ref, reactive, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { get, post, patch, del, download } from '@/lib/api.js';
@@ -90,7 +91,7 @@ export function useDecks(scope) {
   async function handle(key, d) {
     try {
       if (key === 'edit') return router.push(deckTarget(d));
-      if (key === 'view') return router.push(`/p/${d.id}/view`);
+      if (key === 'view') return router.push(deckPath(d, 'view'));
       if (key === 'remove') return (pendingRemove.value = d);
       if (key === 'public' || key === 'private') {
         await setVisibility(d, key);
@@ -99,7 +100,7 @@ export function useDecks(scope) {
       if (key === 'duplicate') {
         const copy = await duplicate(d);
         toast.success('Đã tạo bản sao riêng tư');
-        return router.push(`/p/${copy.id}/edit`);
+        return router.push(deckPath(copy, 'edit'));
       }
       if (key === 'export-html' || key === 'export-pdf') {
         toast.info(key === 'export-pdf' ? 'Đang dựng PDF, vui lòng chờ…' : 'Đang đóng gói HTML…');

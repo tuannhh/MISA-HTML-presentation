@@ -1,6 +1,7 @@
 <script setup>
 // Trình chiếu desktop: khung bài đầy vùng nội dung, thông tin tác giả + thao tác nhân bản/tải xuống.
 import { computed, onMounted, ref } from 'vue'
+import { deckPath } from '@/lib/deckPath.js'
 import { useRoute, useRouter } from 'vue-router'
 import DesktopShell from './DesktopShell.vue'
 import MButton from '@/components/mds/MButton.vue'
@@ -13,12 +14,14 @@ import { useToast } from '@/components/mds/toast.js'
 import { get, post, download } from '@/lib/api.js'
 import { formatDateTime, ratioCss } from '@/lib/format.js'
 import { useDeckFrame } from '@/composables/useDeckFrame.js'
+import { useDeckUrl } from '@/composables/useDeckUrl.js'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const id = route.params.id
+const id = route.params.code || route.params.id
 const deck = ref(null)
+useDeckUrl(deck, 'view')
 const loading = ref(true)
 const error = ref(null)
 const busy = ref('')
@@ -48,7 +51,7 @@ async function act(kind) {
     if (kind === 'duplicate') {
       const copy = (await post(`/api/presentations/${id}/duplicate`)).data
       toast.success('Đã nhân bản về bài của bạn')
-      router.push(`/p/${copy.id}/edit`)
+      router.push(deckPath(copy, 'edit'))
     } else await download(`/api/presentations/${id}/export.${kind}`, `${deck.value.title}.${kind}`)
   } catch (err) {
     toast.error(err.message)
@@ -95,7 +98,7 @@ function fullscreen() {
             <MButton variant="outline" :loading="busy === 'html' || busy === 'pdf'" aria-haspopup="menu"><template #icon><MIcon name="download" :size="16" /></template>Tải xuống<MIcon name="chevron-down" :size="16" /></MButton>
           </template>
         </MDropdownMenu>
-        <MButton v-if="deck.isOwner" variant="primary" @click="router.push(`/p/${id}/edit`)"><template #icon><MIcon name="pencil" :size="16" /></template>Chỉnh sửa</MButton>
+        <MButton v-if="deck.isOwner" variant="primary" @click="router.push(deckPath(deck, 'edit'))"><template #icon><MIcon name="pencil" :size="16" /></template>Chỉnh sửa</MButton>
         <MButton v-else variant="primary" :loading="busy === 'duplicate'" @click="act('duplicate')"><template #icon><MIcon name="copy" :size="16" /></template>Nhân bản để sửa</MButton>
       </div>
       <div class="flex min-h-0 flex-1 items-center justify-center bg-[#05070F] p-4">

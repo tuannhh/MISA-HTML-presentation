@@ -11,15 +11,18 @@
 
 ```
 frontend/src/
-  App.vue            # chọn trang theo bề mặt: meta.desktop | meta.mobile, key = `${surface}:${path}`; gắn VideoOverlay toàn cục
+  App.vue            # chọn trang theo bề mặt: meta.desktop | meta.mobile, key = `${surface}:${route.name}:${code|id}` (đổi tên bài trên URL không dựng lại trang); gắn VideoOverlay toàn cục
   router.js          # route + guard (session, guest, auth, mustChange, admin), safeNext()
-  lib/               # api, session, surface, slideModel, deckActions, format, design (tông màu/nền/phông/logo cho giao diện)
-  composables/       # logic dùng chung 2 bề mặt: useDecks, useCreate, useOutline, useEditor, useMedia, useVideoPlayer, useDeckFrame, useAuthForms, useAdminUsers
+  lib/               # api, session, surface, slideModel, deckActions, format, design (tông màu/nền/phông/logo cho giao diện),
+                     #   deckPath (đường dẫn /ten-bai/ma/tinh-nang), editPaths (allowlist đường dẫn trường sửa trên khung)
+  composables/       # logic dùng chung 2 bề mặt: useDecks, useCreate, useOutline, useEditor, useMedia, useVideoPlayer, useDeckFrame, useAuthForms, useAdminUsers,
+                     #   useLiveDeck (khung sửa trực tiếp), useSlideMedia (mở hộp ảnh/video theo ô), useDeckUrl
   shared/            # component dùng chung: SlideFields, ImagePicker, DeckThumb, RatioPicker, FormField, FormAlert, TempPasswordBox,
                      #   ThemePicker, DesignPanel (+ DesignPreview, BackgroundPicker, DeckBgCanvas, FontPicker, LogoSettings),
-                     #   OutlineSlideCard, OutlineMedia, VideoPicker, MediaLibrary, VideoOverlay
+                     #   OutlineSlideCard, OutlineMedia, VideoPicker, MediaLibrary, VideoOverlay,
+                     #   ImageStudio(+Panel), ImageEditor (Cropper.js), RangeField, InsertSlidePanel, FreeElementsPanel
   desktop/           # composition desktop: DesktopShell (MHeaderBar + MSidebar) + các trang
-  mobile/            # composition mobile mini-app: MobileShell (MMobileTopBar + MMobileBottomNav) + ActionSheet + các trang
+  mobile/            # composition mobile mini-app: MobileShell (MMobileTopBar + MMobileBottomNav) + ActionSheet + FullScreenSheet + các trang
   components/mds/    # bản sao MDS 2.0 (có vá cục bộ — xem 09)
 ```
 
@@ -44,14 +47,16 @@ Ký hiệu: ✅ hiển thị trang; ↪ chuyển hướng; 🚫 trang 403 **tron
 | `/change-password` | Đổi mật khẩu (bắt buộc hoặc tự chọn) | ↪ `/login` | ✅ | ✅ | AuthLayout (forced) / DesktopShell | MobileShell, footer sticky |
 | `/decks` | Bài của tôi | ↪ `/login?next=` | ✅ | ✅ | Lưới thẻ + tab + tìm kiếm + phân trang | Danh sách hàng + ActionSheet; bottom nav "Bài của tôi" |
 | `/public` | Thư viện công khai | ↪ login | ✅ | ✅ | như trên (menu chỉ đọc) | như trên; bottom nav "Công khai" |
-| `/create` | Tạo bằng AI (bước 1: lập dàn ý) | ↪ login | ✅ | ✅ | Tab nguồn, MUpload `block` nhiều tệp (tổng ≤ 300MB, tiến trình tải lên qua `uploadForm` XHR), RatioPicker, **ThemePicker** (Nền tối/sáng + mẫu theo tông + Tự động + Tuỳ chỉnh 2 màu có gợi ý), số trang Tự động/Tuỳ chỉnh, nút "Lập dàn ý bằng AI" → `/p/:id/outline` | Back → `/decks`, không bottom nav, footer Hủy/Lập dàn ý, ThemePicker `compact` |
-| `/p/:id/outline` | Duyệt dàn ý (bước 2) — trạng thái `outlining`/`outline`/`generating` | ↪ login | ✅ chủ sở hữu | như user | Bước tiến trình 3 bước; cột trái: thẻ từng trang (`OutlineSlideCard`: bố cục, tiêu đề, mô tả, các dòng nội dung, media, ghi chú, menu ⋯); cột phải: `DesignPanel` (xem trước + tab Màu sắc/Nền/Phông chữ/Logo + chân trang); footer Hủy thay đổi/Lưu nháp/Dựng bài; xong → ↪ `/p/:id/edit` | Tab phân đoạn "Nội dung (N)" / "Thiết kế"; thẻ `compact` (⋯ 44px mở ActionSheet thao tác trang); footer Lưu nháp/Dựng bài; ActionSheet ⋯: Hủy thay đổi, Xóa bài |
-| `/p/:id/edit` | Trình soạn thảo | ↪ login (bài còn ở bước dàn ý → ↪ `/outline`) | ✅ chủ sở hữu (không phải chủ → thông báo + nút Xem) | như user | 3 cột: danh sách trang · preview · panel sửa (tab "Thiết lập bài" chứa DesignPanel) | Preview trên, dải trang ngang, form dưới, màn con "Thiết kế & thiết lập" (DesignPanel `compact`) |
-| `/p/:id/view` | Trình chiếu | ↪ login | ✅ chủ sở hữu hoặc bài public | như user | Toolbar Prev/Next, toàn màn hình, tải xuống | Footer Prev/Next/Chỉnh sửa hoặc Nhân bản |
+| `/create` | Tạo bằng AI (bước 1: lập dàn ý) | ↪ login | ✅ | ✅ | Tab nguồn, MUpload `block` nhiều tệp (tổng ≤ 300MB, tiến trình tải lên qua `uploadForm` XHR), RatioPicker, **ThemePicker** (Nền tối/sáng + mẫu theo tông + Tự động + Tuỳ chỉnh 2 màu có gợi ý), số trang Tự động/Tuỳ chỉnh, nút "Lập dàn ý bằng AI" → `/<ten-bai>/<ma>/outline` | Back → `/decks`, không bottom nav, footer Hủy/Lập dàn ý, ThemePicker `compact` |
+| `/:slug/:code/outline` | Duyệt dàn ý (bước 2) — trạng thái `outlining`/`outline`/`generating` | ↪ login | ✅ chủ sở hữu | như user | Bước tiến trình 3 bước; cột trái: thẻ từng trang (`OutlineSlideCard`: bố cục, tiêu đề, mô tả, các dòng nội dung, media, ghi chú, menu ⋯); cột phải: `DesignPanel` (xem trước + tab Màu sắc/Nền/Phông chữ/Logo + chân trang); footer Hủy thay đổi/Lưu nháp/Dựng bài; xong → ↪ `/:slug/:code/edit` | Tab phân đoạn "Nội dung (N)" / "Thiết kế"; thẻ `compact` (⋯ 44px mở ActionSheet thao tác trang); footer Lưu nháp/Dựng bài; ActionSheet ⋯: Hủy thay đổi, Xóa bài |
+| `/:slug/:code/edit` | Trình soạn thảo | ↪ login (bài còn ở bước dàn ý → ↪ `/outline`) | ✅ chủ sở hữu (không phải chủ → thông báo + nút Xem) | như user | 3 cột: danh sách trang (+ "Thêm trang" → dialog `InsertSlidePanel`) · **khung sửa trực tiếp** · panel sửa (trang tự do: `FreeElementsPanel` trên `SlideFields`; tab "Thiết lập bài" chứa DesignPanel); hộp "Đổi / chỉnh sửa ảnh" (`ImageStudio`) + hộp video; Ctrl/Cmd+S | Khung sửa trực tiếp trên (chạm chữ sửa, chạm ảnh đổi), dải trang ngang (+ → màn con Thêm trang), form dưới (trang tự do có `FreeElementsPanel compact`), màn con toàn màn hình (`FullScreenSheet`): ảnh (`ImageStudioPanel compact`), video, thêm trang, "Thiết kế & thiết lập" |
+| `/:slug/:code/view` | Trình chiếu | ↪ login | ✅ chủ sở hữu hoặc bài public | như user | Toolbar Prev/Next, toàn màn hình, tải xuống | Footer Prev/Next/Chỉnh sửa hoặc Nhân bản |
 | `/account` | Tài khoản | ↪ login | ✅ | ✅ (+ lối vào Quản trị) | DesktopShell | Bottom nav "Tài khoản"; link đổi mật khẩu, quản trị, đăng xuất |
 | `/admin/users` | Quản lý người dùng | ↪ login | 🚫 `/403` | ✅ | MDataTable + dialog | Danh sách thẻ + ActionSheet + sheet tạo |
 | `/403` | Không có quyền | — | ✅ | ✅ | DesktopShell | MobileShell |
 | `/:pathMatch(.*)*` | 404 | ✅ | ✅ | ✅ | DesktopShell | MobileShell |
+
+Đường dẫn cũ `/p/:id/:feature` (UUID hoặc mã) → `beforeEach` hỏi API rồi ↪ đường dẫn mới; `:code` khớp `[a-z0-9]{8}`, phần tên bài tự sửa theo tên hiện tại (`useDeckUrl`).
 
 Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChange`) ↪ `/change-password`. `?next=` chỉ nhận đường dẫn nội bộ (`safeNext` chặn open redirect).
 
@@ -76,7 +81,7 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 
 - `SlideFields.vue` sinh form theo layout: kicker, tiêu đề, highlight (phải nằm trong tiêu đề), subtitle, caption, tags (phân tách dấu phẩy), icon (combobox), quote, danh sách stats/items/steps/columns (thêm/xoá/di chuyển), ImagePicker (tải ảnh mới hoặc chọn ảnh đã có trong bài), gallery, ghi chú. Lỗi độ dài tính từ `SPEC_LIMITS` ngay khi gõ.
 - Đổi layout (`change-layout`) dùng `lib/slideModel.js` để chuyển dữ liệu sang hình dạng của layout mới mà không mất nội dung chung.
-- Preview là iframe `sandbox="allow-scripts allow-popups"` + thuộc tính **`data-deck-frame`** trỏ `/api/presentations/:id/preview?v=<specVersion>`; đồng bộ trang qua `postMessage` (`deck:goto` từ app, `deck:slide` từ engine) — `useDeckFrame`. Bấm video trong slide → engine gửi `deck:video` → `useVideoPlayer` chỉ nhận từ iframe có `data-deck-frame` → `VideoOverlay` phát toàn màn hình (iframe sandbox không tự fullscreen/nhúng YouTube được).
+- Preview trình soạn thảo là iframe `sandbox="allow-scripts allow-popups"` + **`data-deck-frame`** trỏ `/api/presentations/:id/preview?edit=1` — **khung sửa trực tiếp** (`useLiveDeck`, xem `05` §12): engine → app `deck:ready|slide|edit|media|select|geom|el|save`; app → engine `deck:render|goto|select`. Mọi tin nhận chỉ từ đúng `e.source`, đường dẫn trường qua allowlist `editPaths`, số qua kẹp hữu hạn. Trang xem (`/view`) vẫn dùng `useDeckFrame` (`deck:goto`/`deck:slide`). Bấm video trong slide → engine gửi `deck:video` → `useVideoPlayer` chỉ nhận từ iframe có `data-deck-frame` → `VideoOverlay` phát toàn màn hình (iframe sandbox không tự fullscreen/nhúng YouTube được).
 - Trang có ô media (`MEDIA_LAYOUTS`) có tab Ảnh / Video trong `SlideFields`; bảng Thiết kế dùng chung `DesignPanel` với bước dàn ý.
 - `useEditor`/`useOutline` áp `withDesignDefaults` khi nhận dữ liệu (component không tự sửa props).
 - Engine thêm `body.embed` khi chạy trong iframe → ẩn HUD của engine; ứng dụng tự vẽ nút Prev/Next.

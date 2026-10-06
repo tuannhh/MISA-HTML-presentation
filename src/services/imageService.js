@@ -27,6 +27,74 @@ export async function normalizeImage(buffer, { maxSide = 1920, quality = 82 } = 
   }
 }
 
+// Chỉnh sửa ảnh (thông số đã qua cleanImageEdit): lật → xoay (góc bất kỳ, nền trong suốt) → cắt theo tỷ lệ 0–1 của ảnh đã
+// xoay (khớp toạ độ của Cropper.js ở trình duyệt) → sáng/tối → độ rực màu → tương phản (công thức bộ lọc CSS) → WebP ≤ 1920px.
+export async function applyImageEdit(buffer, e, { maxSide = 1920, quality = 86 } = {}) {
+  try {
+    // Lật ở lượt riêng TRƯỚC khi xoay: sharp luôn xoay góc 90° trước rồi mới lật (bất kể thứ tự gọi), còn trình chỉnh sửa
+    // phía trình duyệt (cropper) lật theo trục ảnh gốc rồi mới xoay → tách lượt để kết quả khớp đúng bản xem trước.
+    let input = buffer;
+    if (e.flipH || e.flipV) {
+      let f = sharp(buffer, { limitInputPixels: MAX_PIXELS, failOn: 'error' });
+      if (e.flipH) f = f.flop();
+      if (e.flipV) f = f.flip();
+      input = await f.png({ compressionLevel: 1 }).toBuffer();
+    }
+    let img = sharp(input, { limitInputPixels: MAX_PIXELS, failOn: 'error' });
+    if (e.rotate) img = img.rotate(e.rotate, { background: { r: 255, g: 255, b: 255, alpha: 0 } });
+    const step = await img.png({ compressionLevel: 1 }).toBuffer({ resolveWithObject: true });
+    let pipe = sharp(step.data, { limitInputPixels: MAX_PIXELS });
+    if (e.crop) {
+      const W = step.info.width;
+      const H = step.info.height;
+      const left = Math.min(W - 1, Math.max(0, Math.round(e.crop.x * W)));
+      const top = Math.min(H - 1, Math.max(0, Math.round(e.crop.y * H)));
+      const width = Math.max(1, Math.min(W - left, Math.round(e.crop.w * W)));
+      const height = Math.max(1, Math.min(H - top, Math.round(e.crop.h * H)));
+      pipe = pipe.extract({ left, top, width, height });
+    }
+    // Màu: đúng công thức bộ lọc CSS mà trình chỉnh sửa dùng để xem trước (brightness → saturate → contrast, kẹp 0–255 sau
+    // mỗi bước) để ảnh lưu ra khớp bản xem trước. Không dùng modulate() của sharp (nhân độ sáng trong không gian LCh → lệch màu).
+    if (e.brightness || e.saturation || e.contrast) pipe = await colorPass(pipe, e);
+    const { data, info } = await pipe
+      .resize({ width: maxSide, height: maxSide, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality, effort: 4 })
+      .toBuffer({ resolveWithObject: true });
+    return { buffer: data, width: info.width, height: info.height, mime: 'image/webp', bytes: data.length };
+  } catch {
+    throw unprocessable('Không chỉnh sửa được ảnh này', 'IMAGE_EDIT_FAILED');
+  }
+}
+
+// Mỗi bước 1 lượt (sharp chỉ giữ 1 phép linear/lượt và tự sắp thứ tự các phép trong 1 lượt) — ảnh trung gian dạng raw.
+async function colorPass(pipe, e) {
+  const steps = [];
+  if (e.brightness) {
+    const b = Math.max(0, 1 + e.brightness / 100);
+    steps.push((p) => p.linear([b, b, b], [0, 0, 0]));
+  }
+  if (e.saturation) {
+    const s = Math.max(0, 1 + e.saturation / 100);
+    // Ma trận saturate() của Filter Effects (W3C), áp trên giá trị sRGB như trình duyệt.
+    steps.push((p) => p.recomb([
+      [0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s],
+      [0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s],
+      [0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s],
+    ]));
+  }
+  if (e.contrast) {
+    // Tương phản quanh mức xám giữa (128): out = a·in + 128(1 − a); chỉ kênh màu, giữ kênh alpha.
+    const a = Math.max(0.05, 1 + e.contrast / 100);
+    steps.push((p) => p.linear([a, a, a], [128 * (1 - a), 128 * (1 - a), 128 * (1 - a)]));
+  }
+  let cur = pipe;
+  for (const step of steps) {
+    const { data, info } = await step(cur).raw().toBuffer({ resolveWithObject: true });
+    cur = sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } });
+  }
+  return cur;
+}
+
 // Ảnh trích từ tài liệu: bỏ ảnh lỗi/quá nhỏ/trùng lặp thay vì làm hỏng cả lượt tạo.
 export async function normalizeExtractedImages(list, { max, minSide = 96 }) {
   const out = [];

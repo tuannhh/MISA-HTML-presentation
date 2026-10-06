@@ -129,7 +129,8 @@ POST /build {outlineVersion, outline?} → (lưu nếu có outline) → startBui
 
 - Trình soạn thảo làm việc trên **bản nháp** (`draft`) clone từ spec; mọi thay đổi chỉ cục bộ cho tới khi bấm **Lưu**.
 - **Lưu** = `PATCH /:id { spec, specVersion, title }` → strict normalize → `UPDATE … WHERE spec_version = ?` → version +1. Lệch version → 409, giao diện hiện link "Tải lại bản mới nhất".
-- Thành công → khung xem trước reload, giữ trang đang xem; ảnh bìa render lại sau 4 giây (gộp nhiều lần lưu liên tiếp — `scheduleThumbnail`).
+- **Sửa trực tiếp trên khung xem trước** (2026-10-06, §12): khung không còn tải lại sau khi lưu — ứng dụng dựng lại slide từ bản nháp và gửi vào khung; lưu xong chỉ cập nhật version. Ctrl/Cmd+S lưu (cả khi đang gõ trong khung).
+- Thành công → ảnh bìa render lại sau 4 giây (gộp nhiều lần lưu liên tiếp — `scheduleThumbnail`).
 - **Tỷ lệ** và **Công khai/Riêng tư** áp dụng ngay (PATCH riêng, không cần spec) và **giữ nguyên bản nháp** chưa lưu.
 - Rời trang khi nháp chưa lưu → hộp thoại xác nhận. Nếu component bị unmount do đổi bề mặt desktop↔mobile, nháp được giữ trong `pendingDrafts` (RAM) và khôi phục nếu `specVersion` vẫn khớp.
 - Ảnh mới: `POST /:id/assets` → trả asset id + URL ký → gắn vào `image.asset` của slide trong nháp. Trang có ô media (`MEDIA_LAYOUTS`) chọn được tab Ảnh / Video; Lưu bỏ video ở bố cục không có ô media, bỏ `palette` khi theme không phải `custom`.
@@ -250,4 +251,29 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
   (≥ 1,9) → lớp `.wide`, cột ảnh 2,1fr.
 - **Màu nhấn nền sáng rực hơn** (`palette.js`, `theme.css`): ngưỡng tương phản màu nhấn nền sáng 3:1 (chữ lớn/đồ hoạ; chữ nội dung vẫn đậm) thay vì
   4,5:1. ember cam `#F05A22` trên nền `#FFFCF9`, paper xanh `#2563EB`, sunset `#F05A22`, sky `#1677FF`, forest/royal/ruby sáng hơn.
+
+## 12. Bản cập nhật lớn 2026-10-06: sửa trực tiếp, trang tự do, ảnh AI / Internet, chỉnh sửa ảnh, đường dẫn thân thiện
+
+### Sửa chữ trực tiếp trên khung xem trước
+- Khung trình soạn thảo tải `GET /:id/preview?edit=1` (chỉ chủ sở hữu). Renderer ở chế độ `edit` gắn `data-e="<đường dẫn trường>"` (vd. `title`, `items.2.text`, `stats.0.value`, `columns.1.points.3`, `elements.e-ab12.rows.1.2`, `@footer` = chân trang chung) và `data-m="<ô media>"` (`slot` = ô ảnh/video chính, `images.<i>`, `elements.<id>`).
+- Engine (`startEdit`) bật `contenteditable` (plaintext-only), gửi `deck:edit {index, path, value}` mỗi lần gõ; Enter (trường 1 dòng)/Esc kết thúc. Ứng dụng áp vào bản nháp qua `lib/editPaths.js` **allowlist** (đường dẫn lạ, `__proto__`, chỉ số vượt mảng bị bỏ; cắt theo `SPEC_LIMITS`, bỏ ký tự điều khiển).
+- Chiều ngược lại: `useLiveDeck` dựng slide từ bản nháp bằng **chính renderer dùng chung** (`deckParts`, debounce 160 ms) → `deck:render {slides[], css, attrs}`; engine chỉ thay slide có HTML đổi (so cache), hoãn khi người dùng đang gõ **trong khung** (`document.hasFocus()`), dựng lại nền động khi đổi theme/nền. Sửa ở bảng bên phải → khung cập nhật ngay; Lưu mới gửi lên máy chủ.
+- Bấm ảnh/video trên khung → `deck:media {index, path, kind, w, h}` → mở hộp "Đổi / chỉnh sửa ảnh" (hoặc hộp video) với đúng tỷ lệ ô.
+
+### Trang tự do (layout `free`) + chèn trang
+- Không có trong danh sách layout cho AI (`AI_LAYOUTS`); chỉ người dùng tạo. `slide.elements[]` (≤ 30): `text` (kiểu chữ title/heading/body/caption/label × hệ số cỡ 0.4–4, căn ngang/dọc, màu theo token theme, nền), `image` (tham chiếu ảnh + bo góc), `video`, `table` (≤ 12×8, hàng tiêu đề, kiểu sọc/kẻ ô/kẻ ngang), `shape` (chữ nhật/bo góc/tròn/đường kẻ, màu token, độ đậm). Toạ độ **% khung** (x, y, w, h) → giữ đúng bố cục khi đổi tỷ lệ.
+- "Thêm trang" mở hộp chọn: 10 mẫu trang tự do (`FREE_TEMPLATES` trong `shared/deck/free.js`: trang trắng, tiêu đề + nội dung, 2 cột, ảnh trái/phải, ảnh lớn + tiêu đề, bảng, video, 3 ảnh, con số lớn) + 13 bố cục có cấu trúc.
+- Trên khung: bấm chọn, kéo di chuyển, 8 tay nắm đổi cỡ (Shift giữ tỷ lệ), hít lề/tâm/phần tử khác trong 0,8% (Alt tắt), phím mũi tên dịch (Shift ×8), Delete xoá, Ctrl/Cmd+D nhân bản, bấm đúp sửa chữ / đổi ảnh. Bảng thuộc tính (`FreeElementsPanel`): thêm phần tử, danh sách lớp, ô số %, thuộc tính theo loại, thứ tự lớp.
+- Máy chủ chuẩn hoá phần tử (`cleanElement`): loại lạ bị bỏ, toạ độ kẹp (−50..100 / 2..150), id `e-…` trùng được cấp lại, bảng luôn chữ nhật.
+
+### Ảnh: AI, tìm Internet, chỉnh sửa
+- **Ảnh AI khi dựng bài** (tuỳ chọn ở màn Tạo, mặc định bật, lưu ở `outline.options.aiImages`): `designDeck` được yêu cầu thêm `imagePrompt` (tiếng Anh) cho trang **cần** minh hoạ mà chưa có ảnh thật/ảnh giao diện; `illustrate()` tạo tối đa `AI_IMAGES_PER_DECK` (6) ảnh 4:3 — ưu tiên bìa → mở đầu phần → còn lại — chạy song song `AI_IMAGES_CONCURRENCY`; ảnh lỗi bỏ qua, không làm hỏng bài.
+- **Hộp "Đổi / chỉnh sửa ảnh"** (`ImageStudioPanel`; desktop = dialog, mobile = màn toàn màn hình): Tải lên · Ảnh trong bài · Tìm ảnh (Pixabay, từ khoá Việt/Anh, lọc hướng) · Tạo bằng AI (mô tả + tỷ lệ, gợi ý sẵn từ tiêu đề trang) · Chỉnh sửa. Chọn ảnh mới giữ chú thích/kiểu hiển thị, bỏ thông số chỉnh sửa của ảnh cũ.
+- **Chỉnh sửa ảnh** (`ImageEditor`, Cropper.js v1, không AI): cắt theo tỷ lệ (tự do/vừa khung/16:9/4:3/1:1/3:4), xoay 90° + xoay tinh ±45°, lật ngang/dọc, sáng/tối – độ rực – tương phản (xem trước bằng CSS filter), **vị trí trong khung** (lấp đầy/hiện trọn, phóng 100–300%, kéo để chọn phần hiển thị).
+  - Cắt/xoay/lật/màu → `POST /assets/:src/edit` tạo ảnh mới từ **ảnh gốc** (`src`) — tham chiếu lưu `{asset: ảnh mới, src: ảnh gốc, edit: thông số}` → mở lại tiếp tục từ trạng thái cũ, không giảm chất lượng qua nhiều lần sửa.
+  - Vị trí/phóng chỉ là CSS (`pos {x,y}` → `object-position`, `zoom` → thuộc tính `scale` + `transform-origin`), không tạo ảnh mới; khi `zoom > 1` tắt hiệu ứng Ken Burns.
+  - Máy chủ (`applyImageEdit`, sharp): lật (lượt riêng) → xoay (nền trong suốt) → cắt theo tỷ lệ khung bao sau xoay → brightness → saturate → contrast **đúng công thức bộ lọc CSS** (kẹp sau mỗi bước) → WebP ≤ 1920 px.
+
+### Đường dẫn thân thiện
+- `/<ten-bai>/<ma 8 ký tự>/<outline|edit|view>` (vd. `/Gioi-thieu-AMIS-oneAI/s1l3sxo7/edit`): tên bài bỏ dấu, giữ hoa/thường, chỉ để dễ đọc — **định vị bằng mã**; tên sai/cũ vẫn mở đúng bài và tự sửa về tên hiện tại (`useDeckUrl`, thay tại chỗ không tải lại trang). Đường dẫn cũ `/p/:id|:code/:feature` tự chuyển hướng.
 

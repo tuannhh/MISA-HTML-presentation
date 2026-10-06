@@ -15,4 +15,4 @@ Quy tắc:
 docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" misa_presentation' < startup/database/changelogs/<file>.sql
 ```
 
-Hiện chưa có changelog nào — baseline 2026-10-05 là bản đầu tiên.
+Danh sách và nội dung từng changelog: `memory-bank/03-database-schema.md` (mục Lịch sử thay đổi lược đồ). Changelog bắt buộc phải có trong `REQUIRED_CHANGELOGS` (`src/db/pool.js`).

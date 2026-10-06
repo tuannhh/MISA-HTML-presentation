@@ -1,6 +1,7 @@
 <script setup>
 // Trình chiếu mobile: khung bài đúng tỷ lệ, có nút Trước/Sau nhìn thấy được (không chỉ dựa vào vuốt), thao tác tải/nhân bản.
 import { computed, onMounted, ref } from 'vue'
+import { deckPath } from '@/lib/deckPath.js'
 import { useRoute, useRouter } from 'vue-router'
 import MobileShell from './MobileShell.vue'
 import ActionSheet from './ActionSheet.vue'
@@ -12,12 +13,14 @@ import { useToast } from '@/components/mds/toast.js'
 import { get, post, download } from '@/lib/api.js'
 import { ratioCss } from '@/lib/format.js'
 import { useDeckFrame } from '@/composables/useDeckFrame.js'
+import { useDeckUrl } from '@/composables/useDeckUrl.js'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const id = route.params.id
+const id = route.params.code || route.params.id
 const deck = ref(null)
+useDeckUrl(deck, 'view')
 const loading = ref(true)
 const error = ref(null)
 const frame = ref(null)
@@ -50,7 +53,7 @@ async function act(kind) {
     if (kind === 'duplicate') {
       const copy = (await post(`/api/presentations/${id}/duplicate`)).data
       toast.success('Đã nhân bản về bài của bạn')
-      router.push(`/p/${copy.id}/edit`)
+      router.push(deckPath(copy, 'edit'))
     } else await download(`/api/presentations/${id}/export.${kind}`, `${deck.value.title}.${kind}`)
   } catch (err) {
     toast.error(err.message)
@@ -79,7 +82,7 @@ async function act(kind) {
         <MButton variant="outline" aria-label="Trang trước" :disabled="index <= 0" @click="go(-1)"><template #icon><MIcon name="chevron-left" :size="20" /></template></MButton>
         <span class="min-w-0 flex-1 text-center text-[15px] font-medium tabular-nums">{{ index + 1 }} / {{ count }}</span>
         <MButton variant="outline" aria-label="Trang sau" :disabled="index >= count - 1" @click="go(1)"><template #icon><MIcon name="chevron-right" :size="20" /></template></MButton>
-        <MButton v-if="deck.isOwner" variant="primary" @click="router.push(`/p/${id}/edit`)">Chỉnh sửa</MButton>
+        <MButton v-if="deck.isOwner" variant="primary" @click="router.push(deckPath(deck, 'edit'))">Chỉnh sửa</MButton>
         <MButton v-else variant="primary" :loading="busy === 'duplicate'" @click="act('duplicate')">Nhân bản</MButton>
       </div>
     </template>

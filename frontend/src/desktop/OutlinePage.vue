@@ -2,6 +2,7 @@
 // Bước duyệt dàn ý (desktop): AI lập dàn ý → người dùng xem/sửa nội dung từng trang, gắn ảnh/video, chọn thiết kế
 // (màu, nền, phông, logo) → "Dựng bài": AI dựng giao diện đúng theo dàn ý → chuyển sang trình soạn thảo.
 import { computed, onMounted, ref } from 'vue'
+import { deckPath } from '@/lib/deckPath.js'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import DesktopShell from './DesktopShell.vue'
 import OutlineSlideCard from '@/shared/OutlineSlideCard.vue'
@@ -16,14 +17,16 @@ import MTooltip from '@/components/mds/MTooltip.vue'
 import MEmptyState from '@/components/mds/MEmptyState.vue'
 import { useToast } from '@/components/mds/toast.js'
 import { useOutline } from '@/composables/useOutline.js'
+import { useDeckUrl } from '@/composables/useDeckUrl.js'
 import { SPEC_LIMITS } from '@/lib/slideModel.js'
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
-const id = route.params.id
-const ol = useOutline(id, { onReady: () => router.replace(`/p/${id}/edit`) })
+const id = route.params.code || route.params.id
+const ol = useOutline(id, { onReady: (d) => router.replace(deckPath(d, 'edit')) })
 const { deck, draft, slides, media, videoLibrary, loading, saving, building, loadError, saveError, dirty } = ol
+useDeckUrl(deck, 'outline')
 
 const titleError = computed(() => {
   const t = draft.value?.title ?? ''
@@ -72,7 +75,7 @@ async function doRemove() {
 
 const leaveTo = ref(null)
 onBeforeRouteLeave((to) => {
-  if (dirty.value && !saving.value && !building.value && to.path !== `/p/${id}/edit`) {
+  if (dirty.value && !saving.value && !building.value && !to.path.endsWith('/edit')) {
     leaveTo.value = to.fullPath
     return false
   }
@@ -110,7 +113,7 @@ onMounted(ol.load)
         <p class="mt-1 max-w-[560px] text-[13px] text-[var(--mds-text-secondary)]">
           {{ deck.status === 'outlining'
             ? 'Đọc tư liệu (kể cả PDF scan, ảnh, ghi âm) và đề xuất nội dung từng trang — thường mất 30 giây đến vài phút. Xong bạn sẽ được xem và sửa dàn ý trước khi dựng giao diện.'
-            : 'Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn — thường dưới 1 phút. Xong sẽ tự chuyển sang trình soạn thảo.' }}
+            : 'Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn, tạo ảnh minh hoạ AI (nếu bật) — thường 1–2 phút. Xong sẽ tự chuyển sang trình soạn thảo.' }}
         </p>
       </div>
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>

@@ -26,6 +26,9 @@
 6. **Gọi API** chỉ qua `lib/api.js`; xử lý `ApiError.code` cụ thể (409 `VERSION_CONFLICT`, `MUST_CHANGE_PASSWORD`…), không nuốt lỗi.
 7. **Clone dữ liệu** reactive bằng `clone()` của `lib/slideModel.js`, không dùng `structuredClone`.
 8. **Sửa bản sao MDS** phải đánh dấu `// [MISA Presentation] …` và ghi vào bảng vá ở `09`.
+9. **Đường dẫn bài** luôn dựng bằng `deckPath(deck, feature)` (`lib/deckPath.js`), không tự ghép `/p/:id/...`.
+10. **Khung sửa trực tiếp:** mọi dữ liệu từ khung (postMessage) là không tin cậy — thêm trường sửa được thì thêm cả đường dẫn vào allowlist `lib/editPaths.js` (+ test), renderer gắn `data-e` qua helper `E(ctx, path, max)` (chỉ khi `ctx.edit`).
+11. **Layout `free`** không đưa vào prompt/schema AI (`AI_LAYOUTS`); thêm loại phần tử = cập nhật `shared/deck/free.js` + `cleanElement` + `freeEl` + `FreeElementsPanel` + test.
 
 ## Quy trình
 
