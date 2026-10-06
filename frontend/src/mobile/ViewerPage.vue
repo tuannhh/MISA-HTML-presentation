@@ -34,7 +34,8 @@ const items = computed(() => [
   ...(deck.value?.isOwner ? [] : [{ key: 'duplicate', label: 'Nhân bản về bài của tôi', icon: 'copy' }]),
 ])
 
-const { index, count, go } = useDeckFrame(frame)
+// Trước/Sau đi theo từng ý (trang bật trình chiếu từng ý); phím bút trình chiếu chuyển vào khung.
+const { index, count, step, steps, next, prev, atStart, atEnd } = useDeckFrame(frame, 0, { keys: true })
 
 onMounted(async () => {
   try {
@@ -75,13 +76,13 @@ async function act(kind) {
       <div class="relative w-full" :style="{ aspectRatio: ratioCss(deck.ratio) }">
         <iframe ref="frame" data-deck-frame :src="src" title="Trình chiếu" sandbox="allow-scripts allow-popups" allow="fullscreen" class="absolute inset-0 h-full w-full border-0" />
       </div>
-      <p class="px-4 py-3 text-center text-[13px] text-[#C8D3EC]">{{ deck.isOwner ? 'Bài của bạn' : deck.authorName }} · Vuốt ngang hoặc dùng nút bên dưới để chuyển trang</p>
+      <p class="px-4 py-3 text-center text-[13px] text-[#C8D3EC]">{{ deck.isOwner ? 'Bài của bạn' : deck.authorName }} · Vuốt ngang hoặc dùng nút bên dưới để chuyển · chạm khối nội dung để phóng to</p>
     </div>
     <template v-if="deck?.status === 'ready'" #footer>
       <div class="flex items-center gap-2">
-        <MButton variant="outline" aria-label="Trang trước" :disabled="index <= 0" @click="go(-1)"><template #icon><MIcon name="chevron-left" :size="20" /></template></MButton>
-        <span class="min-w-0 flex-1 text-center text-[15px] font-medium tabular-nums">{{ index + 1 }} / {{ count }}</span>
-        <MButton variant="outline" aria-label="Trang sau" :disabled="index >= count - 1" @click="go(1)"><template #icon><MIcon name="chevron-right" :size="20" /></template></MButton>
+        <MButton variant="outline" aria-label="Trước" :disabled="atStart" @click="prev"><template #icon><MIcon name="chevron-left" :size="20" /></template></MButton>
+        <span class="min-w-0 flex-1 text-center text-[15px] font-medium tabular-nums">{{ index + 1 }} / {{ count }}<span v-if="steps" class="text-[var(--mds-text-secondary)]" :title="`Đã hiện ${step}/${steps} bước của trang`"> · {{ step }}/{{ steps }}</span></span>
+        <MButton variant="outline" aria-label="Sau" :disabled="atEnd" @click="next"><template #icon><MIcon name="chevron-right" :size="20" /></template></MButton>
         <MButton v-if="deck.isOwner" variant="primary" @click="router.push(deckPath(deck, 'edit'))">Chỉnh sửa</MButton>
         <MButton v-else variant="primary" :loading="busy === 'duplicate'" @click="act('duplicate')">Nhân bản</MButton>
       </div>

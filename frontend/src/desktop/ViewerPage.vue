@@ -26,7 +26,8 @@ const loading = ref(true)
 const error = ref(null)
 const busy = ref('')
 const frame = ref(null)
-const { index, count, go } = useDeckFrame(frame)
+// Trước/Sau đi theo từng ý (trang bật trình chiếu từng ý); phím bút trình chiếu chuyển vào khung.
+const { index, count, step, steps, next, prev, atStart, atEnd } = useDeckFrame(frame, 0, { keys: true })
 
 const src = computed(() => (deck.value?.status === 'ready' ? `/api/presentations/${id}/preview` : ''))
 const exportMenu = [
@@ -88,9 +89,9 @@ function fullscreen() {
         </div>
         <MTag :color="deck.visibility === 'public' ? 'brand' : 'neutral'" size="sm">{{ deck.visibility === 'public' ? 'Công khai' : 'Riêng tư' }}</MTag>
         <div class="flex items-center gap-1">
-          <MButton variant="icon" aria-label="Trang trước" :disabled="index <= 0" @click="go(-1)"><template #icon><MIcon name="chevron-left" :size="20" /></template></MButton>
-          <span class="min-w-[56px] text-center text-[13px] font-medium tabular-nums">{{ index + 1 }} / {{ count }}</span>
-          <MButton variant="icon" aria-label="Trang sau" :disabled="index >= count - 1" @click="go(1)"><template #icon><MIcon name="chevron-right" :size="20" /></template></MButton>
+          <MButton variant="icon" aria-label="Trước" :disabled="atStart" @click="prev"><template #icon><MIcon name="chevron-left" :size="20" /></template></MButton>
+          <span class="min-w-[56px] whitespace-nowrap text-center text-[13px] font-medium tabular-nums">{{ index + 1 }} / {{ count }}<span v-if="steps" class="text-[var(--mds-text-secondary)]" :title="`Đã hiện ${step}/${steps} bước của trang`"> · {{ step }}/{{ steps }}</span></span>
+          <MButton variant="icon" aria-label="Sau" :disabled="atEnd" @click="next"><template #icon><MIcon name="chevron-right" :size="20" /></template></MButton>
         </div>
         <MButton variant="outline" @click="fullscreen"><template #icon><MIcon name="external-link" :size="16" /></template>Toàn màn hình</MButton>
         <MDropdownMenu :items="exportMenu" @select="act">

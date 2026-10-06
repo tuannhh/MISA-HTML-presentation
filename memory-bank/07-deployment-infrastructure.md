@@ -73,7 +73,7 @@ docker compose up -d --build
 docker compose exec app node scripts/create-admin.js admin@misa.com.vn "Quản trị viên"   # in mật khẩu tạm 1 lần
 ```
 
-- Image `Dockerfile`: `node:24-bookworm-slim` + `chromium` + font Noto/DejaVu + `tini`; build giao diện trong stage build; chạy user `node`; `shm_size: 512mb` cho Chromium.
+- Image `Dockerfile`: `node:24-bookworm-slim` + `chromium` + font Noto/DejaVu + `tini`; build giao diện trong stage build (`npm run build` = vite + `scripts/build-deck3d.mjs` → `dist/deck-runtime/deck3d.js`, stage build phải COPY script này); chạy user `node`; `shm_size: 512mb` cho Chromium.
 - onnxruntime-node đóng gói binary mọi nền tảng (~290 MB): Dockerfile xoá hết trừ `linux/<kiến trúc build>` (còn ~25 MB). Build image cho kiến trúc khác (vd. máy Mac arm64 → server amd64) phải `docker buildx build --platform linux/amd64` để `node -p process.arch` ra đúng kiến trúc đích.
 - `models/u2netp.onnx` (4.6 MB) được COPY vào image; thiếu tệp → tách nền tự lùi về theo màu nền.
 - MySQL 8.4: baseline `startup/database/schema.sql` được mount vào `docker-entrypoint-initdb.d` → **chỉ chạy ở lần tạo volume đầu tiên**. Thay đổi lược đồ sau đó: viết changelog trong `startup/database/changelogs/` và chạy thủ công.

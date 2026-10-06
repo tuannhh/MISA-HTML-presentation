@@ -309,3 +309,26 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
 - Lưu toàn bộ thiết kế bài (tông màu, nền, phông, logo, bộ nhận diện, phong cách) thành mẫu có tên; **ảnh được sao chép** sang kho mẫu. Mẫu **riêng tư** (chỉ mình) hoặc **công khai** (mọi người dùng áp được — vd. bộ nhận diện công ty; chỉ chủ đổi tên/chia sẻ/xoá).
 - Áp mẫu: sao chép ảnh mẫu thành asset mới của bài đích → trả `design` → giao diện gán vào thiết kế đang sửa (người dùng bấm Lưu). Bước dàn ý không có `style` → bỏ qua trường này.
 - Cô lập: mẫu riêng tư người khác → 404; ảnh khi lưu mẫu phải thuộc bài của người lưu (`FOREIGN_ASSET`); ảnh mẫu chỉ đọc qua `/api/templates/assets/:id` khi đọc được mẫu.
+
+## 14. Trình chiếu từng ý, phóng to khi bấm, hiệu ứng 3D (2026-10-06)
+
+Chỉ xuất **HTML + PDF** (không PowerPoint — PPTX không giữ được chuyển động/3D).
+
+### Trình chiếu từng ý (`slide.build`)
+- Người dùng chọn ở mục **"Trình chiếu khi bấm Sau"** (`SlideFields`, desktop + mobile; nút "Áp cho mọi trang" → `useEditor.setBuildAll`): `auto` (mặc định, **không lưu** trường) · `step` từng ý mỗi lần bấm · `dim` từng ý + làm mờ ý trước · `tour` phóng to lần lượt từng ý rồi thu về. **Không qua AI** (không có trong schema Gemini).
+- "Ý" = khối nội dung ngoài cùng của bố cục (engine `UNIT`: `.ag-i .tile .path-i .bi .card .crow .stat .st-* .pola .gal>.media .tl-step .tz-i .ps .tlv-i .chev-i .stair .col`), không tính tiêu đề/lớp chèn. Bố cục có ý: `BUILD_LAYOUTS` (`slideModel.js`).
+- Trang tự do / lớp chèn: phần tử bật **"Hiện khi bấm"** (`elements[].step = true`, chỉ lưu khi bật) → hiện theo thứ tự lớp; trang không đặt `build` mà có phần tử `step` → chạy kiểu `step`.
+- Chỉ áp ở chế độ **present**. Bản in PDF, thumbnail (`__deck.goto`), khung soạn thảo luôn hiện **đủ** mọi ý.
+- Điều hướng: Sau (→, PageDown, Space, Enter, ↓, bấm nửa phải, vuốt) = hiện ý tiếp; hết ý → sang trang. Trước = ẩn ý vừa hiện; về trang trước → trang đó hiện đủ ý. Hiệu ứng của ý chạy từ lúc bấm (giữ khoảng trễ tương đối giữa các phần trong ý).
+- Bút trình chiếu: PageDown/PageUp, **F5/Shift+F5** = toàn màn hình, **"." / B** = màn đen (phím bất kỳ để quay lại), Esc = thu phóng.
+- Trang xem (`/view`, desktop + mobile): nút Trước/Sau gửi `deck:step`, hiện "trang · ý/tổng"; phím bút trình chiếu bấm khi focus ở trang cha được chuyển vào khung (`useDeckFrame({ keys: true })`).
+
+### Phóng to khi bấm
+- Present: rê chuột vào khối phóng được (thẻ, số liệu, cột so sánh, bước, ảnh, polaroid, ảnh/bảng trang tự do — **không** video, không logo 3D) → con trỏ kính lúp + viền nhấn; bấm → "máy quay" phóng tới khối (≤3×, căn giữa, không lộ mép trang), các khối khác mờ; bấm chỗ khác / Esc / Trước / Sau → thu về; bấm khối khác khi đang phóng → lia sang. Chỉ đánh dấu khối khi phóng được ≥1,15×.
+- Kỹ thuật: thuộc tính CSS độc lập `translate`/`scale` trên `.slide` (không đụng `transform` của hiệu ứng), tính theo giá trị **đang hiển thị** (`getComputedStyle`) để bấm liên tiếp giữa chuyển tiếp vẫn đúng.
+
+### Nền 3D + logo nổi khối (three.js)
+- 4 nền 3D (`shared/deck/bg3d.js` `NAMES_3D`): **Địa cầu 3D** (`globe3d`), **Địa hình 3D** (`terrain3d`), **Thiên hà 3D** (`galaxy3d`), **Thành phố 3D** (`city3d`) — chọn ở tab Nền như mẫu 2D; màu theo tông bài; thị sai theo con trỏ; xác định theo thời gian (seed). Máy không có WebGL / bản không kèm gói 3D → mẫu 2D tương ứng `FALLBACK_2D` (quỹ đạo, sóng dữ liệu, dòng hạt, lưới phối cảnh).
+- Phần tử **Logo 3D** (`type: 'logo3d'`, `image`, `motion: swing|float|turn`, `depth 0,1–1`): nút "Logo 3D" ở bảng phần tử (trang tự do + lớp chèn), mặc định lấy logo của bài (bản tách nền nếu có). Xếp chồng 40 lớp ảnh thành khối, vệt sáng quét qua, xoay trong ±50° (không lật mặt sau). Logo PNG nền trong suốt đẹp nhất.
+- Trình chiếu: WebGL riêng cho từng logo của **trang đang chiếu**, giải phóng khi rời trang. PDF: chụp 1 khung nghiêng thay ảnh phẳng. Soạn thảo / không WebGL: ảnh phẳng có bóng đổ.
+- Gói 3D (`dist/deck-runtime/deck3d.js`, ~540 KB) chỉ nhúng vào bản tự chứa (xuất HTML/PDF/thumbnail) khi bài **có dùng 3D** (`uses3d`); khung xem trước tải qua `/deck-assets/deck3d.js?v=<băm>` (trình soạn thảo luôn tải để đổi nền 3D thấy ngay).

@@ -138,3 +138,13 @@ export function prepareSpecForSave(spec) {
   if (out.palette && out.theme !== 'custom') out.palette = null;
   return out;
 }
+
+// Trình chiếu khi bấm Sau / bút trình chiếu (trường slide.build; 'auto' = không lưu). Khớp BUILDS của renderer.
+export const BUILD_OPTIONS = [
+  { value: 'auto', label: 'Hiện toàn bộ khi vào trang' },
+  { value: 'step', label: 'Hiện từng ý mỗi lần bấm' },
+  { value: 'dim', label: 'Hiện từng ý, làm mờ ý trước' },
+  { value: 'tour', label: 'Phóng to lần lượt từng ý' },
+]
+// Bố cục có các "ý" để trình chiếu lần lượt (trang tự do: phần tử bật "Hiện khi bấm").
+export const BUILD_LAYOUTS = ['agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'comparison', 'free']

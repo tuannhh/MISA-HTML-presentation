@@ -76,6 +76,7 @@ Một tiến trình Node duy nhất phục vụ cả API lẫn SPA tĩnh (`dist/
 | Vite 8 (rolldown) | Dev server (proxy `/api`, `/deck-assets` → 3000) + build ra `dist/` |
 | Tailwind CSS v4 (`@tailwindcss/vite`) | Tiện ích CSS trên token MDS |
 | MDS 2.0 (copy vào `frontend/src/components/mds/`) | Toàn bộ component giao diện, theme `blue` |
+| three.js 0.186 (`three`, MIT, devDependency) | Nền 3D + logo nổi khối (`shared/deck/deck3d.js`). Đóng gói IIFE bằng `scripts/build-deck3d.mjs` (vite lib) → `dist/deck-runtime/deck3d.js` trong `npm run build`; giao diện import động cho ô xem trước nền. Server không import three (chỉ `bg3d.js`) |
 | Cropper.js 1.6 (`cropperjs`, MIT) | Cắt/xoay/lật ảnh trong trình chỉnh sửa ảnh (`shared/ImageEditor.vue`) — không dùng AI; máy chủ áp lại bằng sharp |
 | Gemini `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite, 1K) + Pixabay API | Ảnh minh hoạ AI (khi dựng bài + theo yêu cầu) và tìm ảnh Internet (`stockImageService`) |
 

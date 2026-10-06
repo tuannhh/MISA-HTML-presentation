@@ -2,7 +2,7 @@
 // Dùng chung cho server (specService chuẩn hoá), renderer (render.js) và trình soạn thảo (chèn trang, bảng thuộc tính).
 // Toạ độ phần tử tính theo % khung slide (x, y = góc trên trái; w, h = kích thước) → giữ đúng vị trí khi đổi tỷ lệ khung.
 
-export const FREE_TYPES = Object.freeze(['text', 'image', 'video', 'table', 'shape']);
+export const FREE_TYPES = Object.freeze(['text', 'image', 'video', 'table', 'shape', 'logo3d']);
 // Kiểu chữ: cỡ gốc (px trên khung cao 1440) + độ đậm — người dùng phóng to/thu nhỏ bằng hệ số size.
 export const TEXT_STYLES = Object.freeze({
   title: { label: 'Tiêu đề lớn', px: 96, weight: 800 },
@@ -31,6 +31,8 @@ export function newElement(type, at = {}) {
   if (type === 'text') return { style: 'body', align: 'left', valign: 'top', color: 'text', fill: 'none', size: 1, text: 'Nhập nội dung', ...base };
   if (type === 'image') return { radius: 'md', image: null, ...base };
   if (type === 'video') return { video: null, ...base };
+  // Logo nổi khối (WebGL): ảnh hiển thị trọn khung, chuyển động lắc/bồng bềnh/xoay chậm, độ dày khối 0,1–1.
+  if (type === 'logo3d') return { image: null, motion: 'swing', depth: 0.5, ...base };
   if (type === 'table') {
     return {
       style: 'striped', header: true, size: 1,

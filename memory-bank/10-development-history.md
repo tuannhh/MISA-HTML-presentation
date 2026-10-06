@@ -1,5 +1,33 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-06 — Trình chiếu từng ý (bút trình chiếu), phóng to khi bấm, nền 3D + logo nổi khối (three.js)
+
+### Yêu cầu
+Người dùng hỏi xuất PowerPoint có giữ hiệu ứng không, bấm Next trên bút trình chiếu có hiện từng phần không, rê chuột/bấm để phóng to,
+tích hợp 3D three.js — rồi chốt: làm (1) hiện từng ý theo bấm, (2) bấm phóng to/thu về, (3) 3D; **giữ xuất HTML + PDF, không xuất PowerPoint**.
+
+### Thay đổi (chi tiết `05` §14)
+- Engine: `buildSteps` (ý = `UNIT`, phần tử `.fe[data-step]`), `stepBy`/`applySteps`, hiệu ứng ý chạy từ lúc bấm (`SF`), `data-wait`/`data-past`;
+  phóng to `zoomTo`/`zoomOut` (`translate`/`scale` độc lập, `data-z` qua `ZOOM` + ngưỡng 1,15×), chế độ `tour`; màn đen `.`/B, F5; `deck:step`, `deck:cmd`, `deck:slide` thêm `step/steps`.
+- Spec: `slide.build` (`BUILDS` step/dim/tour), `elements[].step`, phần tử `logo3d` (`image`, `motion`, `depth`), nền `globe3d/terrain3d/galaxy3d/city3d` (`BACKGROUNDS`).
+- 3D: `shared/deck/bg3d.js` (tên, `FALLBACK_2D`, `uses3d`), `shared/deck/deck3d.js` (three.js: 4 cảnh + `createLogo3D`), `deck3d-entry.js`, `scripts/build-deck3d.mjs` → `dist/deck-runtime/deck3d.js`;
+  `renderService` nhúng inline (bản tự chứa) / `<script src>` (khung xem trước) qua `preJs`/`preSrc` của `renderDeckHtml`; route `/deck-assets/deck3d.js`; ảnh ký thêm ACAO `*`; Dockerfile COPY script build.
+- Giao diện: `SlideFields` (mục Trình chiếu + Áp cho mọi trang), `FreeElementsPanel` (Hiện khi bấm, Logo 3D), `BackgroundPicker`/`DeckBgCanvas` (4 ô 3D), `useDeckFrame` + 2 `ViewerPage` (Trước/Sau theo ý, bộ đếm ý, phím bút trình chiếu), icon MDS `cube`.
+- Sửa phát hiện khi kiểm thử (`09`): slide cũ chặn cú bấm ~1,2 s; thumbnail (present + goto) ẩn ý chờ / logo chưa vẽ; canvas WebGL không dùng lại sau `forceContextLoss`; vite build gói 3D đọc `.env`.
+
+### Đã kiểm chứng
+- Unit 109/109 (mới `present-3d.test.js` 6 test: build/step normalize + an toàn thuộc tính, `UNIT` phủ mọi bố cục có ý, `FALLBACK_2D` engine ↔ `bg3d.js`, logo3d normalize/kẹp/asset/drop, gói 3D inline chỉ khi dùng 3D, khung soạn thảo tải qua URL có băm).
+- `npm run build` OK (chunk `deck3d` 539 KB / gzip 135 KB, tải động); Docker build + smoke **TẤT CẢ ĐẠT**.
+- `tmp/steps-test.mjs` (Chrome cục bộ): step 6 thẻ (bấm/lùi), dim làm mờ, tour phóng 2,7× lần lượt rồi thu về, trang tự do 2 phần tử chờ, quay lại trang trước hiện đủ, bấm phóng 2,4× + Esc, màn đen.
+- `tmp/d3-test.mjs`: 4 nền 3D tông tối + globe tông sáng + logo 3D (WebGL) + chế độ sửa ảnh phẳng, không lỗi console.
+- `tmp/present-e2e.mjs` trên Docker: lưu spec nền `globe3d` + logo3d + build step/dim/tour; preview có `<script src=/deck-assets/deck3d.js?v=…>`, ảnh ký có ACAO; trang xem: nền 3D trong khung sandbox, logo 3D WebGL, PageDown từ trang cha hiện ý, nút Sau theo ý (bộ đếm "3 / 6 · 1/5"), bấm khối phóng + Esc thu; mobile 390px nút ≥44px không cuộn ngang; xuất HTML chạy offline (file://, chặn mạng) có nền + logo 3D + ý chờ; PDF 6 trang hiện đủ ý, logo nghiêng tĩnh (pdftoppm).
+- `tmp/ui-present.mjs`: mục Trình chiếu + "Áp cho mọi trang" (toast 4 trang), bảng Logo 3D, 4 ô nền 3D có canvas WebGL; mobile mục Trình chiếu không cuộn ngang. `tmp/thumb-local.mjs`: thumbnail trang build=step hiện đủ 6 thẻ, không WebGL → nền 2D dự phòng.
+
+### Còn để ngỏ
+- Chưa thử bút trình chiếu vật lý (Logitech…) — đã phủ phím PageDown/PageUp/F5/Esc/"." theo chuẩn phổ biến.
+- Bài xuất HTML có 3D nặng thêm ~540 KB; máy yếu có thể giật khi vừa nền 3D vừa nhiều logo 3D (mỗi logo 1 ngữ cảnh WebGL, chỉ trang đang chiếu).
+- Dữ liệu thử trên MySQL Docker: bài `t8dlsk8w` (tài khoản `brand-a-*`) nay có trang "Logo 3D", nền `globe3d`, build trên 3 trang.
+
 ## 2026-10-06 — Màu chữ / xuống dòng / VIẾT HOA trên khung, chọn bố cục + ảnh-logo, tông be-trắng, bộ nhận diện thương hiệu + mẫu
 
 ### Yêu cầu

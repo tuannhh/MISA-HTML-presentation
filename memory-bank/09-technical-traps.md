@@ -76,7 +76,7 @@
 |---|---|---|
 | `MInput.vue`, `MTextarea.vue` | `defineOptions({ inheritAttrs: false })` + `useAttrs()`: `class`/`style` ở wrapper, mọi attr khác (`id`, `name`, `autocomplete`, `aria-*`, `maxlength`, `inputmode`…) chuyển xuống thẻ input/textarea thật | Bản gốc gắn attr lên `div` bọc ngoài → mất autocomplete, label `for` không liên kết, trình đọc màn hình không đọc nhãn |
 | `MDataTable.vue` | Prop `hideTools: ('refresh'\|'export'\|'columns'\|'filter')[]`; hàng hiện nút thao tác cả khi `group-focus-within` | Ẩn nút không có chức năng; dùng được bằng bàn phím |
-| `iconRegistry.generated.js` | Thêm icon `video`, `player-play`, `brand-youtube`, `scissors`, `palette`, `typography`; đợt 2026-10-06 thêm `layout-board`, `table`, `square-rounded`, `sparkles`, `crop`, `rotate`, `rotate-clockwise`, `flip-horizontal`, `flip-vertical`, `sun`, `droplet`, `contrast`, `zoom-in`, `arrows-move`, `adjustments`, `stack`, `align-left/center/right`, `world-search`, `row-insert-bottom`, `column-insert-right` (Tabler, nối CUỐI object `ICON_REGISTRY` trước `})`) | MDS chưa có icon cho video/tách nền/thiết kế; sinh lại registry sẽ mất |
+| `iconRegistry.generated.js` | Thêm icon `video`, `player-play`, `brand-youtube`, `scissors`, `palette`, `typography`; đợt 2026-10-06 thêm `layout-board`, `table`, `square-rounded`, `sparkles`, `crop`, `rotate`, `rotate-clockwise`, `flip-horizontal`, `flip-vertical`, `sun`, `droplet`, `contrast`, `zoom-in`, `arrows-move`, `adjustments`, `stack`, `align-left/center/right`, `world-search`, `row-insert-bottom`, `column-insert-right`, `cube` (Tabler, nối CUỐI object `ICON_REGISTRY` trước `})`) | MDS chưa có icon cho video/tách nền/thiết kế; sinh lại registry sẽ mất |
 | `MUpload.vue` | Prop `block` (dropzone rộng hết khung, có icon + dòng `hint`), `sizeHint` (thay chú thích "Dung lượng tối đa…") | Form tạo bài 1 cột rộng; giới hạn theo **tổng** dung lượng nhiều tệp, không theo từng tệp |
 | `MUpload.vue` | Dropzone là `div role=button` (tabindex, Enter/Space), `<input type=file>` đặt NGOÀI dropzone, bỏ `@click.prevent` | Bản gốc: `<label @click.prevent>` bọc input → `input.click()` nổi bọt lên label bị `preventDefault` → trình duyệt huỷ hộp chọn tệp, bấm không mở cửa sổ (lỗi "không tải được tệp" ở tab Tải tệp lên) |
 
@@ -160,6 +160,21 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 
 ### Chữ mốc thời gian bị ngắt giữa từ trong thẻ hẹp
 - `overflow-wrap:anywhere` cắt "T12/2026" thành "T12/202 / 6" ở tỷ lệ 4:3. Đã đổi: thẻ là container (`container-type: inline-size`), cỡ chữ `min(64px·k, 150cqi / --vl)` với `--vl` = độ dài từ dài nhất (renderer tính).
+
+### Slide vừa rời đi vẫn chặn cú bấm ~1,2 giây
+- `.slide` ẩn bằng `visibility` có trễ chuyển tiếp (`visibility 0s linear .55s` sau khi bỏ `.off` lúc 700 ms) → trong ~1,25 giây slide cũ (trong suốt, nằm sau trong DOM) vẫn nhận `elementFromPoint`/click — bấm phóng to rơi vào slide cũ. Sửa: `.slide:not(.on) { pointer-events: none }`.
+
+### Thumbnail chạy ở chế độ present (không phải still)
+- `browserService.screenshotSlides` dựng HTML mode `present` rồi gọi `__deck.goto` → engine đã gắn `data-wait` cho các ý "hiện khi bấm" và logo 3D chưa vẽ. `__deck.goto` phải hiện đủ ý (bỏ `data-wait`/`data-past`, thu phóng) và vẽ logo 1 khung tĩnh (`frozen !== null`).
+
+### WebGL: canvas đã `forceContextLoss` không dùng lại được
+- Tạo `WebGLRenderer` mới trên cùng canvas sau khi giải phóng → nhận lại ngữ cảnh đã mất (đen). Luôn tạo **canvas mới** (engine `#bg3d`, `.l3d-cv`; `DeckBgCanvas`).
+
+### Chromium chụp thumbnail/PDF có `--disable-gpu`
+- WebGL có thể không có (Chrome máy dev headless) → nền 3D tự về mẫu 2D, logo giữ ảnh phẳng; Chromium trong Docker vẫn có WebGL phần mềm (đã thấy logo nghiêng trong PDF). Puppeteer kiểm 3D trên Chrome máy dev: thêm `--enable-unsafe-swiftshader --use-angle=swiftshader`.
+
+### Vite build gói 3D đọc `.env` của dự án
+- `vite build` lập trình tự nạp `.env` ở root (cảnh báo `NODE_ENV=production`) → `scripts/build-deck3d.mjs` đặt `envDir: 'scripts'` để không đọc `.env`.
 
 ## Kiểm thử
 

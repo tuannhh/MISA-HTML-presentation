@@ -7,6 +7,7 @@ RUN npm ci --ignore-scripts
 COPY vite.config.js ./
 COPY frontend ./frontend
 COPY shared ./shared
+COPY scripts/build-deck3d.mjs ./scripts/build-deck3d.mjs
 RUN npm run build
 
 # ---------- runtime ----------

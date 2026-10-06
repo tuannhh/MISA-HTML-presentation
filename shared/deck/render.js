@@ -11,6 +11,7 @@ import { TEXT_STYLES } from './free.js';
 import { richHtml, plainText } from './rich.js';
 
 export { VARIANTS, STYLES } from './variants.js';
+import { NAMES_3D } from './bg3d.js';
 
 export const RATIO_SIZES = Object.freeze({
   '16:9': [2560, 1440],
@@ -31,8 +32,10 @@ export const TONE_THEMES = Object.freeze({
   light: Object.freeze(presetsForTone('light')),
 });
 // Mẫu nền chuyển động (vẽ bằng canvas trong shared/deck/backgrounds.js) — 'none' = chỉ nền màu chuyển sắc.
-export const BACKGROUNDS = Object.freeze(['network', 'circuit', 'grid', 'matrix', 'waves', 'hex', 'dots', 'orbits', 'particles', 'radar', 'none']);
+export const BACKGROUNDS = Object.freeze(['network', 'circuit', 'grid', 'matrix', 'waves', 'hex', 'dots', 'orbits', 'particles', 'radar', ...NAMES_3D, 'none']);
 // Bố cục có ô media (1 ảnh hoặc 1 video) — gallery có ô nhiều ảnh riêng.
+// Trình chiếu: auto (mặc định, không lưu) · step (từng ý khi bấm) · dim (từng ý + làm mờ ý trước) · tour (phóng lần lượt từng ý).
+export const BUILDS = Object.freeze(['step', 'dim', 'tour']);
 export const MEDIA_LAYOUTS = Object.freeze(['cover', 'section', 'bullets', 'image', 'quote']);
 export const LOGO_POSITIONS = Object.freeze(['tl', 'tc', 'tr', 'bl', 'bc', 'br']);
 export const LOGO_SHOW = Object.freeze(['all', 'cover', 'inner']);
@@ -482,6 +485,7 @@ function freeEl(e, i, ctx) {
   const ph = (ic, label) => (ctx.edit ? `<div class="ph">${icon(ic)}<span>${label}</span></div>` : '');
   let cls = `fe fe-${e.type}`;
   let inner = '';
+  let extra = '';
   if (e.type === 'text') {
     const st = TEXT_STYLES[e.style] || TEXT_STYLES.body;
     const fill = ['panel', 'soft', 'accent', 'dark'].includes(e.fill) ? e.fill : 'none';
@@ -495,6 +499,14 @@ function freeEl(e, i, ctx) {
     const fit = ref && ref.fit === 'contain' ? 'contain' : 'cover';
     // Ảnh trọn khung (logo, đồ hoạ nền trong suốt) → không tô nền khung.
     inner = `<figure class="fe-fig r-${esc(e.radius || 'md')}${url ? (fit === 'contain' ? ' fit-c' : '') : ' empty'}"${M(ctx, P)}>${url ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" style="object-fit:${fit};${imgPos(ref)}">` : ph('image', 'Bấm để chọn ảnh')}</figure>`;
+  } else if (e.type === 'logo3d') {
+    // Ảnh phẳng = dự phòng (trình soạn thảo, bản in, máy không có WebGL); engine phủ canvas 3D khi trình chiếu.
+    // crossorigin: WebGL chỉ đọc được ảnh "sạch" CORS (URL ký từ khung sandbox origin null — route ảnh trả ACAO *).
+    const ref = e.image;
+    const url = ref && ref.asset ? ctx.assetUrl(ref.asset) : null;
+    cls += ` mv-${esc(e.motion || 'swing')}`;
+    inner = `<figure class="fe-fig fit-c${url ? '' : ' empty'}"${M(ctx, P)}>${url ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" crossorigin="anonymous">` : ph('image', 'Bấm để chọn logo')}</figure>`;
+    extra = ` data-motion="${esc(e.motion || 'swing')}" data-depth="${n2(e.depth, 0.5)}"`;
   } else if (e.type === 'video') {
     inner = e.video ? videoFig(e.video, ctx, { mp: P, anim: 'fade', d: 0, caption: '' }) : ctx.edit ? `<figure class="fe-fig r-md empty"${M(ctx, P)}>${ph('play', 'Bấm để chọn video')}</figure>` : '';
   } else if (e.type === 'table') {
@@ -508,7 +520,7 @@ function freeEl(e, i, ctx) {
     const fill = SHAPE_FILL[e.fill] || SHAPE_FILL.soft;
     inner = `<div class="fe-sh sh-${esc(e.shape || 'round')}" style="--sf:${fill};opacity:${n2(e.opacity, 1)}"></div>`;
   }
-  return `<div class="${cls}" data-el="${esc(e.id)}" style="${box}"${anim}>${inner}</div>`;
+  return `<div class="${cls}" data-el="${esc(e.id)}" style="${box}"${anim}${extra}${e.step ? ' data-step' : ''}>${inner}</div>`;
 }
 
 L.free = function free(s, ctx) {
@@ -638,7 +650,8 @@ export function deckParts(spec, opts) {
     // Lớp phần tử chèn thêm (ảnh, logo, chữ…) phía trên bố cục — trang tự do đã tự vẽ phần tử của nó.
     const over = s.layout !== 'free' && list(s.elements).length ? `<div class="free over">${list(s.elements).map((e, k) => freeEl(e, k + 8, ctx)).join('')}</div>` : '';
     const label = `Trang ${index + 1}/${total}${s.title ? `: ${plainText(s.title).replace(/\s+/g, ' ')}` : ''}`;
-    return `<section class="slide L-${esc(s.layout)}${v ? ` V-${v}` : ''}${cls}"${style} data-id="${esc(s.id)}" aria-label="${esc(label)}"><div class="sbg"></div>${glows(index, W)}${b.html}${fn(s, ctx, v)}${ft}${abs}${over}</section>`;
+    const build = BUILDS.includes(s.build) ? ` data-build="${s.build}"` : '';
+    return `<section class="slide L-${esc(s.layout)}${v ? ` V-${v}` : ''}${cls}"${style}${build} data-id="${esc(s.id)}" aria-label="${esc(label)}"><div class="sbg"></div>${glows(index, W)}${b.html}${fn(s, ctx, v)}${ft}${abs}${over}</section>`;
   });
 
   return {
@@ -689,7 +702,9 @@ ${d.slides.join('\n')}
 </div></div>
 ${hud}
 ${embeds}
-<script${nonce}>${opts.engineJs || ''}</script>
+${opts.preSrc ? `<script${nonce} src="${esc(opts.preSrc)}"></script>
+` : ''}${opts.preJs ? `<script${nonce}>${opts.preJs}</script>
+` : ''}<script${nonce}>${opts.engineJs || ''}</script>
 </body>
 </html>`;
 }

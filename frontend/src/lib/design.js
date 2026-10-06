@@ -3,13 +3,17 @@
 import '@shared/deck/backgrounds.js';
 import { THEME_PRESETS, CUSTOM_THEME, presetsForTone, themeSwatch, themeTone, paletteVars, normHex, contrast } from '@shared/deck/palette.js';
 import { DECK_FONTS, DEFAULT_FONT, fontStack, fontFaceCss } from '@shared/deck/fonts.js';
+import { NAMES_3D, LABELS_3D } from '@shared/deck/bg3d.js';
 
 export { THEME_PRESETS, CUSTOM_THEME, presetsForTone, themeSwatch, themeTone, paletteVars, normHex, contrast, DEFAULT_FONT, fontStack };
 
 export const DeckBg = globalThis.DeckBg;
+export { NAMES_3D, FALLBACK_2D } from '@shared/deck/bg3d.js';
 
 export const BACKGROUND_OPTIONS = [
   ...DeckBg.NAMES.map((name) => ({ value: name, label: DeckBg.LABELS[name] || name })),
+  // Nền 3D (three.js, WebGL) — ô xem trước tải mã 3D khi cần; máy không có WebGL thấy mẫu 2D tương ứng.
+  ...NAMES_3D.map((name) => ({ value: name, label: LABELS_3D[name], is3d: true })),
   { value: 'none', label: 'Không hiệu ứng' },
 ];
 

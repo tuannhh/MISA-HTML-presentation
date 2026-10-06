@@ -16,7 +16,7 @@ import { assetRoutes } from './routes/assetRoutes.js';
 import { templateRoutes } from './routes/templateRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { imageRoutes } from './routes/imageRoutes.js';
-import { deckFontBuffer, deckFontFile, DECK_FONT_PATH } from './services/renderService.js';
+import { deckFontBuffer, deckFontFile, deck3dBuffer, DECK_FONT_PATH, DECK3D_PATH } from './services/renderService.js';
 import { ok } from './lib/validate.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -55,6 +55,14 @@ export function createApp({ config, pool, repos, services }) {
     const buf = deckFontFile([].concat(req.params.file).join('/'));
     if (!buf) return res.status(404).end();
     res.set(fontHeaders);
+    return res.send(buf);
+  });
+
+  // Gói hiệu ứng 3D (three.js) cho khung xem trước sandbox — công khai như phông; URL có ?v=<băm> nên lưu đệm lâu được.
+  app.get(DECK3D_PATH, (_req, res) => {
+    const buf = deck3dBuffer();
+    if (!buf) return res.status(404).end();
+    res.set({ 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' });
     return res.send(buf);
   });
 

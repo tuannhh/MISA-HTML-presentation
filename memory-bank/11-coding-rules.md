@@ -31,6 +31,7 @@
 11. **Layout `free`** không đưa vào prompt/schema AI (`AI_LAYOUTS`); thêm loại phần tử = cập nhật `shared/deck/free.js` + `cleanElement` + `freeEl` + `FreeElementsPanel` + test.
 12. **Chữ định dạng `⟦…⟧`:** chỉ tạo/sửa qua `shared/deck/rich.js` (không tự ghép chuỗi thẻ); độ dài/so khớp/hiển thị tiêu đề dùng `plainText`; HTML chỉ qua `richHtml` (escape + style từ allowlist). Trường chỉ nhận chữ thường (ô số liệu, chân trang) đánh `plain` ở `editPaths` + `data-pl` ở renderer.
 13. **Bộ nhận diện / mẫu:** ảnh trong `brand` luôn là asset kind `brand` của **chính bài** (qua `collectAssetIds`/`dropForeignAssets`/`remapAssetIds`); mẫu chỉ liên hệ ảnh bằng **sao chép** (không dùng chung tệp giữa bài và mẫu, không tham chiếu chéo tenant). Thêm ô ảnh nhận diện = sửa `BRAND_SLOTS` + `cleanBrand` + `brandFor` + `BrandSettings` + test.
+14. **Trình chiếu / 3D:** `slide.build` và nền 3D là lựa chọn của người dùng — **không** đưa vào prompt/schema AI. Đơn vị "ý" và khối phóng được khai báo bằng bộ chọn `UNIT`/`ZOOM` trong `engine.js` — thêm bố cục/lớp khối mới phải cập nhật hai bộ chọn này (test `present-3d.test.js` đối chiếu). Server/renderer chỉ import `shared/deck/bg3d.js` (không import three); `FALLBACK_2D` có bản sao trong engine (test đối chiếu). Hiệu ứng 3D phải có đường lùi khi không có WebGL.
 
 ## Quy trình
 

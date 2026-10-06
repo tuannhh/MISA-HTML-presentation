@@ -112,6 +112,45 @@
   }
   var timelines = [];
 
+  /* ---------- trình chiếu từng ý (data-build trên slide) + phóng to khi bấm ---------- */
+  // Đơn vị nội dung theo bố cục (khối ngoài cùng, không tính tiêu đề/trang tự do). Thứ tự = thứ tự trong trang.
+  var UNIT = '.ag-i,.tile,.path-i,.bi,.card,.crow,.stat,.st-hero,.st-row,.st-bar,.st-ring,.pola,.gal>.media,.tl-step,.tz-i,.ps,.tlv-i,.chev-i,.stair,.col';
+  // Phần tử phóng to được khi bấm (video không — bấm video để phát).
+  var ZOOM = '.card,.stat,.st-hero,.st-row,.st-ring,.st-bar,.col,.ps,.stair,.tl-step,.tz-i,.chev-i,.tile,.crow,.panel.bi,.pola,figure.media:not(.vid),.fe-image,.fe-table';
+  var BUILDS = { step: 1, dim: 1, tour: 1 };
+  var STEPS = [], SF = []; // STEPS[i] = { mode, units[], max } · SF[i][k] = khung bắt đầu của ý k (null = theo nhịp gốc)
+  function outer(list, sl) { return list.filter(function (el) { var p = el.parentElement && el.parentElement.closest(UNIT); return !p || !sl.contains(p); }); }
+  function buildSteps() {
+    STEPS = slides.map(function (sl, i) {
+      var b = sl.getAttribute('data-build');
+      var units = [];
+      if (BUILDS[b] && !sl.classList.contains('L-free')) {
+        units = outer(Array.prototype.filter.call(sl.querySelectorAll(UNIT), function (el) { return !el.closest('.head,.free'); }), sl);
+      }
+      units = units.concat(Array.prototype.slice.call(sl.querySelectorAll('.fe[data-step]')));
+      if (!units.length) return null;
+      var mode = BUILDS[b] ? b : 'step';
+      units.forEach(function (u, k) { u.setAttribute('data-u', String(k + 1)); });
+      // Gắn ý cho từng phần tử chuyển động + khung trễ nhỏ nhất của ý (để ý hiện ngay khi bấm).
+      var minD = {};
+      (timelines[i] || []).forEach(function (it) {
+        for (var k = 0; k < units.length; k++) if (units[k].contains(it.el)) { it.u = k + 1; break; }
+        if (it.u && it.an) minD[it.u] = Math.min(minD[it.u] === undefined ? 1e9 : minD[it.u], it.an.d);
+      });
+      (timelines[i] || []).forEach(function (it) { if (it.u) it.m = minD[it.u] || 0; });
+      return { mode: mode, units: units, max: mode === 'tour' ? units.length + 1 : units.length };
+    });
+  }
+  function markZoom() {
+    slides.forEach(function (sl) {
+      Array.prototype.forEach.call(sl.querySelectorAll(ZOOM), function (el) {
+        if (el.closest('.vid') || el.querySelector('.vid')) return;
+        var w = el.offsetWidth, h = el.offsetHeight;
+        if (w > 0 && h > 0 && Math.min(0.82 * W / w, 0.8 * H / h, 3) >= 1.15) el.setAttribute('data-z', '');
+      });
+    });
+  }
+
   function render(i, f, t) {
     if (t === undefined) t = f / FPS;
     var list = timelines[i] || [];
@@ -119,6 +158,8 @@
       var it = list[n], el = it.el, tf = '', op = null, fl = null, s, A = it.an;
       if (A) {
         var lf = f - A.d;
+        // Ý hiện khi bấm: tính thời gian từ lúc bấm (giữ khoảng trễ tương đối giữa các phần trong cùng ý).
+        if (it.u && SF[i]) { var sf = SF[i][it.u]; if (sf !== undefined && sf !== null) lf = f - sf - (A.d - it.m); }
         switch (A.a) {
           case 'up': case 'down': case 'left': case 'right': {
             s = spring(lf, 15, 120);
@@ -178,21 +219,113 @@
     if (m) return m[1].split(',').slice(0, 3).map(function (x) { return x.trim(); }).join(',');
     return /^\d+\s*,\s*\d+\s*,\s*\d+$/.test(v) ? v : fb;
   }
+  // Nền 3D (gói window.Deck3D, WebGL) vẽ trên canvas riêng #bg3d; không có WebGL/gói 3D → mẫu 2D tương ứng (khớp FALLBACK_2D trong bg3d.js).
+  var FALLBACK_2D = { globe3d: 'orbits', terrain3d: 'waves', galaxy3d: 'particles', city3d: 'grid' };
+  var cv3 = null, bg3 = null, ptr = { x: 0, y: 0 };
+  function drop3d() {
+    if (bg3) { try { bg3.dispose(); } catch (e) { /* bỏ qua */ } bg3 = null; }
+    if (cv3 && cv3.parentNode) cv3.parentNode.removeChild(cv3);
+    cv3 = null;
+  }
   function setupPainter() {
     painter = null;
+    drop3d();
     var bgName = deck.getAttribute('data-bg') || 'network';
     if (cx) { cv.width = CW; cv.height = CH; cx.clearRect(0, 0, CW, CH); }
-    if (!cx || bgName === 'none' || !window.DeckBg) return;
+    if (bgName === 'none') return;
     var cs = getComputedStyle(document.documentElement);
     var node = rgbVar(cs, '--node', '160,220,255'), edge = rgbVar(cs, '--edge', '46,230,214');
-    painter = window.DeckBg.create(cx, {
+    var o = {
       name: bgName, width: CW, height: CH, node: node, edge: edge,
       accent: rgbVar(cs, '--accent', edge), accent2: rgbVar(cs, '--accent-2', node),
-      light: document.documentElement.getAttribute('data-tone') === 'light', seed: 7,
-    });
+      light: document.documentElement.getAttribute('data-tone') === 'light', seed: 7, still: MODE !== 'present',
+    };
+    if (FALLBACK_2D[bgName]) {
+      if (window.Deck3D) {
+        cv3 = document.createElement('canvas');
+        cv3.id = 'bg3d'; cv3.setAttribute('aria-hidden', 'true');
+        cv.parentNode.insertBefore(cv3, cv.nextSibling);
+        try { bg3 = window.Deck3D.createBg3D(cv3, o); } catch (e) { bg3 = null; }
+        if (bg3) { painter = bg3; return; }
+        drop3d();
+      }
+      o.name = FALLBACK_2D[bgName];
+    }
+    if (!cx || !window.DeckBg) return;
+    painter = window.DeckBg.create(cx, o);
   }
   setupPainter();
   function drawBg(t) { if (painter) painter.draw(t); }
+  // Ảnh tĩnh của nền (in PDF): canvas đang vẽ (3D hoặc 2D).
+  function bgSnapshot() { return (bg3 ? cv3 : cv).toDataURL('image/png'); }
+
+  /* ---------- logo nổi khối (phần tử .fe-logo3d): WebGL riêng cho từng logo của slide đang chiếu ---------- */
+  var logos = []; // { el, inst, slide }
+  function imgReady(img, cb) {
+    if (img.complete && img.naturalWidth) { cb(); return; }
+    img.addEventListener('load', cb, { once: true });
+  }
+  function makeLogo(fe, still, cb) {
+    var img = fe.querySelector('img');
+    if (!img || !window.Deck3D) { cb(null); return; }
+    imgReady(img, function () {
+      var fig = img.parentNode, c = document.createElement('canvas');
+      c.className = 'l3d-cv'; c.setAttribute('aria-hidden', 'true');
+      var w = fe.offsetWidth || 400, h = fe.offsetHeight || 400;
+      var inst = null;
+      try {
+        inst = window.Deck3D.createLogo3D(c, img, { width: w, height: h, motion: fe.getAttribute('data-motion'), depth: +fe.getAttribute('data-depth') || 0.5, tint: rgbVar(getComputedStyle(document.documentElement), '--bg1', '20,24,40'), still: still });
+      } catch (e) { inst = null; }
+      if (!inst) { cb(null); return; }
+      fig.appendChild(c); fig.classList.add('on3d');
+      cb(inst, c, fig);
+    });
+  }
+  function startLogos(i) {
+    var sl = slides[i];
+    if (!sl || !window.Deck3D) return;
+    Array.prototype.forEach.call(sl.querySelectorAll('.fe-logo3d'), function (fe) {
+      if (logos.some(function (l) { return l.el === fe; })) return;
+      var rec = { el: fe, inst: null, slide: sl, dead: false };
+      logos.push(rec);
+      var still = MODE !== 'present' || frozen !== null;
+      makeLogo(fe, still, function (inst, c, fig) {
+        if (!inst) return;
+        if (rec.dead) { inst.dispose(); if (c.parentNode) c.parentNode.removeChild(c); fig.classList.remove('on3d'); return; }
+        rec.inst = inst; rec.c = c; rec.fig = fig;
+        inst.setPointer(ptr.x, ptr.y);
+        if (still) inst.draw(1.4); // khung tĩnh (thumbnail): góc nghiêng đẹp
+      });
+    });
+  }
+  function stopLogos(sl) {
+    logos = logos.filter(function (l) {
+      if (sl && l.slide !== sl) return true;
+      l.dead = true;
+      if (l.inst) { l.inst.dispose(); if (l.c.parentNode) l.c.parentNode.removeChild(l.c); l.fig.classList.remove('on3d'); }
+      return false;
+    });
+  }
+  function drawLogos(t) { for (var k = 0; k < logos.length; k++) if (logos[k].inst && logos[k].slide === slides[cur]) logos[k].inst.draw(t); }
+  // In PDF: mỗi logo vẽ 1 khung nghiêng đẹp → thay ảnh bằng ảnh chụp (rồi giải phóng WebGL), lần lượt từng logo.
+  function printLogos(done) {
+    var list = window.Deck3D ? Array.prototype.slice.call(deck.querySelectorAll('.fe-logo3d')) : [];
+    (function nextLogo() {
+      var fe = list.shift();
+      if (!fe) { done(); return; }
+      var finished = false;
+      var fin = function () { if (!finished) { finished = true; nextLogo(); } };
+      setTimeout(fin, 4000); // ảnh lỗi/không tải được → không treo bản in
+      var img = fe.querySelector('img');
+      if (!img) { fin(); return; }
+      makeLogo(fe, true, function (inst, c, fig) {
+        if (!inst) { fin(); return; }
+        try { inst.draw(1.4); img.src = c.toDataURL('image/png'); } catch (e) { /* giữ ảnh phẳng */ }
+        inst.dispose(); if (c.parentNode) c.parentNode.removeChild(c); fig.classList.remove('on3d');
+        imgReady(img, fin);
+      });
+    })();
+  }
 
   /* ---------- video: bấm ảnh bìa → phát toàn màn hình, tự phát ---------- */
   var ov = null, blobs = {};
@@ -261,30 +394,129 @@
   function pad(n) { return String(n).padStart(2, '0'); }
   function notify() {
     if (!EMBED) return;
-    try { window.parent.postMessage({ type: 'deck:slide', index: cur, count: N }, '*'); } catch (e) { /* bỏ qua */ }
+    var st = STEPS[cur];
+    try { window.parent.postMessage({ type: 'deck:slide', index: cur, count: N, step: st ? pos : 0, steps: st ? st.max : 0 }, '*'); } catch (e) { /* bỏ qua */ }
   }
-  function show(i, instant) {
+
+  /* phóng to "máy quay": dịch + phóng cả slide (thuộc tính translate/scale độc lập, không đụng transform của engine) */
+  var Z = { el: null, z: 1, x: 0, y: 0, tour: false };
+  function unzoomSlide(sl) { sl.style.translate = ''; sl.style.scale = ''; sl.classList.remove('zoomed'); Array.prototype.forEach.call(sl.querySelectorAll('.zt'), function (e) { e.classList.remove('zt'); }); }
+  function zoomOut(instant) {
+    var sl = slides[cur];
+    if (!Z.el || !sl) { Z = { el: null, z: 1, x: 0, y: 0, tour: false }; return; }
+    if (instant) sl.style.transition = 'none';
+    unzoomSlide(sl);
+    if (instant) { void sl.offsetWidth; sl.style.transition = ''; }
+    Z = { el: null, z: 1, x: 0, y: 0, tour: false };
+  }
+  // force (đi lần lượt): vẫn làm nổi phần tử khi nó đã đủ lớn (không phóng).
+  function zoomTo(el, force) {
+    var sl = slides[cur];
+    if (!sl || !el || !sl.contains(el)) return false;
+    var d = deck.getBoundingClientRect(), s = d.width / W, r = el.getBoundingClientRect();
+    // Góc phóng ĐANG hiển thị (giữa chừng chuyển tiếp, getComputedStyle trả giá trị nội suy hiện tại).
+    var cs = getComputedStyle(sl), z0 = parseFloat(cs.scale) || 1, tr = String(cs.translate || '').split(' ');
+    var x0 = parseFloat(tr[0]) || 0, y0 = parseFloat(tr[1]) || 0;
+    var w = el.offsetWidth || r.width / (s * z0), h = el.offsetHeight || r.height / (s * z0);
+    var px = W / 2 + ((r.left + r.width / 2 - d.left) / s - W / 2 - x0) / z0;
+    var py = H / 2 + ((r.top + r.height / 2 - d.top) / s - H / 2 - y0) / z0;
+    var z = Math.min(0.82 * W / w, 0.8 * H / h, 3);
+    if (!force && z < 1.15) return false;
+    z = Math.max(1, z);
+    var mx = (z - 1) * W / 2, my = (z - 1) * H / 2;
+    var x = clamp(-z * (px - W / 2), -mx, mx), y = clamp(-z * (py - H / 2), -my, my);
+    Array.prototype.forEach.call(sl.querySelectorAll('.zt'), function (e) { e.classList.remove('zt'); });
+    el.classList.add('zt'); sl.classList.add('zoomed');
+    sl.style.translate = x.toFixed(1) + 'px ' + y.toFixed(1) + 'px'; sl.style.scale = z.toFixed(4);
+    Z = { el: el, z: z, x: x, y: y, tour: !!force };
+    return true;
+  }
+
+  /* trạng thái từng ý của slide hiện tại: pos = số bước đã đi (0…max) */
+  var pos = 0;
+  function nowFrame() { return REDUCE ? -FINAL : (performance.now() - t0) / 1000 * FPS; }
+  function applySteps(st, back) {
+    var fr = SF[cur] = [];
+    if (st.mode === 'tour') {
+      st.units.forEach(function (u) { u.removeAttribute('data-wait'); u.removeAttribute('data-past'); });
+      return;
+    }
+    st.units.forEach(function (u, k) {
+      if (back) { fr[k + 1] = null; u.removeAttribute('data-wait'); } else u.setAttribute('data-wait', '');
+      if (st.mode === 'dim' && back && k < st.units.length - 1) u.setAttribute('data-past', ''); else u.removeAttribute('data-past');
+    });
+  }
+  // Đi 1 bước trong slide; trả false khi đã hết bước (→ sang slide).
+  function stepBy(dir) {
+    var st = STEPS[cur];
+    if (!st || MODE !== 'present') return false;
+    var to = pos + dir;
+    if (to < 0 || to > st.max) return false;
+    if (st.mode === 'tour') {
+      pos = to;
+      if (pos >= 1 && pos <= st.units.length) zoomTo(st.units[pos - 1], true); else zoomOut();
+    } else if (dir > 0) {
+      var u = st.units[to - 1];
+      SF[cur][to] = nowFrame(); u.removeAttribute('data-wait');
+      if (st.mode === 'dim') st.units.forEach(function (x, k) { if (k < to - 1) x.setAttribute('data-past', ''); else x.removeAttribute('data-past'); });
+      pos = to;
+    } else {
+      var v = st.units[pos - 1];
+      v.setAttribute('data-wait', ''); SF[cur][pos] = undefined;
+      pos = to;
+      if (st.mode === 'dim') st.units.forEach(function (x, k) { if (k < pos - 1) x.setAttribute('data-past', ''); else x.removeAttribute('data-past'); });
+    }
+    notify();
+    return true;
+  }
+
+  function show(i, instant, back) {
     frozen = null;
     i = clamp(i, 0, N - 1);
     var prevEl = slides[cur];
-    if (i !== cur && prevEl) { prevEl.classList.remove('on'); prevEl.classList.add('off'); prevEl.setAttribute('aria-hidden', 'true'); setTimeout(function () { prevEl.classList.remove('off'); }, 700); }
+    // Slide cũ mờ dần cùng góc phóng hiện tại rồi mới trả về (không giật).
+    if (Z.el && prevEl) { var zs = prevEl; Z = { el: null, z: 1, x: 0, y: 0, tour: false }; if (i === cur) unzoomSlide(zs); else setTimeout(function () { if (zs !== slides[cur]) unzoomSlide(zs); }, 700); }
+    if (i !== cur && prevEl) {
+      prevEl.classList.remove('on'); prevEl.classList.add('off'); prevEl.setAttribute('aria-hidden', 'true');
+      setTimeout(function () { prevEl.classList.remove('off'); if (prevEl !== slides[cur]) stopLogos(prevEl); }, 700);
+    }
     cur = i; t0 = performance.now() - (instant ? FINAL / FPS * 1000 : 0);
+    var st = MODE === 'present' ? STEPS[cur] : null;
+    pos = st && back ? st.max : 0;
+    if (st) applySteps(st, back);
+    else SF[cur] = null;
     render(cur, instant ? FINAL : 0);
     slides[cur].classList.add('on'); slides[cur].removeAttribute('aria-hidden');
+    if (MODE === 'present') startLogos(cur);
     if (countEl) countEl.textContent = pad(cur + 1) + ' / ' + pad(N);
     if (barEl) barEl.style.width = ((cur + 1) / N * 100) + '%';
     if (!EMBED) { try { history.replaceState(null, '', '#' + (cur + 1)); } catch (e) { /* bỏ qua */ } }
     notify();
   }
-  function next() { show(cur + 1); }
-  function prev() { show(cur - 1); }
+  // Trước/Sau: phóng to (bấm) → thu về trước; còn ý chưa hiện → hiện ý tiếp; hết → sang slide.
+  function next() {
+    if (Z.el && !Z.tour) { zoomOut(); return; }
+    if (stepBy(1)) return;
+    if (cur < N - 1) show(cur + 1);
+  }
+  function prev() {
+    if (Z.el && !Z.tour) { zoomOut(); return; }
+    if (stepBy(-1)) return;
+    if (cur > 0) show(cur - 1, false, true);
+  }
 
   var readyResolve; var ready = new Promise(function (r) { readyResolve = r; });
   window.__deck = {
     count: N, ready: ready,
     goto: function (i, frame) {
       slides.forEach(function (s, k) { s.style.transition = 'none'; s.classList.toggle('on', k === i); s.classList.remove('off'); });
-      cur = clamp(i, 0, N - 1); frozen = frame === undefined ? FINAL : frame; render(cur, frozen, 0); drawBg(0);
+      cur = clamp(i, 0, N - 1); frozen = frame === undefined ? FINAL : frame;
+      // Chụp ảnh (thumbnail): trang hiện ĐỦ mọi ý, không phóng, không mờ.
+      if (Z.el) { unzoomSlide(slides[cur]); Z = { el: null, z: 1, x: 0, y: 0, tour: false }; }
+      var st = STEPS[cur];
+      if (st) { pos = st.max; applySteps(st, true); st.units.forEach(function (u) { u.removeAttribute('data-past'); }); }
+      render(cur, frozen, 0); drawBg(0);
+      stopLogos(); startLogos(cur);
     },
   };
 
@@ -297,9 +529,10 @@
     if (MODE === 'print') {
       document.body.classList.add('print');
       // Nền chuyển động không in được → 1 khung tĩnh làm ảnh nền cho từng trang PDF.
-      if (painter) { try { painter.draw(0); deck.style.setProperty('--bgimg', 'url(' + cv.toDataURL('image/png') + ')'); } catch (e) { /* bỏ qua */ } }
+      if (painter) { try { painter.draw(0); deck.style.setProperty('--bgimg', 'url(' + bgSnapshot() + ')'); } catch (e) { /* bỏ qua */ } }
+      drop3d();
       slides.forEach(function (s, i) { s.removeAttribute('aria-hidden'); render(i, FINAL, 0); });
-      readyResolve(); return;
+      printLogos(readyResolve); return;
     }
     if (MODE === 'edit') { startEdit(); return; }
     if (MODE === 'still') {
@@ -312,6 +545,7 @@
 
     if (EMBED) document.body.classList.add('embed');
     fit(); addEventListener('resize', fit);
+    buildSteps(); markZoom();
     var h = parseInt((location.hash || '').slice(1), 10);
     show(isNaN(h) ? 0 : h - 1, REDUCE);
     (function loop(now) {
@@ -319,20 +553,28 @@
         var f = REDUCE ? FINAL : (now - t0) / 1000 * FPS;
         render(cur, f, REDUCE ? 0 : now / 1000);
         drawBg(REDUCE ? 0 : now / 1000);
+        drawLogos(REDUCE ? 1.4 : now / 1000);
       }
       requestAnimationFrame(loop);
     })(performance.now());
 
+    function toggleBlack() { document.body.classList.toggle('black'); }
     addEventListener('keydown', function (e) {
       var k = e.key;
       if (ov) { if (k === 'Escape') closeVideo(); return; }
       // Enter/Space trên nút phát video → để nút nhận lệnh bấm, không chuyển trang.
       if ((k === 'Enter' || k === ' ') && e.target && e.target.closest && e.target.closest('.vplay')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Màn đen (bút trình chiếu: phím "." hoặc B) — bấm phím bất kỳ để quay lại.
+      if (document.body.classList.contains('black')) { e.preventDefault(); toggleBlack(); return; }
       if (['ArrowRight', 'PageDown', ' ', 'Enter', 'ArrowDown'].indexOf(k) >= 0) { e.preventDefault(); next(); }
       else if (['ArrowLeft', 'PageUp', 'Backspace', 'ArrowUp'].indexOf(k) >= 0) { e.preventDefault(); prev(); }
       else if (k === 'Home') show(0); else if (k === 'End') show(N - 1);
       else if (k === 'r' || k === 'R') show(cur);
       else if (k === 'f' || k === 'F') toggleFs();
+      else if (k === 'F5') { e.preventDefault(); if (!document.fullscreenElement) toggleFs(); }
+      else if (k === '.' || k === 'b' || k === 'B') { e.preventDefault(); toggleBlack(); }
+      else if (k === 'Escape' && Z.el) { e.preventDefault(); zoomOut(); }
     });
     function toggleFs() {
       try {
@@ -345,21 +587,35 @@
     if ((b = document.getElementById('prev'))) b.addEventListener('click', function (e) { e.stopPropagation(); prev(); });
     if ((b = document.getElementById('fs'))) b.addEventListener('click', function (e) { e.stopPropagation(); toggleFs(); });
     document.getElementById('stage').addEventListener('click', function (e) {
+      if (document.body.classList.contains('black')) { toggleBlack(); return; }
       var fig = e.target && e.target.closest ? e.target.closest('.vid') : null;
       if (fig) { e.stopPropagation(); playVideo(fig); return; }
+      // Bấm vào khối nội dung → phóng to; đang phóng → bấm khối khác chuyển sang khối đó, bấm chỗ khác thu về.
+      var z = e.target && e.target.closest ? e.target.closest('[data-z]') : null;
+      if (z && (!slides[cur].contains(z) || z.closest('[data-wait]'))) z = null;
+      if (Z.el) { if (!(z && z !== Z.el && zoomTo(z))) zoomOut(); return; }
+      if (z && zoomTo(z)) return;
       if (e.clientX < innerWidth * .3) prev(); else next();
     });
     var tx = null;
     addEventListener('touchstart', function (e) { tx = e.touches[0].clientX; }, { passive: true });
     addEventListener('touchend', function (e) { if (tx === null || ov) return; var dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) { if (dx < 0) next(); else prev(); } tx = null; });
+    // Thị sai theo con trỏ cho nền/logo 3D (−1…1 quanh tâm màn hình).
+    addEventListener('pointermove', function (e) {
+      ptr.x = clamp((e.clientX / innerWidth) * 2 - 1, -1, 1); ptr.y = clamp(1 - (e.clientY / innerHeight) * 2, -1, 1);
+      if (bg3) bg3.setPointer(ptr.x, ptr.y);
+      logos.forEach(function (l) { if (l.inst) l.inst.setPointer(ptr.x, ptr.y); });
+    });
     var idle; function wake() { document.body.classList.remove('idle'); clearTimeout(idle); idle = setTimeout(function () { document.body.classList.add('idle'); }, 2500); }
     addEventListener('mousemove', wake); wake();
     setTimeout(function () { var hn = document.getElementById('hint'); if (hn) hn.style.opacity = '0'; }, 4500);
     addEventListener('message', function (e) {
       var d = e.data;
-      if (!d || typeof d !== 'object' || d.type !== 'deck:goto') return;
-      var idx = Number(d.index);
-      if (Number.isInteger(idx)) show(idx, !!d.instant);
+      if (!d || typeof d !== 'object') return;
+      if (d.type === 'deck:goto') { var idx = Number(d.index); if (Number.isInteger(idx)) show(idx, !!d.instant); }
+      // Nút Trước/Sau và bút trình chiếu bên ngoài khung → đi theo từng ý như phím trong khung.
+      else if (d.type === 'deck:step') { if (d.dir === 1) next(); else if (d.dir === -1) prev(); }
+      else if (d.type === 'deck:cmd') { if (d.cmd === 'black') toggleBlack(); else if (d.cmd === 'esc' && Z.el) { zoomOut(); } }
     });
     readyResolve();
   }

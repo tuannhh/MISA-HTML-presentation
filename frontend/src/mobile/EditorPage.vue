@@ -38,6 +38,11 @@ import { ratioCss } from '@/lib/format.js'
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+// "Áp cho mọi trang" ở mục Trình chiếu của trang đang chọn.
+function onBuildAll(build) {
+  const n = ed.setBuildAll(build)
+  toast.success(`Đã áp cách trình chiếu cho ${n} trang`)
+}
 // :code = mã ngắn 8 ký tự (API nhận cả mã ngắn lẫn UUID).
 const id = route.params.code || route.params.id
 const ed = useEditor(id, { onOutline: (d) => router.replace(deckPath(d, 'outline')) })
@@ -304,9 +309,10 @@ onMounted(ed.load)
           :video-library="videoLibrary"
           :overlay="!isFree"
           :ratio="deck.ratio"
+          :deck-logo="draft.spec.logo"
           @media="(m) => sm.open({ ...m, index: selected })"
         />
-        <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="assets" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" :ratio="deck.ratio" :asset-url="ed.assetUrl" studio @change-layout="ed.changeLayout" @media="(m) => sm.open({ ...m, index: selected })" />
+        <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="assets" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" :ratio="deck.ratio" :asset-url="ed.assetUrl" studio @change-layout="ed.changeLayout" @build-all="onBuildAll" @media="(m) => sm.open({ ...m, index: selected })" />
       </div>
     </template>
 

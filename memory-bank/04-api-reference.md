@@ -18,6 +18,7 @@ Tiền tố chung `/api`. Mọi response thành công: `{ "data": ..., "meta": {
 | GET | `/api/health` | Liveness, không chạm DB → `{status:'ok'}` |
 | GET | `/api/health/ready` | Readiness: `SELECT 1` + `queue.pending`; 503 nếu DB lỗi |
 | GET | `/deck-assets/InterVariable.woff2` | Font Inter cho bài trình bày (công khai, cache 1 năm, CORS `*`) |
+| GET | `/deck-assets/deck3d.js?v=<băm>` | Gói hiệu ứng 3D (three.js, IIFE `window.Deck3D`) cho khung xem trước sandbox — công khai, cache 1 năm (URL có băm nội dung), CORS `*`, CORP cross-origin. Chưa `npm run build` → 404 (bài tự lùi về nền 2D) |
 | GET | `/deck-assets/fonts/<thư mục>/<tệp>.woff2` | Phông Montserrat/Barlow/Roboto/Google Sans (tập con unicode-range). Chỉ phục vụ tệp trong allowlist `FONT_FILES` — ngoài danh sách → 404 |
 
 ## Xác thực — `/api/auth`
@@ -84,7 +85,7 @@ DTO bài trình bày: `{ id, code, title, ratio, visibility, status, sourceKind,
 
 ## Ảnh / video — `/api/assets/:id`
 
-Trả tệp nếu **(a)** query `exp` + `sig` là chữ ký HMAC hợp lệ (dùng trong iframe sandbox không có cookie) **hoặc (b)** người dùng có quyền đọc bài chứa ảnh (chủ sở hữu hoặc bài public ready). Header `Cross-Origin-Resource-Policy: cross-origin`, `nosniff`. Video phát bằng `sendFile` hỗ trợ `Range` (206, tua được, không nạp cả tệp vào RAM).
+Trả tệp nếu **(a)** query `exp` + `sig` là chữ ký HMAC hợp lệ (dùng trong iframe sandbox không có cookie) **hoặc (b)** người dùng có quyền đọc bài chứa ảnh (chủ sở hữu hoặc bài public ready). Header `Cross-Origin-Resource-Policy: cross-origin`, `nosniff`; URL **có chữ ký** thêm `Access-Control-Allow-Origin: *` (logo 3D đọc điểm ảnh bằng WebGL trong khung origin null, ảnh tải `crossorigin="anonymous"`; không có Allow-Credentials). Video phát bằng `sendFile` hỗ trợ `Range` (206, tua được, không nạp cả tệp vào RAM).
 
 ## Quản trị — `/api/admin` (chỉ admin)
 

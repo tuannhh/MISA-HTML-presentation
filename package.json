@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite",
     "dev:api": "node --watch --env-file-if-exists=.env src/server.js",
-    "build": "vite build",
+    "build": "vite build && node scripts/build-deck3d.mjs",
     "start": "node src/server.js",
     "create-admin": "node --env-file-if-exists=.env scripts/create-admin.js",
     "test": "node --test \"test/unit/**/*.test.js\"",
@@ -37,6 +37,7 @@
     "@vitejs/plugin-vue": "^6.0.9",
     "cropperjs": "^1.6.2",
     "tailwindcss": "^4.3.3",
+    "three": "^0.186.1",
     "vite": "^8.3.2",
     "vue": "^3.5.43",
     "vue-router": "^5.3.1"

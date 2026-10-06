@@ -3,13 +3,14 @@
 //  - lenient (kết quả AI): tự cắt chuỗi quá dài, thay giá trị lạ bằng mặc định, bỏ phần tử thừa.
 //  - strict (người dùng lưu): vượt giới hạn → trả danh sách lỗi để API báo 422 (không âm thầm cắt dữ liệu người dùng).
 import { randomUUID } from 'node:crypto';
-import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE, BRAND_SLOTS } from '../../shared/deck/render.js';
+import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE, BRAND_SLOTS, BUILDS } from '../../shared/deck/render.js';
 import { hasRich, canonicalRich, plainText, cutRich } from '../../shared/deck/rich.js';
 import { CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
 import { FONT_IDS, DEFAULT_FONT } from '../../shared/deck/fonts.js';
 import { ICON_NAMES } from '../../shared/deck/icons.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
+import { LOGO_MOTIONS } from '../../shared/deck/bg3d.js';
 import { VARIANTS, STYLES } from '../../shared/deck/variants.js';
 import { FREE_TYPES, TEXT_STYLES, TEXT_ALIGNS, TEXT_VALIGNS, TEXT_COLORS, FILLS, SHAPES, SHAPE_FILLS, TABLE_STYLES, RADII, SIZE_RANGE } from '../../shared/deck/free.js';
 
@@ -216,6 +217,8 @@ function cleanElement(c, v, path, seen) {
     w: num(o.w, 2, 150, 2) ?? 30,
     h: num(o.h, 2, 150, 2) ?? 20,
   };
+  // Hiện khi bấm (trình chiếu từng phần tử) — chỉ lưu khi bật.
+  if (o.step === true) el.step = true;
   const size = num(o.size, SIZE_RANGE.min, SIZE_RANGE.max, 2) ?? 1;
   if (o.type === 'text') {
     return Object.assign(el, {
@@ -230,6 +233,9 @@ function cleanElement(c, v, path, seen) {
   }
   if (o.type === 'image') return Object.assign(el, { image: cleanImage(c, o.image, `${path}.image`), radius: oneOf(o.radius, Object.keys(RADII), 'md') });
   if (o.type === 'video') return Object.assign(el, { video: cleanVideo(c, o.video, `${path}.video`) });
+  if (o.type === 'logo3d') {
+    return Object.assign(el, { image: cleanImage(c, o.image, `${path}.image`), motion: oneOf(o.motion, Object.keys(LOGO_MOTIONS), 'swing'), depth: num(o.depth, 0.1, 1, 2) ?? 0.5 });
+  }
   if (o.type === 'table') {
     const rows = c.arr(o.rows, SPEC_LIMITS.tableRows, `${path}.rows`).map((r, i) =>
       c.arr(r, SPEC_LIMITS.tableCols, `${path}.rows[${i}]`).map((cell, k) => c.str(cell, SPEC_LIMITS.cell, `${path}.rows[${i}][${k}]`)),
@@ -354,6 +360,8 @@ function cleanSlide(c, v, i, seen) {
   if (!c.strict) slide.layout = fallbackLayout(slide);
   // Biến thể trình bày do hệ thống chọn ngầm (không có trên giao diện) → giá trị lạ/không thuộc bố cục: bỏ, không báo lỗi.
   slide.variant = VARIANTS[slide.layout]?.includes(o.variant) ? o.variant : '';
+  // Cách trình chiếu (người dùng chọn, không qua AI): mặc định 'auto' = không lưu trường.
+  if (BUILDS.includes(o.build)) slide.build = o.build;
   return slide;
 }
 

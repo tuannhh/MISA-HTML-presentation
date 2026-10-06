@@ -96,7 +96,7 @@ body.idle { cursor: none; }
   transform: translate(-50%, -50%) scale(var(--s, 1)); transform-origin: center;
   background: linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%);
 }
-#bg { position: absolute; left: 0; top: 0; width: var(--W); height: var(--H); z-index: 0; opacity: .9; pointer-events: none; }
+#bg, #bg3d { position: absolute; left: 0; top: 0; width: var(--W); height: var(--H); z-index: 0; opacity: .9; pointer-events: none; }
 
 /* ---------- slide khung ---------- */
 .slide {
@@ -113,8 +113,20 @@ body.idle { cursor: none; }
   opacity: 0; visibility: hidden;
   transition: opacity .55s ease, transform .7s ease, visibility 0s linear .55s;
 }
-.slide.on { opacity: 1; visibility: visible; transition: opacity .45s ease, visibility 0s; }
+.slide.on { opacity: 1; visibility: visible; transition: opacity .45s ease, visibility 0s, translate .7s cubic-bezier(.22, .8, .24, 1), scale .7s cubic-bezier(.22, .8, .24, 1); }
 .slide.off { visibility: visible; opacity: 0; transform: scale(1.025); }
+/* Slide vừa rời đi còn "hiện" (mờ dần ~1,2 giây) → không được chặn cú bấm của slide đang chiếu (phóng to, video). */
+.slide:not(.on) { pointer-events: none; }
+/* Trình chiếu từng ý + phóng to khi bấm — engine gắn data-u (ý), data-wait (chưa hiện), data-past (ý trước, làm mờ),
+   data-z (phóng được); phóng = translate/scale độc lập trên slide (không đụng transform của hiệu ứng). */
+.slide [data-wait] { visibility: hidden !important; }
+.slide [data-past] { filter: opacity(.32) saturate(.6) !important; }
+body:not(.edit) .slide.on [data-z] { cursor: zoom-in; }
+body:not(.edit) .slide.on:not(.zoomed) [data-z]:hover { outline: 3px solid color-mix(in srgb, var(--accent) 50%, transparent); outline-offset: 8px; }
+.slide.zoomed { cursor: zoom-out; }
+.slide.zoomed [data-z]:not(.zt):not(.zt *):not(:has(.zt)), .slide.zoomed [data-u]:not(.zt):not(.zt *):not(:has(.zt)) { filter: opacity(.2) !important; }
+body.black { cursor: none; }
+body.black::after { content: ""; position: fixed; inset: 0; z-index: 60; background: #000; }
 .slide *, .slide *::before, .slide *::after { box-sizing: border-box; }
 .sbg {
   position: absolute; inset: 0; z-index: -1; pointer-events: none;
@@ -648,7 +660,7 @@ body.embed #hud { display: none; }
 body.print { overflow: visible; height: auto; background: var(--bg1); }
 body.print #stage { position: static; overflow: visible; }
 body.print #deck { position: static; transform: none; width: var(--W); height: auto; overflow: visible; background: none; }
-body.print #bg { display: none; }
+body.print #bg, body.print #bg3d { display: none; }
 /* Nền chuyển động không in được → engine vẽ 1 khung tĩnh của mẫu nền thành ảnh (--bgimg) đặt dưới mỗi trang. */
 body.print .slide {
   position: relative; width: var(--W); height: var(--H); opacity: 1; visibility: visible; transform: none; transition: none;
@@ -688,6 +700,11 @@ body.print .im-glass { -webkit-backdrop-filter: none; backdrop-filter: none; bac
 .fe-fig.fit-c { background: none; }
 .fe-fig img { display: block; width: 100%; height: 100%; }
 .fe-fig.r-md { border-radius: 28px; } .fe-fig.r-lg { border-radius: 64px; } .fe-fig.r-circle { border-radius: 50%; }
+/* Logo nổi khối: canvas WebGL phủ khung (engine thêm khi có gói 3D), ảnh phẳng làm dự phòng/bản in. */
+.fe-logo3d .fe-fig { overflow: visible; background: none; }
+.fe-logo3d .fe-fig img { object-fit: contain; filter: drop-shadow(0 18px 30px rgba(0, 0, 0, .35)); }
+.fe-logo3d .l3d-cv { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.fe-logo3d .fe-fig.on3d img { visibility: hidden; }
 .fe-fig.empty { border: 3px dashed var(--line-2); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .fe-fig .ph, .fe-video .ph { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 18px; align-items: center; justify-content: center; color: var(--muted); font: 600 30px/1.2 var(--f-sans); text-align: center; }
 .fe-fig .ph .ic { width: 96px; height: 96px; }

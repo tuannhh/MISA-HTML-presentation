@@ -14,6 +14,7 @@ import FormField from './FormField.vue'
 import RangeField from './RangeField.vue'
 import VideoPicker from './VideoPicker.vue'
 import { useToast } from '@/components/mds/toast.js'
+import { LOGO_MOTIONS } from '@shared/deck/bg3d.js'
 import { newElement, TEXT_STYLES, TEXT_COLORS, FILLS, SHAPES, SHAPE_FILLS, TABLE_STYLES, RADII, SIZE_RANGE } from '@shared/deck/free.js'
 import { SPEC_LIMITS as L, ratioNum } from '@/lib/slideModel.js'
 
@@ -27,6 +28,8 @@ const props = defineProps({
   // Trang có bố cục (không phải trang tự do): phần tử là LỚP CHÈN ĐÈ lên bố cục — logo, ảnh, chữ, hình khối.
   overlay: { type: Boolean, default: false },
   ratio: { type: String, default: '16:9' },
+  // Logo của bài (spec.logo) — ảnh mặc định cho "Logo 3D" (ưu tiên bản đã tách nền).
+  deckLogo: { type: Object, default: null },
 })
 const emit = defineEmits(['media'])
 // Tỷ lệ khung (rộng/cao) — đổi % rộng/cao của phần tử ra tỷ lệ ảnh khi mở hộp chọn ảnh.
@@ -43,9 +46,10 @@ const SHAPE_OPTS = opts(SHAPES)
 const SHAPE_FILL_OPTS = opts(SHAPE_FILLS)
 const TABLE_OPTS = opts(TABLE_STYLES)
 const RADIUS_OPTS = opts(RADII)
+const MOTION_OPTS = opts(LOGO_MOTIONS)
 
-const TYPE_LABEL = { text: 'Chữ', image: 'Ảnh', video: 'Video', table: 'Bảng', shape: 'Hình khối' }
-const TYPE_ICON = { text: 'typography', image: 'photo', video: 'video', table: 'table', shape: 'square-rounded' }
+const TYPE_LABEL = { text: 'Chữ', image: 'Ảnh', video: 'Video', table: 'Bảng', shape: 'Hình khối', logo3d: 'Logo 3D' }
+const TYPE_ICON = { text: 'typography', image: 'photo', video: 'video', table: 'table', shape: 'square-rounded', logo3d: 'cube' }
 const label = (e) => (e.type === 'text' ? (e.text || '').trim().slice(0, 40) || 'Chữ (trống)' : TYPE_LABEL[e.type])
 
 // Phần tử mới đặt so le để không chồng khít lên phần tử trước.
@@ -58,16 +62,23 @@ const ADD_ALL = [
   { key: 'video', label: 'Video', icon: 'video', make: (o) => newElement('video', { x: 25 + o, y: 22 + o, w: 50, h: 50 }) },
   { key: 'table', label: 'Bảng', icon: 'table', make: (o) => newElement('table', { x: 8 + o, y: 26 + o, w: 70, h: 40 }) },
   { key: 'shape', label: 'Hình khối', icon: 'square-rounded', make: (o) => newElement('shape', { x: 30 + o, y: 30 + o, w: 30, h: 30 }) },
+  // Logo nổi khối 3D khi trình chiếu — mặc định lấy logo của bài (bản tách nền nếu có).
+  { key: 'logo3d', label: 'Logo 3D', icon: 'cube', make: (o) => newElement('logo3d', { image: deckLogoImage(), x: 34 + o, y: 22 + o, w: 32, h: 46 }) },
 ]
+function deckLogoImage() {
+  const lg = props.deckLogo
+  const asset = lg?.removeBg && lg.cutout ? lg.cutout : lg?.asset
+  return asset ? { asset, alt: 'Logo', caption: '', fit: 'contain' } : null
+}
 // Lớp chèn đè: logo, chữ, ảnh, hình khối (bảng/video dùng trang tự do hoặc ô media của bố cục).
-const OVERLAY_KEYS = new Set(['logo', 'text', 'image', 'shape'])
+const OVERLAY_KEYS = new Set(['logo', 'text', 'image', 'shape', 'logo3d'])
 const ADD = computed(() => ADD_ALL.filter((a) => (props.overlay ? OVERLAY_KEYS.has(a.key) : true)))
 function add(a) {
   try {
     const o = (els.value.length % 5) * 2
     const e = props.live.addElement(a.make(o))
     // Ảnh/video mới → mở ngay hộp chọn nguồn.
-    if (e && (e.type === 'image' || e.type === 'video')) setTimeout(() => emit('media', { path: `elements.${e.id}`, kind: e.type, aspect: (e.w * ratio.value) / e.h }), 50)
+    if (e && (e.type === 'image' || e.type === 'video' || (e.type === 'logo3d' && !e.image))) setTimeout(() => emit('media', { path: `elements.${e.id}`, kind: e.type, aspect: (e.w * ratio.value) / e.h }), 50)
   } catch (err) {
     toast.error(err.message)
   }
@@ -77,6 +88,11 @@ const idx = computed(() => props.live.selectedEl.value?.index ?? 0)
 const setNum = (k, v, min, max) => {
   const n = Number(String(v).replace(',', '.'))
   if (el.value && Number.isFinite(n)) el.value[k] = Math.min(max, Math.max(min, Math.round(n * 100) / 100))
+}
+// Trình chiếu: phần tử ẩn đến khi người trình bày bấm Sau (theo thứ tự lớp). Chỉ lưu khi bật.
+function setStep(v) {
+  if (v) el.value.step = true
+  else delete el.value.step
 }
 const imgUrl = computed(() => (el.value?.image?.asset ? props.media.assetUrl(el.value.image.asset) : ''))
 
@@ -103,7 +119,7 @@ function delCol() {
     <section>
       <h3 class="mb-1 text-[13px] font-semibold">{{ overlay ? 'Chèn lên trang' : 'Thêm phần tử' }}</h3>
       <p v-if="overlay" class="mb-2 text-[12px] leading-4 text-[var(--mds-text-secondary)]">Logo, ảnh, chữ hoặc hình khối nằm đè lên bố cục — kéo thả trên khung xem trước để đặt chỗ.</p>
-      <div class="grid gap-2" :class="overlay ? 'grid-cols-4' : 'grid-cols-3'">
+      <div class="grid grid-cols-3 gap-2">
         <button
           v-for="a in ADD"
           :key="a.key"
@@ -151,6 +167,8 @@ function delCol() {
         </label>
       </div>
 
+      <MSwitch :model-value="!!el.step" label="Hiện khi bấm (trình chiếu từng phần)" @update:model-value="setStep" />
+
       <!-- Chữ -->
       <template v-if="el.type === 'text'">
         <FormField label="Nội dung" hint="Hoặc bấm đúp vào chữ trên khung xem trước để sửa trực tiếp">
@@ -193,6 +211,20 @@ function delCol() {
         <MButton variant="outline" @click="emit('media', { path: `elements.${el.id}`, kind: 'image', aspect: (el.w * ratio.value) / el.h })"><template #icon><MIcon name="adjustments" :size="16" /></template>{{ imgUrl ? 'Đổi / chỉnh sửa ảnh' : 'Chọn ảnh' }}</MButton>
         <FormField label="Bo góc"><MSelect v-model="el.radius" :options="RADIUS_OPTS" /></FormField>
         <MInput v-if="el.image" v-model="el.image.alt" placeholder="Mô tả ảnh (cho trình đọc màn hình)" />
+      </template>
+
+      <!-- Logo 3D -->
+      <template v-else-if="el.type === 'logo3d'">
+        <button type="button" class="relative grid aspect-video w-full place-items-center overflow-hidden rounded-lg border border-[var(--mds-border)] bg-[var(--mds-bg-page)] hover:border-[var(--mds-brand-600)]" @click="emit('media', { path: `elements.${el.id}`, kind: 'image', aspect: (el.w * ratio.value) / el.h })">
+          <img v-if="imgUrl" :src="imgUrl" alt="" class="h-full w-full object-contain p-2" />
+          <span v-else class="flex flex-col items-center gap-1 text-[12px] text-[var(--mds-text-secondary)]"><MIcon name="cube" :size="28" />Chọn logo</span>
+        </button>
+        <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Nổi khối và chuyển động khi trình chiếu (cần trình duyệt hỗ trợ WebGL; bản PDF là ảnh nghiêng tĩnh). Logo PNG nền trong suốt cho khối đẹp nhất.</p>
+        <div class="grid grid-cols-2 gap-2">
+          <FormField label="Chuyển động"><MSelect v-model="el.motion" :options="MOTION_OPTS" /></FormField>
+          <div class="flex items-end"><MButton variant="outline" class="w-full" @click="emit('media', { path: `elements.${el.id}`, kind: 'image', aspect: (el.w * ratio.value) / el.h })">{{ imgUrl ? 'Đổi logo' : 'Chọn logo' }}</MButton></div>
+        </div>
+        <RangeField v-model="el.depth" label="Độ dày khối" :min="0.1" :max="1" :step="0.05" :reset="0.5" :format="(v) => `${Math.round(v * 100)}%`" />
       </template>
 
       <!-- Video -->

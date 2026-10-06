@@ -10,6 +10,7 @@ import { parseYouTubeId } from '../../src/services/youtubeService.js';
 import { sniffVideo } from '../../src/lib/fileType.js';
 import { deckFontFile } from '../../src/services/renderService.js';
 import { renderDeckHtml, BACKGROUNDS } from '../../shared/deck/render.js';
+import { NAMES_3D } from '../../shared/deck/bg3d.js';
 import { paletteVars, contrast, themeVarsCss, THEME_PRESETS, presetsForTone } from '../../shared/deck/palette.js';
 import { FONT_FILES, fontFaceCss } from '../../shared/deck/fonts.js';
 import '../../shared/deck/backgrounds.js';
@@ -205,5 +206,5 @@ test('renderer: video 16:9 có nút phát + chống XSS tên video; nền/phông
   assert.match(html, /\[data-deck-theme="custom"\]\{/);
   assert.match(html, /--f-head:"Deck Barlow"/);
   assert.match(html, /width:400px;height:100px/);
-  assert.deepEqual(BACKGROUNDS, [...globalThis.DeckBg.NAMES, 'none'], 'danh sách nền khớp backgrounds.js');
+  assert.deepEqual(BACKGROUNDS, [...globalThis.DeckBg.NAMES, ...NAMES_3D, 'none'], 'danh sách nền khớp backgrounds.js + nền 3D');
 });

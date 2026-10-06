@@ -71,3 +71,9 @@ Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài +
 ## Kiểm toán
 
 `audit_logs` ghi: đăng ký, đăng nhập (thành công/thất bại), đổi mật khẩu, tạo/dựng (`presentation.build`)/xoá/nhân bản bài, đổi chế độ chia sẻ, xuất HTML/PDF, mọi thao tác admin.
+
+## Trình chiếu từng ý / 3D (2026-10-06)
+- Tin `deck:step`/`deck:cmd` vào khung chỉ mang hướng (`±1`) hoặc lệnh trong allowlist (`black`, `esc`) — engine bỏ qua giá trị khác. `deck:slide` gửi ra thêm `step/steps` là số nguyên.
+- `slide.build`, `elements[].step`, `logo3d.motion` chỉ nhận giá trị trong allowlist (`BUILDS`, `true`, `LOGO_MOTIONS`); `depth` kẹp 0,1–1; renderer chỉ in giá trị đã chuẩn hoá (qua `esc`).
+- Ảnh ký trả `Access-Control-Allow-Origin: *` (không kèm cookie/credentials) để WebGL đọc điểm ảnh logo — quyền vẫn do chữ ký + hạn `exp` quyết định. Ảnh khác nguồn không đọc được (canvas "bẩn") → `createLogo3D` trả null, giữ ảnh phẳng.
+- Gói `deck3d.js` nhúng inline có nonce như engine; chuỗi `</script` (nếu có) được thoát khi đọc gói.

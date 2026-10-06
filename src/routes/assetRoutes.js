@@ -16,6 +16,9 @@ export function assetRoutes({ service }) {
       // Cho phép trang xem trước (sandbox, origin null) hiển thị ảnh.
       'Cross-Origin-Resource-Policy': 'cross-origin',
     });
+    // URL có chữ ký (khung xem trước) → cho đọc điểm ảnh qua CORS: logo 3D (WebGL) trong khung sandbox origin null tải ảnh với
+    // crossorigin="anonymous". Chữ ký vẫn là điều kiện truy cập; không gửi kèm cookie (không có Allow-Credentials).
+    if (signed) res.set('Access-Control-Allow-Origin', '*');
     if (!path) return res.send(buffer);
     return new Promise((resolve, reject) => {
       res.sendFile(path, { acceptRanges: true, cacheControl: false, lastModified: true, dotfiles: 'deny' }, (err) => (err && !res.headersSent ? reject(err) : resolve()));

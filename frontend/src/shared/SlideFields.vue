@@ -12,7 +12,7 @@ import ImagePicker from './ImagePicker.vue'
 import VideoPicker from './VideoPicker.vue'
 import MTabs from '@/components/mds/MTabs.vue'
 import IconPicker from './IconPicker.vue'
-import { LAYOUTS, LAYOUT_FIELDS, TONE_OPTIONS, VARIANT_LABELS, ITEM_IMAGE_LAYOUTS, ratioNum, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
+import { LAYOUTS, LAYOUT_FIELDS, TONE_OPTIONS, VARIANT_LABELS, ITEM_IMAGE_LAYOUTS, BUILD_OPTIONS, BUILD_LAYOUTS, ratioNum, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
 import { VARIANTS, fits, resolveVariant } from '@shared/deck/variants.js'
 import { plainText, repaintRich } from '@shared/deck/rich.js'
 
@@ -30,7 +30,7 @@ const props = defineProps({
   // URL xem trước ảnh theo mã asset (ảnh/logo thay biểu tượng của mục).
   assetUrl: { type: Function, default: () => '' },
 })
-const emit = defineEmits(['change-layout', 'media'])
+const emit = defineEmits(['change-layout', 'media', 'build-all'])
 
 const s = computed(() => props.slide)
 // Ô ảnh chỉ nhận ảnh (asset cũ không có kind = ảnh).
@@ -73,6 +73,15 @@ const variant = computed(() => resolveVariant(s.value, ratioN.value))
 function setVariant(v) {
   s.value.variant = v
 }
+// Trình chiếu từng ý (người dùng chọn, không qua AI) — 'auto' = xoá trường.
+const canBuild = computed(() => BUILD_LAYOUTS.includes(s.value.layout))
+const build = computed({
+  get: () => s.value.build || 'auto',
+  set: (v) => {
+    if (v === 'auto') delete s.value.build
+    else s.value.build = v
+  },
+})
 const itemImages = computed(() => ITEM_IMAGE_LAYOUTS.includes(s.value.layout))
 function clearItemImage(it) {
   delete it.image
@@ -131,6 +140,13 @@ function setGalleryImage(i, v) {
         >
           {{ v.label }}
         </button>
+      </div>
+    </FormField>
+
+    <FormField v-if="canBuild" label="Trình chiếu khi bấm Sau" :hint="s.layout === 'free' ? 'Bật “Hiện khi bấm” ở từng phần tử để chúng hiện lần lượt' : 'Dùng phím →, PageDown hoặc bút trình chiếu. Bấm vào khối nội dung khi trình chiếu để phóng to'">
+      <div class="flex min-w-0 flex-col gap-2">
+        <MSelect v-model="build" :options="BUILD_OPTIONS" aria-label="Cách trình chiếu trang" />
+        <MButton variant="ghost" class="self-start" @click="emit('build-all', build)"><template #icon><MIcon name="copy" :size="16" /></template>Áp cho mọi trang</MButton>
       </div>
     </FormField>
 

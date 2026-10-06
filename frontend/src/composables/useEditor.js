@@ -2,7 +2,7 @@
 // media (ảnh, video, YouTube, logo), thiết kế, chia sẻ, xuất.
 import { ref, computed, onBeforeUnmount } from 'vue';
 import { get, patch, del, post, download, ApiError } from '@/lib/api.js';
-import { newSlide, duplicateSlide, ensureLayoutContent, prepareSpecForSave, clone, SPEC_LIMITS } from '@/lib/slideModel.js';
+import { newSlide, duplicateSlide, ensureLayoutContent, prepareSpecForSave, clone, SPEC_LIMITS, BUILD_LAYOUTS } from '@/lib/slideModel.js';
 import { useMedia } from '@/composables/useMedia.js';
 import { withDesignDefaults } from '@/lib/design.js';
 
@@ -139,6 +139,18 @@ export function useEditor(id, { onOutline } = {}) {
     slides().splice(j, 0, s);
     selected.value = j;
   }
+  // Trình chiếu: áp cùng cách trình chiếu cho mọi trang có "ý" (trang bìa/mục/trích dẫn/kết không có ý → bỏ qua).
+  function setBuildAll(build) {
+    let n = 0;
+    for (const s of draft.value?.spec.slides || []) {
+      if (!BUILD_LAYOUTS.includes(s.layout)) continue;
+      if (build === 'auto') delete s.build;
+      else s.build = build;
+      n += 1;
+    }
+    return n;
+  }
+
   function changeLayout(layout) {
     if (!slide.value) return;
     slide.value.layout = layout;
@@ -170,7 +182,7 @@ export function useEditor(id, { onOutline } = {}) {
 
   return {
     deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, previewKey, assets, media, videoLibrary,
-    load, save, discard, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout,
+    load, save, discard, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout, setBuildAll,
     uploadImage, assetUrl, exportHtml, exportPdf, remove, duplicate,
   };
 }
