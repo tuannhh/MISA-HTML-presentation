@@ -1,6 +1,13 @@
 // Truy cập bảng presentations. Mọi truy vấn "của tôi" đi qua tenantClause; truy vấn "đọc được"
-// = của tôi HOẶC (public + ready). Không hàm nào cho phép đọc bản private của tenant khác.
-import { tenantClause } from './tenantScope.js';
+// = của tôi HOẶC (ready + (public HOẶC được chủ bài mời qua presentation_shares)).
+// Không hàm nào cho phép đọc bản private của tenant khác khi chưa được mời.
+import { tenantClause, assertTenantId } from './tenantScope.js';
+
+// Quyền của người xem trên 1 dòng đọc được: chủ bài | được mời sửa | chỉ xem (được mời xem hoặc bài công khai).
+export function accessRole(row, userId) {
+  if (row.tenant_id === userId) return 'owner';
+  return row.share_role === 'editor' ? 'editor' : 'viewer';
+}
 
 const LIST_COLS = `p.id, p.tenant_id, p.short_code, p.title, p.ratio, p.visibility, p.status, p.source_kind, p.source_label,
   p.spec_version, p.outline_version, p.slide_count, p.thumbnail_asset_id, p.error_message, p.created_at, p.updated_at, p.published_at`;
@@ -56,17 +63,21 @@ export function createPresentationRepository(pool) {
       return rows[0]?.id || null;
     },
 
-    // Đọc được: chủ sở hữu hoặc bản công khai đã sẵn sàng (mọi tenant đã đăng nhập).
+    // Đọc được: chủ sở hữu, hoặc bài đã sẵn sàng mà công khai / người này được mời. Kèm access_role
+    // ('owner' | 'editor' | 'viewer') để service quyết thao tác — người được mời sửa vẫn không phải chủ bài.
     async findReadable(tenantId, id) {
       const t = tenantClause(tenantId, 'p');
       const [rows] = await pool.execute(
-        `SELECT ${LIST_COLS}, p.spec, u.display_name AS author_name
+        `SELECT ${LIST_COLS}, p.spec, u.display_name AS author_name, s.role AS share_role
            FROM presentations p JOIN users u ON u.id = p.tenant_id
-          WHERE p.id = ? AND (${t.sql} OR (p.visibility = 'public' AND p.status = 'ready'))
+           LEFT JOIN presentation_shares s ON s.presentation_id = p.id AND s.user_id = ?
+          WHERE p.id = ? AND (${t.sql} OR (p.status = 'ready' AND (p.visibility = 'public' OR s.user_id IS NOT NULL)))
           LIMIT 1`,
-        [id, ...t.params],
+        [t.params[0], id, ...t.params],
       );
-      return parseSpec(rows[0]);
+      const row = parseSpec(rows[0]);
+      if (row) row.access_role = accessRole(row, tenantId);
+      return row;
     },
 
     async listOwned(tenantId, { q, limit, offset }) {
@@ -84,6 +95,28 @@ export function createPresentationRepository(pool) {
       );
       const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM presentations p WHERE ${w}`, params);
       return { rows, total: Number(total) };
+    },
+
+    // "Được chia sẻ với tôi": bài người khác mời mình (đã sẵn sàng), kèm quyền được cấp.
+    async listSharedWith(userId, { q, limit, offset }) {
+      const where = ['s.user_id = ?', "p.status = 'ready'"];
+      const params = [assertTenantId(userId)];
+      if (q) {
+        where.push("p.title LIKE ? ESCAPE '\\\\'");
+        params.push(`%${escapeLike(q)}%`);
+      }
+      const w = where.join(' AND ');
+      const [rows] = await pool.query(
+        `SELECT ${LIST_COLS}, u.display_name AS author_name, s.role AS share_role
+           FROM presentation_shares s JOIN presentations p ON p.id = s.presentation_id JOIN users u ON u.id = p.tenant_id
+          WHERE ${w} ORDER BY p.updated_at DESC LIMIT ? OFFSET ?`,
+        [...params, limit, offset],
+      );
+      const [[{ total }]] = await pool.query(
+        `SELECT COUNT(*) AS total FROM presentation_shares s JOIN presentations p ON p.id = s.presentation_id WHERE ${w}`,
+        params,
+      );
+      return { rows: rows.map((r) => ({ ...r, access_role: accessRole(r, userId) })), total: Number(total) };
     },
 
     async listPublic({ q, limit, offset }) {

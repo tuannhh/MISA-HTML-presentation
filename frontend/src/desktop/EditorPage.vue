@@ -2,6 +2,8 @@
 // Trình soạn thảo desktop: danh sách trang | xem trước SỬA TRỰC TIẾP | nội dung trang đang chọn.
 // Khung xem trước dựng lại ngay từ bản nháp (useLiveDeck): bấm vào chữ để sửa tại chỗ, bấm ảnh/video để đổi hoặc chỉnh sửa,
 // trang tự do kéo thả/đổi cỡ phần tử. Lưu (hoặc Ctrl/Cmd+S) → máy chủ chuẩn hoá + lưu; trang khác làm tiếp như vậy.
+// Quyền: chủ bài đủ thao tác (Chia sẻ, Xoá, khôi phục phiên bản); người được mời sửa: sửa + handoff phiên bản;
+// người chỉ xem: thông báo + Trình chiếu/Nhân bản.
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { deckPath } from '@/lib/deckPath.js'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
@@ -13,11 +15,14 @@ import ImageStudio from '@/shared/ImageStudio.vue'
 import VideoPicker from '@/shared/VideoPicker.vue'
 import DesignPanel from '@/shared/DesignPanel.vue'
 import FormAlert from '@/shared/FormAlert.vue'
+import SharePanel from '@/shared/SharePanel.vue'
+import VersionsPanel from '@/shared/VersionsPanel.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import MInput from '@/components/mds/MInput.vue'
 import MSelect from '@/components/mds/MSelect.vue'
-import MSwitch from '@/components/mds/MSwitch.vue'
+import MTag from '@/components/mds/MTag.vue'
+import MDrawer from '@/components/mds/MDrawer.vue'
 import MTabs from '@/components/mds/MTabs.vue'
 import MDropdownMenu from '@/components/mds/MDropdownMenu.vue'
 import MDialog from '@/components/mds/MDialog.vue'
@@ -32,6 +37,7 @@ import { useSlideMedia } from '@/composables/useSlideMedia.js'
 import { LAYOUT_LABEL, LAYOUT_ICON, SPEC_LIMITS } from '@/lib/slideModel.js'
 import { plainText } from '@shared/deck/rich.js'
 import { RATIO_OPTIONS, ratioCss } from '@/lib/format.js'
+import { deckAccess, deckNav, NAV_ROUTE } from '@/lib/deckActions.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -46,6 +52,9 @@ const id = route.params.code || route.params.id
 const ed = useEditor(id, { onOutline: (d) => router.replace(deckPath(d, 'outline')) })
 const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, media, videoLibrary } = ed
 useDeckUrl(deck, 'edit')
+const access = computed(() => (deck.value ? deckAccess(deck.value) : 'owner'))
+const isOwner = computed(() => access.value === 'owner')
+const listPath = computed(() => NAV_ROUTE[deckNav(deck.value)])
 
 const frame = ref(null)
 const sm = useSlideMedia(draft, selected)
@@ -65,11 +74,10 @@ function onInsert({ layout, template }) {
   insertOpen.value = false
   guard(() => ed.addSlide(layout, template))
 }
-const moreMenu = [
-  { key: 'duplicate', label: 'Nhân bản bài', icon: 'copy' },
-  { key: 'd', divider: true },
-  { key: 'remove', label: 'Xóa bài', icon: 'trash', danger: true },
-]
+const moreMenu = computed(() => [
+  { key: 'duplicate', label: isOwner.value ? 'Nhân bản bài' : 'Nhân bản về bài của tôi', icon: 'copy' },
+  ...(isOwner.value ? [{ key: 'd', divider: true }, { key: 'remove', label: 'Xóa bài', icon: 'trash', danger: true }] : []),
+])
 const exportMenu = [
   { key: 'html', label: 'HTML một tệp (có chuyển động)', icon: 'file-export' },
   { key: 'pdf', label: 'PDF (không chuyển động)', icon: 'download' },
@@ -117,17 +125,13 @@ async function onRatio(ratio) {
   }
 }
 
-const visibilityBusy = ref(false)
-async function onVisibility(isPublic) {
-  visibilityBusy.value = true
-  try {
-    await ed.updateMeta({ visibility: isPublic ? 'public' : 'private' })
-    toast.success(isPublic ? 'Đã công khai — mọi người dùng đều xem được' : 'Đã chuyển về riêng tư')
-  } catch (err) {
-    toast.error(err.message)
-  } finally {
-    visibilityBusy.value = false
-  }
+/* Chia sẻ (chủ bài) + phiên bản/handoff (chủ bài, người được mời sửa) */
+const shareOpen = ref(false)
+const versionsOpen = ref(false)
+const setShareVisibility = (isPublic) => ed.updateMeta({ visibility: isPublic ? 'public' : 'private' })
+function onRestored(d) {
+  ed.applyDeck(d)
+  versionsOpen.value = false
 }
 
 const exporting = ref('')
@@ -186,7 +190,7 @@ onMounted(ed.load)
 </script>
 
 <template>
-  <DesktopShell active="mine" full>
+  <DesktopShell :active="deckNav(deck)" full>
     <div v-if="loading" class="flex flex-1 items-center justify-center"><MSpinner :size="32" /></div>
 
     <div v-else-if="loadError" class="flex flex-1 items-center justify-center p-6">
@@ -195,9 +199,9 @@ onMounted(ed.load)
       </MEmptyState>
     </div>
 
-    <!-- Không phải chủ sở hữu: chỉ được xem -->
-    <div v-else-if="deck && !deck.isOwner" class="flex flex-1 items-center justify-center p-6">
-      <MEmptyState title="Bạn chỉ có quyền xem bài này" description="Nhân bản về bài của bạn để chỉnh sửa.">
+    <!-- Chỉ có quyền xem (được mời xem / bài công khai) -->
+    <div v-else-if="deck && access === 'viewer'" class="flex flex-1 items-center justify-center p-6">
+      <MEmptyState title="Bạn chỉ có quyền xem bài này" description="Nhân bản về bài của bạn để chỉnh sửa, hoặc nhờ chủ bài cấp quyền Chỉnh sửa.">
         <template #actions>
           <MButton variant="outline" @click="router.push(deckPath(deck, 'view'))">Trình chiếu</MButton>
           <MButton variant="primary" @click="onMore('duplicate')">Nhân bản</MButton>
@@ -227,15 +231,23 @@ onMounted(ed.load)
       <!-- Thanh công cụ -->
       <div class="flex shrink-0 items-center gap-2 border-b border-[var(--mds-border)] bg-[var(--mds-bg)] px-4 py-2">
         <MTooltip content="Về danh sách">
-          <MButton variant="icon" aria-label="Về danh sách" @click="router.push('/decks')"><template #icon><MIcon name="arrow-left" :size="20" /></template></MButton>
+          <MButton variant="icon" aria-label="Về danh sách" @click="router.push(listPath)"><template #icon><MIcon name="arrow-left" :size="20" /></template></MButton>
         </MTooltip>
         <div class="w-full max-w-[420px]">
           <MInput v-model="draft.title" aria-label="Tên bài trình bày" :error="titleError" />
         </div>
         <span v-if="dirty" class="whitespace-nowrap text-[12px] text-[var(--mds-warning)]">● Chưa lưu</span>
+        <MTooltip v-if="!isOwner" :content="`Bài của ${deck.authorName || 'người khác'} — thay đổi lưu thẳng vào bài gốc`">
+          <MTag color="info" size="sm" class="whitespace-nowrap">Được chia sẻ · Chỉnh sửa</MTag>
+        </MTooltip>
         <div class="ml-auto flex items-center gap-2">
-          <div class="w-[200px]"><MSelect :model-value="deck.ratio" :options="RATIO_OPTIONS" aria-label="Tỷ lệ khung hình" @update:model-value="onRatio" /></div>
-          <MSwitch :model-value="deck.visibility === 'public'" :disabled="visibilityBusy" label="Công khai" @update:model-value="onVisibility" />
+          <div class="w-[180px]"><MSelect :model-value="deck.ratio" :options="RATIO_OPTIONS" aria-label="Tỷ lệ khung hình" @update:model-value="onRatio" /></div>
+          <MTooltip content="Handoff bản thấy ổn, xem lại và khôi phục phiên bản">
+            <MButton variant="outline" aria-haspopup="dialog" @click="versionsOpen = true"><template #icon><MIcon name="history" :size="16" /></template>Phiên bản</MButton>
+          </MTooltip>
+          <MButton v-if="isOwner" variant="outline" aria-haspopup="dialog" @click="shareOpen = true">
+            <template #icon><MIcon name="user-plus" :size="16" /></template>Chia sẻ<MTag v-if="deck.visibility === 'public'" color="brand" size="sm" class="ml-1">Công khai</MTag>
+          </MButton>
           <MButton variant="outline" @click="router.push(deckPath(deck, 'view'))"><template #icon><MIcon name="eye" :size="16" /></template>Trình chiếu</MButton>
           <MDropdownMenu :items="exportMenu" @select="onExport">
             <template #activator>
@@ -339,8 +351,11 @@ onMounted(ed.load)
             <div v-else class="flex flex-col gap-4">
               <DesignPanel v-model:footer="draft.spec.footer" :design="draft.spec" :media="media" :title="draft.title" :subtitle="draft.spec.slides[0]?.subtitle || ''" :ratio="deck.ratio" />
               <FormAlert tone="info">Màu sắc, nền, phông chữ, logo và bộ nhận diện thương hiệu áp dụng cho toàn bộ bài sau khi bấm <strong>Lưu</strong>.</FormAlert>
-              <FormAlert tone="info">
-                Tỷ lệ khung và chế độ chia sẻ được áp dụng ngay khi đổi trên thanh công cụ. Công khai: mọi người dùng của hệ thống đều xem và nhân bản được bài này.
+              <FormAlert v-if="isOwner" tone="info">
+                Tỷ lệ khung áp dụng ngay khi đổi trên thanh công cụ. <strong>Chia sẻ</strong>: công khai cho mọi người xem bản trình chiếu, hoặc mời từng người với quyền Chỉ xem / Chỉnh sửa.
+              </FormAlert>
+              <FormAlert v-else tone="info">
+                Bạn đang sửa bài được chia sẻ — thay đổi lưu thẳng vào bài của {{ deck.authorName || 'chủ bài' }}. Thấy bản nào ổn, hãy <strong>handoff</strong> ở nút Phiên bản để chủ bài có thể khôi phục khi cần.
               </FormAlert>
             </div>
           </div>
@@ -388,6 +403,13 @@ onMounted(ed.load)
         <MButton variant="primary" @click="sm.close()">Xong</MButton>
       </template>
     </MDialog>
+
+    <MDialog v-if="deck && isOwner" v-model="shareOpen" :title="`Chia sẻ “${deck.title}”`" width="600px">
+      <SharePanel :deck-id="deck.id" :visibility="deck.visibility" :set-visibility="setShareVisibility" />
+    </MDialog>
+    <MDrawer v-if="deck" v-model="versionsOpen" title="Phiên bản & handoff" :width="520">
+      <VersionsPanel v-if="versionsOpen" :deck-id="deck.id" :spec-version="deck.specVersion" :dirty="dirty" @restored="onRestored" />
+    </MDrawer>
 
     <MDialog v-model="confirmRemove" type="danger" title="Xóa bài trình bày?" confirm-text="Xóa" @confirm="doRemove">
       <p class="text-[14px] leading-5">Bài cùng toàn bộ ảnh sẽ bị xóa vĩnh viễn. Không thể khôi phục.</p>

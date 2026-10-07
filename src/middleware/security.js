@@ -94,6 +94,8 @@ export function rateLimits() {
     generate: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 30, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã tạo quá nhiều bài trong 1 giờ, vui lòng thử lại sau', 'GENERATE_RATE_LIMITED') }),
     build: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 60, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã dựng bài quá nhiều lần trong 1 giờ, vui lòng thử lại sau', 'BUILD_RATE_LIMITED') }),
     // Tải video, đọc link YouTube, tách nền logo — tốn băng thông/CPU hơn thao tác thường.
+    // Mời người theo email: chặn dò email hàng loạt.
+    share: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 60, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn chia sẻ quá nhanh, vui lòng thử lại sau ít phút', 'SHARE_RATE_LIMITED') }),
     media: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 120, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn thêm media quá nhanh, vui lòng thử lại sau ít phút', 'MEDIA_RATE_LIMITED') }),
     // Tạo ảnh AI tốn chi phí model → hạn mức riêng; tìm ảnh Pixabay (API giới hạn ~100 lượt/phút/khoá).
     aiImage: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 40, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn tạo ảnh AI quá nhanh, vui lòng thử lại sau ít phút', 'AI_IMAGE_RATE_LIMITED') }),

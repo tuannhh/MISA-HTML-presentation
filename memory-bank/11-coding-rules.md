@@ -7,7 +7,9 @@
 1. **Phân lớp:** `routes` (HTTP: parse, allowlist bằng `pick`, gọi service, `ok()`) → `services` (nghiệp vụ, quyền) → `repositories` (SQL). Route không viết SQL; repository không biết `req`.
 2. **Response:** luôn `ok(res, data, meta, status)` → `{data, meta}`; lỗi luôn `throw` `HttpError` (`badRequest`, `notFound`, `conflict`…) với `code` dạng `UPPER_SNAKE` và message tiếng Việt cho người dùng.
 3. **Tenant:** mọi truy vấn theo người dùng dùng `tenantClause()` / hàm `*Owned` / `*ForTenant` của repository. Truy vấn không theo tenant (public, admin) phải đặt tên rõ (`listPublic`, `adminList`) và có chú thích lý do.
-4. **Không đủ quyền đọc bài → 404**, không phải 403.
+4. **Không đủ quyền đọc bài → 404**, không phải 403. Đã đọc được bài nhưng thiếu quyền thao tác (người chỉ xem sửa, người sửa đổi công khai/xoá bản người khác) → 403 với `code` riêng (`VIEW_ONLY`, `OWNER_ONLY`, `NOT_VERSION_OWNER`).
+4a. **Quyền trên bài** chỉ qua 3 cổng của `presentationService`: `owned()` / `editable()` / `readable()` (hoặc `templateService.editableDeck`). Không tự so `tenant_id === user.id` ở service mới. Sau khi qua cổng, mọi ghi dữ liệu bài dùng **`row.tenant_id`** (tenant chủ bài), không dùng `user.id` (`09` §Chia sẻ).
+4b. **Phiên bản** chỉ chụp phía máy chủ (`INSERT … SELECT` từ `presentations`), không nhận spec từ client; thao tác có giới hạn số lượng theo bài phải khoá dòng bài trong transaction (`withTransaction` + `FOR UPDATE`).
 5. **Spec:** mọi spec trước khi ghi DB đi qua `normalizeSpec` (strict cho người dùng, lenient cho AI) + `dropForeignAssets`. Thêm trường mới vào spec = sửa đồng thời `SPEC_LIMITS`, `specService`, `render.js`, `geminiService` (schema), `SlideFields.vue`, `slideModel.js`, fixture `sample-spec.json`.
 6. **Renderer:** mọi chuỗi người dùng/AI chèn vào HTML phải qua `esc()`; không dùng `innerHTML` với dữ liệu trong engine.
 7. **Cấu hình:** chỉ đọc `process.env` trong `src/config/index.js`; nơi khác nhận `config` qua `container.js`.
@@ -26,7 +28,7 @@
 6. **Gọi API** chỉ qua `lib/api.js`; xử lý `ApiError.code` cụ thể (409 `VERSION_CONFLICT`, `MUST_CHANGE_PASSWORD`…), không nuốt lỗi.
 7. **Clone dữ liệu** reactive bằng `clone()` của `lib/slideModel.js`, không dùng `structuredClone`.
 8. **Sửa bản sao MDS** phải đánh dấu `// [MISA Presentation] …` và ghi vào bảng vá ở `09`.
-9. **Đường dẫn bài** luôn dựng bằng `deckPath(deck, feature)` (`lib/deckPath.js`), không tự ghép `/p/:id/...`.
+9. **Đường dẫn bài** luôn dựng bằng `deckPath(deck, feature)` (`lib/deckPath.js`), không tự ghép `/p/:id/...`. Quyết định hiển thị theo vai trò bài dùng `deckAccess`/`deckTarget`/`deckMenuItems`/`deckNav` (`lib/deckActions.js`) — không dùng `isOwner` cho thao tác người được mời sửa cũng làm được.
 10. **Khung sửa trực tiếp:** mọi dữ liệu từ khung (postMessage) là không tin cậy — thêm trường sửa được thì thêm cả đường dẫn vào allowlist `lib/editPaths.js` (+ test), renderer gắn `data-e` qua helper `E(ctx, path, max)` (chỉ khi `ctx.edit`).
 11. **Layout `free`** không đưa vào prompt/schema AI (`AI_LAYOUTS`); thêm loại phần tử = cập nhật `shared/deck/free.js` + `cleanElement` + `freeEl` + `FreeElementsPanel` + test.
 12. **Chữ định dạng `⟦…⟧`:** chỉ tạo/sửa qua `shared/deck/rich.js` (không tự ghép chuỗi thẻ); độ dài/so khớp/hiển thị tiêu đề dùng `plainText`; HTML chỉ qua `richHtml` (escape + style từ allowlist). Trường chỉ nhận chữ thường (ô số liệu, chân trang) đánh `plain` ở `editPaths` + `data-pl` ở renderer.

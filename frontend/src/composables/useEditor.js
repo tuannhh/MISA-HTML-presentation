@@ -25,7 +25,7 @@ export function useEditor(id, { onOutline } = {}) {
 
   const dirty = computed(() => !!draft.value && JSON.stringify({ t: draft.value.title, s: draft.value.spec }) !== baseline.value);
   const slide = computed(() => draft.value?.spec?.slides?.[selected.value] || null);
-  // edit=1: khung xem trước sửa trực tiếp (chỉ chủ sở hữu) — nội dung khung được dựng lại từ bản nháp (useLiveDeck).
+  // edit=1: khung xem trước sửa trực tiếp (chủ bài + người được mời sửa) — nội dung khung được dựng lại từ bản nháp (useLiveDeck).
   const previewUrl = computed(() => (deck.value?.status === 'ready' ? `/api/presentations/${id}/preview?edit=1&v=${previewKey.value}` : ''));
 
   // Video đã dùng trong bài + video tải lên chưa gắn trang nào (thư viện "Video trong bài").
@@ -106,6 +106,13 @@ export function useEditor(id, { onOutline } = {}) {
     if (deck.value) adopt(deck.value);
   }
 
+  // Nhận bài mới từ máy chủ (vd. sau khi khôi phục phiên bản) — bỏ bản nháp, dựng lại khung xem trước.
+  function applyDeck(d) {
+    adopt(d);
+    saveError.value = null;
+    previewKey.value = Date.now();
+  }
+
   // Đổi thuộc tính lưu ngay (tỷ lệ, chia sẻ) — không làm mất bản nháp nội dung đang sửa.
   async function updateMeta(fields) {
     const keep = dirty.value ? clone(draft.value) : null;
@@ -182,7 +189,7 @@ export function useEditor(id, { onOutline } = {}) {
 
   return {
     deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, previewKey, assets, media, videoLibrary,
-    load, save, discard, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout, setBuildAll,
+    load, save, discard, applyDeck, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout, setBuildAll,
     uploadImage, assetUrl, exportHtml, exportPdf, remove, duplicate,
   };
 }

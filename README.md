@@ -1,6 +1,6 @@
 # MISA Presentation
 
-AI tạo **bài trình bày HTML có chuyển động** từ nhiều tệp tư liệu (pptx/docx/pdf kể cả bản scan/txt/ảnh/ghi âm — tổng tối đa 300 MB), link (Google Slides/Docs, trang web công khai) hoặc nội dung nhập tay. Số trang tự động hoặc tuỳ chỉnh, tông nền Sáng/Tối. Sửa chữ/ảnh từng trang, lưu để render lại, trình chiếu, xuất **HTML một tệp** (giữ chuyển động, media nhúng base64) hoặc **PDF**. Tỷ lệ 16:9 · 4:3 · 2:1 · 3:1. Đa tenant, chia sẻ Riêng tư / Công khai.
+AI tạo **bài trình bày HTML có chuyển động** từ nhiều tệp tư liệu (pptx/docx/pdf kể cả bản scan/txt/ảnh/ghi âm — tổng tối đa 300 MB), link (Google Slides/Docs, trang web công khai) hoặc nội dung nhập tay. Số trang tự động hoặc tuỳ chỉnh, tông nền Sáng/Tối. Sửa chữ/ảnh từng trang, lưu để render lại, trình chiếu, xuất **HTML một tệp** (giữ chuyển động, media nhúng base64) hoặc **PDF**. Tỷ lệ 16:9 · 4:3 · 2:1 · 3:1. Đa tenant; chia sẻ **Công khai** (mọi người chỉ xem bản trình chiếu) hoặc **mời từng người** theo email với quyền Chỉ xem / Chỉnh sửa; người sửa và chủ bài **handoff** tối đa 5 phiên bản, chủ bài khôi phục (mặc định về bản gốc lúc chia sẻ lần đầu).
 
 - Backend: Node 24 · Express 5 · MySQL 8.4 · Gemini (`gemini-3.8-flash`) · Chromium (puppeteer-core)
 - Giao diện: Vue 3 · Vite · Tailwind v4 · **MISA Design System 2.0** (desktop + mobile mini-app)

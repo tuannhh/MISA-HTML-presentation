@@ -80,7 +80,7 @@
 |---|---|---|
 | `MInput.vue`, `MTextarea.vue` | `defineOptions({ inheritAttrs: false })` + `useAttrs()`: `class`/`style` ở wrapper, mọi attr khác (`id`, `name`, `autocomplete`, `aria-*`, `maxlength`, `inputmode`…) chuyển xuống thẻ input/textarea thật | Bản gốc gắn attr lên `div` bọc ngoài → mất autocomplete, label `for` không liên kết, trình đọc màn hình không đọc nhãn |
 | `MDataTable.vue` | Prop `hideTools: ('refresh'\|'export'\|'columns'\|'filter')[]`; hàng hiện nút thao tác cả khi `group-focus-within` | Ẩn nút không có chức năng; dùng được bằng bàn phím |
-| `iconRegistry.generated.js` | Thêm icon `video`, `player-play`, `brand-youtube`, `scissors`, `palette`, `typography`; đợt 2026-10-06 thêm `layout-board`, `table`, `square-rounded`, `sparkles`, `crop`, `rotate`, `rotate-clockwise`, `flip-horizontal`, `flip-vertical`, `sun`, `droplet`, `contrast`, `zoom-in`, `arrows-move`, `adjustments`, `stack`, `align-left/center/right`, `world-search`, `row-insert-bottom`, `column-insert-right`, `cube` (Tabler, nối CUỐI object `ICON_REGISTRY` trước `})`) | MDS chưa có icon cho video/tách nền/thiết kế; sinh lại registry sẽ mất |
+| `iconRegistry.generated.js` | Thêm icon `video`, `player-play`, `brand-youtube`, `scissors`, `palette`, `typography`; đợt 2026-10-06 thêm `layout-board`, `table`, `square-rounded`, `sparkles`, `crop`, `rotate`, `rotate-clockwise`, `flip-horizontal`, `flip-vertical`, `sun`, `droplet`, `contrast`, `zoom-in`, `arrows-move`, `adjustments`, `stack`, `align-left/center/right`, `world-search`, `row-insert-bottom`, `column-insert-right`, `cube`; đợt 2026-10-07 (chia sẻ) thêm `history`, `restore`, `user-plus`, `user-share`, `flag` (Tabler, nối CUỐI object `ICON_REGISTRY` trước `})`) | MDS chưa có icon cho video/tách nền/thiết kế; sinh lại registry sẽ mất |
 | `MUpload.vue` | Prop `block` (dropzone rộng hết khung, có icon + dòng `hint`), `sizeHint` (thay chú thích "Dung lượng tối đa…") | Form tạo bài 1 cột rộng; giới hạn theo **tổng** dung lượng nhiều tệp, không theo từng tệp |
 | `MUpload.vue` | Dropzone là `div role=button` (tabindex, Enter/Space), `<input type=file>` đặt NGOÀI dropzone, bỏ `@click.prevent` | Bản gốc: `<label @click.prevent>` bọc input → `input.click()` nổi bọt lên label bị `preventDefault` → trình duyệt huỷ hộp chọn tệp, bấm không mở cửa sổ (lỗi "không tải được tệp" ở tab Tải tệp lên) |
 
@@ -203,3 +203,24 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 
 ### Chữ tiếng Việt lỗi mã hoá khi test bằng curl trên Windows
 - Gửi JSON tiếng Việt bằng `curl` trong cmd/PowerShell cũ tạo tên kiểu `Ngu?i D�ng` — do code page của console, không phải server. Dùng script Node (`test/smoke/smoke.mjs`) hoặc tệp JSON UTF-8 với `--data-binary @file`.
+
+## Chia sẻ theo người + handoff (2026-10-07)
+
+### Dữ liệu bài luôn ở tenant của chủ bài
+- **Bẫy:** service cũ ghi theo `user.id` (vd. `updateOwned(user.id, …)`, `assetKey(user.id, …)`, `assets.create(user.id, …)`). Khi người được mời sửa gọi, `user.id` là **người sửa** → `updateOwned` không khớp dòng nào (409 giả) hoặc asset/tệp rơi vào tenant người sửa (chủ bài không thấy, xoá bài không dọn).
+- **Quy tắc:** sau `editable()`/`mediaTarget()` dùng `row.tenant_id` / `deck.tenant_id` cho mọi thao tác dữ liệu của bài (cả `templateService.apply`: khoá `tenants/${deck.tenant_id}/…`). `user.id` chỉ dùng cho `actorId` audit, `created_by`, và đường chỉ-chủ-bài (outline, build, delete) hoặc bản sao thuộc người gọi (duplicate). Test `brand-rich.test.js` kiểm áp mẫu bởi người sửa ghi vào tenant chủ bài.
+
+### Bản gốc duy nhất: `INSERT … SELECT … WHERE NOT EXISTS` + unique `baseline_lock`
+- `ensureBaseline` gọi ở mỗi lần mời/bật công khai. `WHERE NOT EXISTS` không chống được 2 request song song (cả hai cùng thấy "chưa có") → unique `(presentation_id, baseline_lock)` với cột sinh `IF(kind='baseline',1,NULL)` chặn bản thứ 2; repository bắt `ER_DUP_ENTRY` → coi như đã có. Không dùng `INSERT IGNORE` (nuốt cả lỗi khác, vd. dữ liệu sai kiểu).
+- **Không** dựa vào `affectedRows` của `INSERT … ON DUPLICATE KEY UPDATE` để biết "mời mới hay đổi quyền" (MySQL trả 1 = thêm, 2 = cập nhật, 0 hoặc 1 khi giá trị không đổi tuỳ cờ `CLIENT_FOUND_ROWS` của driver); `addShare` đọc `shares.find` **trước** khi upsert để quyết định 201/200 và tên audit.
+
+### Handoff cần khoá dòng, không chỉ đếm
+- Đếm `COUNT(*) < 5` rồi `INSERT` ngoài transaction → 2 request song song đều thấy 4 → 6 bản. `createHandoff` chạy trong `withTransaction`: `SELECT … FROM presentations … FOR UPDATE` (khoá dòng bài, tuần tự hoá mọi handoff của bài) → kiểm `spec_version` → trùng → đếm → `INSERT … SELECT`. Smoke bắn 6 request song song cùng phiên bản → đúng 1 bản 201.
+
+### Khôi phục: chuẩn hoá lenient, không strict
+- Ảnh chụp cũ có thể vượt giới hạn mới của `SPEC_LIMITS`/thiếu asset đã bị xoá → `normalizeSpec(snap.spec)` (lenient) + `dropForeignAssets` theo asset **hiện còn** của bài. Strict sẽ làm bản handoff hợp lệ lúc chụp không khôi phục được.
+
+### Giao diện
+- `MDrawer` z-index 1001 > `MDialog` 1000 → dialog xác nhận mở từ drawer bị che. `VersionsPanel` xác nhận khôi phục/xoá **ngay trong panel** (không mở dialog chồng), dùng chung được cho drawer (desktop) và `FullScreenSheet` (mobile).
+- Browser pane chặn iframe sandbox (`ERR_BLOCKED_BY_CLIENT`) → khung xem lại phiên bản trông trống khi kiểm bằng pane; kiểm nội dung bằng `fetch` URL `/versions/:id/preview` (200, CSP sandbox, `data-mode="present"`).
+- Nhãn bottom nav mobile 5 mục ở 375px chỉ ~70px → "Được chia sẻ" bị cắt; giữ nhãn ngắn, đặt nghĩa đầy đủ ở `ariaLabel`.

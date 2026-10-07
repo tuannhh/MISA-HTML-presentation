@@ -5,7 +5,7 @@
 //    tenant và dropForeignAssets) → trả thiết kế đã đổi mã để giao diện ghép vào bản nháp; người dùng bấm Lưu như thường.
 //  - Chia sẻ: riêng tư (chỉ chủ) / công khai (mọi người dùng áp được — ví dụ bộ nhận diện công ty, chiến dịch). Chỉ chủ sửa/xoá.
 import { randomUUID } from 'node:crypto';
-import { badRequest, notFound, conflict, unprocessable } from '../lib/httpError.js';
+import { badRequest, forbidden, notFound, conflict, unprocessable } from '../lib/httpError.js';
 import { logger } from '../lib/logger.js';
 import { normalizeDesign, collectAssetIds, remapAssetIds } from './specService.js';
 import { BRAND_SLOTS } from '../../shared/deck/render.js';
@@ -24,6 +24,14 @@ const designAssetIds = (design) => [...collectAssetIds({ slides: [], logo: desig
 
 export function createTemplateService({ repos, storage, signer, audit }) {
   const { templates, assets, presentations } = repos;
+
+  // Bài mà người dùng được sửa: chủ bài hoặc người được mời sửa (dữ liệu bài thuộc tenant của chủ bài — deck.tenant_id).
+  async function editableDeck(user, presentationId) {
+    const deck = await presentations.findReadable(user.id, presentationId);
+    if (!deck) throw notFound('Không tìm thấy bài trình bày');
+    if (deck.access_role === 'viewer') throw forbidden('Bạn chỉ có quyền xem bài này', 'VIEW_ONLY');
+    return deck;
+  }
 
   const dto = (row, files, userId) => ({
     id: row.id,
@@ -55,13 +63,12 @@ export function createTemplateService({ repos, storage, signer, audit }) {
   async function create(user, body, ip) {
     const name = cleanName(body.name);
     if (typeof body.presentationId !== 'string') throw badRequest('Thiếu bài trình bày nguồn', 'PRESENTATION_REQUIRED');
-    const deck = await presentations.findOwned(user.id, body.presentationId);
-    if (!deck) throw notFound('Không tìm thấy bài trình bày');
+    const deck = await editableDeck(user, body.presentationId);
     const { design, errors } = normalizeDesign(body.design, { strict: true });
     if (errors.length) throw unprocessable('Thiết kế chưa hợp lệ', 'INVALID_DESIGN', errors);
     if ((await templates.countOwned(user.id)) >= MAX_TEMPLATES_PER_USER) throw unprocessable(`Mỗi người tối đa ${MAX_TEMPLATES_PER_USER} mẫu`, 'TOO_MANY_TEMPLATES');
     // Ảnh trong thiết kế phải là ảnh của chính bài này (không lấy được ảnh của người khác qua mã asset).
-    const owned = new Map((await assets.listOwnedForPresentation(user.id, deck.id)).map((a) => [a.id, a]));
+    const owned = new Map((await assets.listOwnedForPresentation(deck.tenant_id, deck.id)).map((a) => [a.id, a]));
     const ids = designAssetIds(design);
     for (const aid of ids) {
       const a = owned.get(aid);
@@ -123,8 +130,7 @@ export function createTemplateService({ repos, storage, signer, audit }) {
 
   // Áp mẫu vào bài: sao chép ảnh của mẫu thành asset của bài → thiết kế đã đổi mã (giao diện ghép vào bản nháp rồi Lưu).
   async function apply(user, presentationId, templateId) {
-    const deck = await presentations.findOwned(user.id, presentationId);
-    if (!deck) throw notFound('Không tìm thấy bài trình bày');
+    const deck = await editableDeck(user, presentationId);
     if (!MEDIA_STATUSES.has(deck.status)) throw conflict('Chưa thể áp mẫu khi bài đang được AI xử lý', 'NOT_READY');
     const tpl = await templates.findReadable(user.id, templateId);
     if (!tpl) throw notFound('Không tìm thấy mẫu');
@@ -137,11 +143,11 @@ export function createTemplateService({ repos, storage, signer, audit }) {
     const out = [];
     for (const f of files) {
       const nid = randomUUID();
-      // Ảnh của mẫu nằm ở kho của người tạo mẫu; bản sao thuộc bài (và tenant) của người áp.
-      const key = `tenants/${user.id}/presentations/${deck.id}/${nid}.webp`;
+      // Ảnh của mẫu nằm ở kho của người tạo mẫu; bản sao thuộc bài — tức tenant của CHỦ BÀI (người áp có thể là người được mời sửa).
+      const key = `tenants/${deck.tenant_id}/presentations/${deck.id}/${nid}.webp`;
       await storage.copy(f.storage_key, key);
       const kind = f.kind === 'logo' ? 'logo' : 'brand';
-      await assets.create(user.id, { id: nid, presentationId: deck.id, kind, mime: f.mime, bytes: f.bytes, width: f.width, height: f.height, storageKey: key, originalName: f.original_name });
+      await assets.create(deck.tenant_id, { id: nid, presentationId: deck.id, kind, mime: f.mime, bytes: f.bytes, width: f.width, height: f.height, storageKey: key, originalName: f.original_name });
       map.set(f.id, nid);
       out.push({ id: nid, kind, url: signer.url(nid), width: f.width, height: f.height, name: f.original_name, mime: f.mime, bytes: f.bytes });
     }

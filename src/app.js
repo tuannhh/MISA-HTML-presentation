@@ -99,7 +99,7 @@ export function createApp({ config, pool, repos, services }) {
   api.use(loadUser(repos.users));
   api.use(csrfProtection(config));
   api.use('/auth', authRoutes({ auth: services.auth, users: repos.users, limits }));
-  api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, config, limits }));
+  api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, sharing: services.sharing, config, limits }));
   api.use('/templates', templateRoutes({ service: services.templates, limits }));
   api.use('/assets', assetRoutes({ service: services.presentations }));
   api.use('/admin', adminRoutes({ auth: services.auth }));

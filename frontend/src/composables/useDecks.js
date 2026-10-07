@@ -1,4 +1,4 @@
-// Danh sách bài trình bày (của tôi / công khai) + thao tác nhanh — dùng chung desktop/mobile.
+// Danh sách bài trình bày (của tôi / được chia sẻ với tôi / công khai) + thao tác nhanh — dùng chung desktop/mobile.
 import { deckTarget } from '@/lib/deckActions.js';
 import { deckPath } from '@/lib/deckPath.js';
 import { ref, reactive, onBeforeUnmount } from 'vue';
@@ -83,20 +83,18 @@ export function useDecks(scope) {
     });
   const exportFile = (d, kind) => run(d.id, `export-${kind}`, () => download(`/api/presentations/${d.id}/export.${kind}`, `${d.title}.${kind}`));
 
-  /* ---- xử lý chọn thao tác (menu) — xoá cần xác nhận qua dialog của trang ---- */
+  /* ---- xử lý chọn thao tác (menu) — xoá cần xác nhận, chia sẻ mở panel của trang ---- */
   const router = useRouter();
   const toast = useToast();
   const pendingRemove = ref(null);
+  const pendingShare = ref(null);
 
   async function handle(key, d) {
     try {
       if (key === 'edit') return router.push(deckTarget(d));
       if (key === 'view') return router.push(deckPath(d, 'view'));
       if (key === 'remove') return (pendingRemove.value = d);
-      if (key === 'public' || key === 'private') {
-        await setVisibility(d, key);
-        return toast.success(key === 'public' ? 'Đã công khai — mọi người dùng đều xem được' : 'Đã chuyển về riêng tư');
-      }
+      if (key === 'share') return (pendingShare.value = d);
       if (key === 'duplicate') {
         const copy = await duplicate(d);
         toast.success('Đã tạo bản sao riêng tư');
@@ -129,5 +127,5 @@ export function useDecks(scope) {
     ctrl?.abort();
   });
 
-  return { rows, total, page, q, loading, error, busy, load, search, goPage, duplicate, remove, setVisibility, exportFile, handle, pendingRemove, confirmRemove, pageSize: PAGE_SIZE };
+  return { rows, total, page, q, loading, error, busy, load, search, goPage, duplicate, remove, setVisibility, exportFile, handle, pendingRemove, confirmRemove, pendingShare, pageSize: PAGE_SIZE };
 }

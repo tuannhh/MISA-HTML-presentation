@@ -3,12 +3,16 @@
 //  2. Người dùng duyệt/sửa dàn ý, gắn media (ảnh, video, YouTube), chọn thiết kế (tông màu, nền, phông, logo)
 //     → "Dựng bài": AI dựng giao diện theo đúng dàn ý (generating → ready; lỗi → quay lại outline, giữ công sức).
 // Sau đó: sửa có khoá lạc quan, chia sẻ, nhân bản, media, xem trước, xuất HTML/PDF.
-// Cách ly tenant: mọi thao tác ghi dùng *Owned(tenantId,…); đọc dùng findReadable (của tôi hoặc công khai).
+// Cách ly tenant: dữ liệu (bài, asset, tệp) luôn thuộc tenant của CHỦ BÀI. Quyền người dùng trên 1 bài (findReadable):
+//   owner  — mọi thao tác;
+//   editor — được chủ bài mời sửa: sửa nội dung/media/thiết kế/tỷ lệ (ghi vào tenant của chủ bài, qua row.tenant_id);
+//   viewer — được mời xem hoặc bài công khai: xem, trình chiếu, tải, nhân bản.
+// Thao tác chỉ chủ bài (xoá, công khai, mời người, khôi phục, dàn ý) dùng owned().
 import { randomUUID, randomBytes } from 'node:crypto';
 import { open, readFile, rm } from 'node:fs/promises';
 import { logger } from '../lib/logger.js';
 import { Semaphore } from '../lib/semaphore.js';
-import { badRequest, conflict, notFound, tooLarge, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
+import { badRequest, conflict, forbidden, notFound, tooLarge, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
 import { sniffVideo, VIDEO_MIME } from '../lib/fileType.js';
 import { normalizeSpec, collectAssetIds, dropForeignAssets, remapAssetIds, themeForTone, cleanImageEdit, SPEC_LIMITS } from './specService.js';
 import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia } from './outlineService.js';
@@ -100,7 +104,7 @@ export function parseThemeChoice(input) {
 }
 
 export function createPresentationService({ config, repos, storage, gemini, browser, signer, audit, stock }) {
-  const { presentations, assets } = repos;
+  const { presentations, assets, versions } = repos;
   const genQueue = new Semaphore(config.limits.generationConcurrency);
   // Tách nền (đặc biệt mô hình AI) tốn CPU → xử lý lần lượt.
   const cutoutQueue = new Semaphore(1);
@@ -435,6 +439,10 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       thumbnailUrl: row.thumbnail_asset_id ? `/api/assets/${row.thumbnail_asset_id}?v=${new Date(row.updated_at).getTime()}` : null,
       errorMessage: row.error_message,
       isOwner: row.tenant_id === viewerId,
+      // 'owner' | 'editor' | 'viewer' — giao diện dựa vào đây để mở trình soạn thảo / chỉ trình chiếu.
+      access: row.access_role || (row.tenant_id === viewerId ? 'owner' : 'viewer'),
+      // Quyền được mời ('viewer' | 'editor') — null: bài của mình hoặc chỉ xem nhờ công khai.
+      shareRole: row.share_role || null,
       authorName: row.author_name ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -448,7 +456,12 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const limit = pageSize;
     const offset = (page - 1) * pageSize;
     const query = q ? String(q).trim().slice(0, 100) : '';
-    const res = scope === 'public' ? await presentations.listPublic({ q: query, limit, offset }) : await presentations.listOwned(user.id, { q: query, limit, offset });
+    const res =
+      scope === 'public'
+        ? await presentations.listPublic({ q: query, limit, offset })
+        : scope === 'shared'
+          ? await presentations.listSharedWith(user.id, { q: query, limit, offset })
+          : await presentations.listOwned(user.id, { q: query, limit, offset });
     return { rows: res.rows.map((r) => toDto(r, user.id)), total: res.total };
   }
 
@@ -461,6 +474,14 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   async function owned(user, id) {
     const row = await presentations.findOwned(user.id, id);
     if (!row) throw notFound('Không tìm thấy bài trình bày');
+    row.access_role = 'owner';
+    return row;
+  }
+
+  // Chủ bài hoặc người được mời sửa. Người chỉ xem → 403 (họ đã thấy bài, báo rõ lý do thay vì 404).
+  async function editable(user, id) {
+    const row = await readable(user, id);
+    if (row.access_role === 'viewer') throw forbidden('Bạn chỉ có quyền xem bài này', 'VIEW_ONLY');
     return row;
   }
 
@@ -468,18 +489,20 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const row = await readable(user, id);
     const dto = toDto(row, user.id);
     dto.spec = row.spec;
+    // Người sửa cần thư viện media của bài (ảnh, logo, video) — asset nằm ở tenant của chủ bài.
+    if (row.access_role !== 'viewer') dto.assets = (await assets.listOwnedForPresentation(row.tenant_id, id)).map(assetDto);
     if (dto.isOwner) {
       const own = await presentations.findOwned(user.id, id);
       dto.instructions = own?.instructions || '';
       dto.outline = own?.outline || null;
-      dto.assets = (await assets.listOwnedForPresentation(user.id, id)).map(assetDto);
     }
     return dto;
   }
 
   /* ---------------- sửa ---------------- */
   async function update(user, id, body, ip) {
-    const row = await owned(user, id);
+    const row = await editable(user, id);
+    const isOwner = row.access_role === 'owner';
     const fields = {};
     if (body.title !== undefined) {
       const t = String(body.title).trim();
@@ -491,6 +514,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       fields.ratio = body.ratio;
     }
     if (body.visibility !== undefined) {
+      if (!isOwner) throw forbidden('Chỉ chủ bài được đổi chế độ công khai', 'OWNER_ONLY');
       if (!['private', 'public'].includes(body.visibility)) throw badRequest('Chế độ chia sẻ không hợp lệ', 'INVALID_VISIBILITY');
       if (body.visibility === 'public' && row.status !== 'ready') throw conflict('Chỉ công khai được bài trình bày đã tạo xong', 'NOT_READY');
       fields.visibility = body.visibility;
@@ -501,16 +525,41 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       if (!Number.isInteger(body.specVersion)) throw badRequest('Thiếu specVersion', 'VERSION_REQUIRED');
       const { spec, errors } = normalizeSpec(body.spec, { strict: true });
       if (errors.length) throw unprocessable('Nội dung chưa hợp lệ', 'INVALID_SPEC', errors);
-      assertMedia(spec, await assets.listOwnedForPresentation(user.id, id));
+      assertMedia(spec, await assets.listOwnedForPresentation(row.tenant_id, id));
       fields.spec = spec;
       expected = body.specVersion;
     }
-    const affected = await presentations.updateOwned(user.id, id, fields, expected);
+    // Ghi vào dòng của chủ bài (tenant của bài) — quyền đã kiểm ở editable().
+    const affected = await presentations.updateOwned(row.tenant_id, id, fields, expected);
     if (!affected) throw conflict('Bài trình bày đã được sửa ở nơi khác. Tải lại để lấy bản mới nhất.', 'VERSION_CONFLICT');
     if (fields.visibility && fields.visibility !== row.visibility) {
       await audit.record({ actorId: user.id, action: 'presentation.visibility', targetType: 'presentation', targetId: id, ip, meta: { to: fields.visibility } });
     }
-    if (fields.spec || fields.ratio) scheduleThumbnail(user.id, id);
+    // Lần đầu chia sẻ (công khai) → chụp bản gốc để khôi phục về sau (chỉ tạo 1 lần).
+    if (fields.visibility === 'public') await versions.ensureBaseline(id, user.id);
+    if (!isOwner && (fields.spec || fields.title || fields.ratio)) {
+      await audit.record({ actorId: user.id, action: 'presentation.shared_edit', targetType: 'presentation', targetId: id, ip, meta: { owner: row.tenant_id } });
+    }
+    if (fields.spec || fields.ratio) scheduleThumbnail(row.tenant_id, id);
+    return get(user, id);
+  }
+
+  // Khôi phục bài về một ảnh chụp (bản gốc / handoff) — chỉ chủ bài; snap đã được sharingService lấy đúng bài.
+  // expectedVersion: phiên bản chủ bài đang thấy → có người vừa lưu thì 409, không ghi đè mù.
+  async function restoreSnapshot(user, id, snap, expectedVersion, ip) {
+    const row = await owned(user, id);
+    if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
+    if (!Number.isInteger(expectedVersion)) throw badRequest('Thiếu specVersion', 'VERSION_REQUIRED');
+    // Ảnh chụp đã hợp lệ lúc lưu; chuẩn hoá lại (lenient) để chịu được giới hạn thay đổi về sau + chỉ giữ asset còn thuộc bài.
+    const { spec } = normalizeSpec(snap.spec);
+    if (!spec.slides.length) throw unprocessable('Bản đã chọn không có trang nào', 'EMPTY_VERSION');
+    dropForeignAssets(spec, new Set((await assets.listOwnedForPresentation(row.tenant_id, id)).map((a) => a.id)));
+    const fields = { spec, title: String(snap.title || row.title).slice(0, 200) };
+    if (config.ratios.includes(snap.ratio)) fields.ratio = snap.ratio;
+    const affected = await presentations.updateOwned(row.tenant_id, id, fields, expectedVersion);
+    if (!affected) throw conflict('Bài vừa được lưu ở nơi khác. Tải lại rồi khôi phục lại.', 'VERSION_CONFLICT');
+    await audit.record({ actorId: user.id, action: 'presentation.restore', targetType: 'presentation', targetId: id, ip, meta: { version: snap.id, kind: snap.kind } });
+    scheduleThumbnail(row.tenant_id, id);
     return get(user, id);
   }
 
@@ -548,26 +597,27 @@ export function createPresentationService({ config, repos, storage, gemini, brow
 
   /* ---------------- media: ảnh, logo, video, YouTube ---------------- */
   async function mediaTarget(user, id) {
-    const row = await owned(user, id);
+    const row = await editable(user, id);
     if (!MEDIA_STATUSES.has(row.status)) throw conflict('Chưa thể thêm media khi bài đang được AI xử lý', 'NOT_READY');
     return row;
   }
 
-  async function storeImage(user, id, kind, img, name) {
+  // deck: dòng bài từ mediaTarget — tệp + asset ghi vào tenant của chủ bài (kể cả khi người được mời sửa tải lên).
+  async function storeImage(deck, kind, img, name) {
     const assetId = randomUUID();
-    const key = assetKey(user.id, id, assetId);
+    const key = assetKey(deck.tenant_id, deck.id, assetId);
     await storage.put(key, img.buffer);
     const row = { id: assetId, kind, mime: img.mime, bytes: img.bytes, width: img.width, height: img.height, original_name: name || null };
-    await assets.create(user.id, { id: assetId, presentationId: id, kind, mime: img.mime, bytes: img.bytes, width: img.width, height: img.height, storageKey: key, originalName: name || null });
+    await assets.create(deck.tenant_id, { id: assetId, presentationId: deck.id, kind, mime: img.mime, bytes: img.bytes, width: img.width, height: img.height, storageKey: key, originalName: name || null });
     return assetDto(row);
   }
 
   async function addAsset(user, id, file) {
-    await mediaTarget(user, id);
+    const deck = await mediaTarget(user, id);
     if (!file) throw badRequest('Chưa chọn ảnh', 'FILE_REQUIRED');
     await ensureImageRoom(id);
     const img = await normalizeImage(file.buffer);
-    return storeImage(user, id, 'image', img, String(file.originalname || '').normalize('NFC').slice(0, 255));
+    return storeImage(deck, 'image', img, String(file.originalname || '').normalize('NFC').slice(0, 255));
   }
 
   async function ensureImageRoom(id) {
@@ -581,12 +631,12 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     if (!prompt) throw badRequest('Nhập mô tả ảnh cần tạo', 'PROMPT_REQUIRED');
     if (prompt.length > SPEC_LIMITS.aiPrompt) throw badRequest(`Mô tả tối đa ${SPEC_LIMITS.aiPrompt} ký tự`, 'PROMPT_TOO_LONG');
     const aspect = IMAGE_ASPECTS.includes(body.aspect) ? body.aspect : '16:9';
-    await mediaTarget(user, id);
+    const deck = await mediaTarget(user, id);
     await ensureImageRoom(id);
     if (aiQueue.pending >= MAX_AI_PENDING) throw unavailable('Hệ thống đang tạo nhiều ảnh, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
     const out = await aiQueue.run(() => gemini.generateImage({ prompt, aspectRatio: aspect }));
     const img = await normalizeImage(out.buffer);
-    const asset = await storeImage(user, id, 'image', img, `anh-ai-${Date.now().toString(36)}.webp`);
+    const asset = await storeImage(deck, 'image', img, `anh-ai-${Date.now().toString(36)}.webp`);
     await audit.record({ actorId: user.id, action: 'presentation.ai_image', targetType: 'presentation', targetId: id, ip, meta: { aspect, chars: prompt.length } });
     return { asset, alt: prompt.slice(0, SPEC_LIMITS.alt) };
   }
@@ -599,65 +649,65 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   async function importStockImage(user, id, body) {
     if (!stock) throw unavailable('Chức năng tìm ảnh chưa được cấu hình', 'STOCK_NOT_CONFIGURED');
     if (body.provider !== undefined && body.provider !== 'pixabay') throw badRequest('Nguồn ảnh không hợp lệ', 'INVALID_PROVIDER');
-    await mediaTarget(user, id);
+    const deck = await mediaTarget(user, id);
     await ensureImageRoom(id);
     const got = await stock.fetchImage(body.id);
     const img = await normalizeImage(got.buffer);
-    const asset = await storeImage(user, id, 'image', img, `${got.name}.webp`);
+    const asset = await storeImage(deck, 'image', img, `${got.name}.webp`);
     return { asset, alt: got.tags.slice(0, SPEC_LIMITS.alt) };
   }
 
   // Chỉnh sửa ảnh (cắt, xoay, lật, sáng/tối, độ rực, tương phản): luôn áp lên ẢNH GỐC → ảnh mới (không giảm chất lượng qua
   // nhiều lần sửa); trả về cả mã ảnh gốc + thông số để spec lưu (mở lại trình chỉnh sửa tiếp tục từ trạng thái cũ).
   async function editImage(user, id, assetId, body) {
-    await mediaTarget(user, id);
-    const src = await assets.findOwnedInPresentation(user.id, id, assetId);
+    const deck = await mediaTarget(user, id);
+    const src = await assets.findOwnedInPresentation(deck.tenant_id, id, assetId);
     if (!src || !['image', 'poster'].includes(src.kind)) throw notFound('Không tìm thấy ảnh');
     const edit = cleanImageEdit(body);
     if (!edit) return { asset: assetDto(src), src: src.id, edit: null };
     await ensureImageRoom(id);
     const out = await applyImageEdit(await storage.get(src.storage_key), edit);
     const base = String(src.original_name || 'anh').replace(/^chinh-sua-/, '').replace(/\.[a-z0-9]+$/i, '');
-    const asset = await storeImage(user, id, 'image', out, `chinh-sua-${base}.webp`.slice(0, 255));
+    const asset = await storeImage(deck, 'image', out, `chinh-sua-${base}.webp`.slice(0, 255));
     return { asset, src: src.id, edit };
   }
 
   // Logo: giữ nền trong suốt (WebP có alpha), chất lượng cao hơn ảnh thường để chữ trong logo sắc nét.
   async function addLogo(user, id, file) {
-    await mediaTarget(user, id);
+    const deck = await mediaTarget(user, id);
     if (!file) throw badRequest('Chưa chọn logo', 'FILE_REQUIRED');
     if ((await assets.countForPresentation(id, 'logo')) >= MAX_LOGOS_PER_DECK) throw unprocessable('Bài trình bày đã có quá nhiều logo', 'TOO_MANY_ASSETS');
     const img = await normalizeImage(file.buffer, { maxSide: 1200, quality: 92 });
-    return storeImage(user, id, 'logo', img, String(file.originalname || '').normalize('NFC').slice(0, 255));
+    return storeImage(deck, 'logo', img, String(file.originalname || '').normalize('NFC').slice(0, 255));
   }
 
   // Ảnh bộ nhận diện (nền trang bìa/nội dung, dải đầu/chân trang): cạnh dài tới 3840px để nền 16:9–3:1 không bị nhoè,
   // WebP giữ kênh trong suốt (dải đầu/chân trang dạng PNG nền trong).
   async function addBrand(user, id, file) {
-    await mediaTarget(user, id);
+    const deck = await mediaTarget(user, id);
     if (!file) throw badRequest('Chưa chọn ảnh', 'FILE_REQUIRED');
     if ((await assets.countForPresentation(id, 'brand')) >= MAX_BRAND_PER_DECK) throw unprocessable('Bài trình bày đã có quá nhiều ảnh thương hiệu', 'TOO_MANY_ASSETS');
     const img = await normalizeImage(file.buffer, { maxSide: 3840, quality: 88 });
-    return storeImage(user, id, 'brand', img, String(file.originalname || '').normalize('NFC').slice(0, 255));
+    return storeImage(deck, 'brand', img, String(file.originalname || '').normalize('NFC').slice(0, 255));
   }
 
   async function cutoutLogo(user, id, assetId, { mode } = {}) {
-    await mediaTarget(user, id);
-    const src = await assets.findOwnedInPresentation(user.id, id, assetId);
+    const deck = await mediaTarget(user, id);
+    const src = await assets.findOwnedInPresentation(deck.tenant_id, id, assetId);
     if (!src || src.kind !== 'logo') throw notFound('Không tìm thấy logo');
     if (cutoutQueue.pending >= 5) throw unavailable('Hệ thống đang tách nền nhiều logo, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
     const buffer = await storage.get(src.storage_key);
     const res = await cutoutQueue.run(() => removeBackground(buffer, { mode: ['auto', 'color', 'ai'].includes(mode) ? mode : 'auto' }));
     // Ảnh đã trong suốt sẵn / không nhận ra nền → dùng chính logo gốc.
     if (res.method === 'none') return { asset: assetDto(src), method: res.method, note: res.note || '' };
-    const asset = await storeImage(user, id, 'logo', { buffer: res.buffer, width: res.width, height: res.height, mime: 'image/webp', bytes: res.buffer.length }, src.original_name ? `tach-nen-${src.original_name}`.slice(0, 255) : null);
+    const asset = await storeImage(deck, 'logo', { buffer: res.buffer, width: res.width, height: res.height, mime: 'image/webp', bytes: res.buffer.length }, src.original_name ? `tach-nen-${src.original_name}`.slice(0, 255) : null);
     return { asset, method: res.method, note: res.note || '' };
   }
 
   // Video tải lên: multer đã ghi ra đĩa; poster (ảnh bìa, chụp ở trình duyệt) tuỳ chọn.
   async function addVideo(user, id, file, posterFile) {
     try {
-      await mediaTarget(user, id);
+      const deck = await mediaTarget(user, id);
       if (!file) throw badRequest('Chưa chọn video', 'FILE_REQUIRED');
       if ((await assets.countForPresentation(id, 'video')) >= config.limits.maxVideosPerDeck) throw unprocessable(`Mỗi bài trình bày tối đa ${config.limits.maxVideosPerDeck} video`, 'TOO_MANY_ASSETS');
       const type = sniffVideo(await readHead(file.path));
@@ -666,12 +716,12 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       let poster = null;
       if (posterFile) {
         const img = await normalizeImage(await readFile(posterFile.path), { maxSide: 1280 }).catch(() => null);
-        if (img) poster = await storeImage(user, id, 'poster', img, null);
+        if (img) poster = await storeImage(deck, 'poster', img, null);
       }
       const assetId = randomUUID();
-      const key = assetKey(user.id, id, assetId, type);
+      const key = assetKey(deck.tenant_id, id, assetId, type);
       await storage.putFile(key, file.path);
-      await assets.create(user.id, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, width: null, height: null, storageKey: key, originalName: name });
+      await assets.create(deck.tenant_id, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, width: null, height: null, storageKey: key, originalName: name });
       const asset = assetDto({ id: assetId, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, width: null, height: null, original_name: name });
       return { video: { provider: 'file', asset: assetId, poster: poster?.id || null, title: name.replace(/\.[a-z0-9]+$/i, '').slice(0, 200) }, assets: [asset, poster].filter(Boolean) };
     } finally {
@@ -680,10 +730,10 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   }
 
   async function addYouTube(user, id, { url }) {
-    await mediaTarget(user, id);
+    const deck = await mediaTarget(user, id);
     if ((await assets.countForPresentation(id, 'poster')) >= MAX_POSTERS_PER_DECK) throw unprocessable('Bài trình bày đã có quá nhiều video', 'TOO_MANY_ASSETS');
     const yt = await resolveYouTube(url);
-    const poster = yt.thumb ? await storeImage(user, id, 'poster', yt.thumb, `youtube-${yt.id}`) : null;
+    const poster = yt.thumb ? await storeImage(deck, 'poster', yt.thumb, `youtube-${yt.id}`) : null;
     return { video: { provider: 'youtube', id: yt.id, poster: poster?.id || null, title: yt.title }, assets: [poster].filter(Boolean) };
   }
 
@@ -728,12 +778,22 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     };
   }
 
-  // edit: khung xem trước của trình soạn thảo (chỉ chủ sở hữu) — chữ sửa trực tiếp, bấm ảnh để đổi, kéo thả phần tử.
+  // edit: khung xem trước của trình soạn thảo (chủ bài / người được mời sửa) — chữ sửa trực tiếp, bấm ảnh để đổi, kéo thả phần tử.
   async function preview(user, id, nonce, { edit = false } = {}) {
     const row = await readable(user, id);
     if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
-    const mode = edit && row.tenant_id === user.id ? 'edit' : 'present';
+    const mode = edit && row.access_role !== 'viewer' ? 'edit' : 'present';
     return renderDeck(row.spec, { ratio: row.ratio, mode, nonce, ...(await resolvers(id)) });
+  }
+
+  // Xem lại 1 phiên bản (bản gốc / handoff) trước khi khôi phục — chủ bài và người được mời sửa.
+  async function previewVersion(user, id, versionId, nonce) {
+    await editable(user, id);
+    const v = await versions.find(id, versionId);
+    if (!v) throw notFound('Không tìm thấy phiên bản');
+    const { spec } = normalizeSpec(v.spec);
+    dropForeignAssets(spec, new Set((await assets.listMediaForPresentation(id)).map((a) => a.id)));
+    return renderDeck(spec, { ratio: config.ratios.includes(v.ratio) ? v.ratio : '16:9', mode: 'present', nonce, ...(await resolvers(id)) });
   }
 
   const idByCode = (code) => (SHORT_CODE_RE.test(String(code)) ? presentations.findIdByCode(code) : null);
@@ -793,7 +853,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   }
 
   return {
-    create, list, get, update, remove, duplicate, saveOutline, build, idByCode,
+    create, list, get, update, remove, duplicate, saveOutline, build, idByCode, owned, editable, restoreSnapshot, previewVersion,
     addAsset, addLogo, addBrand, cutoutLogo, addVideo, addYouTube, readAsset,
     generateImage, searchImages, importStockImage, editImage,
     preview, exportHtml, exportPdf, recoverStale, queueStats: () => ({ pending: genQueue.pending }),

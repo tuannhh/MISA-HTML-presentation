@@ -4,6 +4,8 @@
 // Đổi/chỉnh sửa ảnh, chọn video, chèn trang là màn con toàn màn hình (FullScreenSheet) trong cùng route.
 // Thiết kế & thiết lập bài (tên, màu – nền – phông – logo, chân trang, tỷ lệ, chia sẻ) là màn con toàn màn hình trong cùng route.
 // Bài còn ở bước dàn ý (đang lập / chờ duyệt) → chuyển sang màn duyệt dàn ý.
+// Quyền: chủ bài đủ thao tác (Chia sẻ, Xoá, khôi phục phiên bản); người được mời sửa: sửa + handoff (màn con Phiên bản);
+// người chỉ xem: thông báo + Trình chiếu.
 import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import { deckPath } from '@/lib/deckPath.js'
 import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
@@ -19,10 +21,12 @@ import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import DesignPanel from '@/shared/DesignPanel.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
+import SharePanel from '@/shared/SharePanel.vue'
+import VersionsPanel from '@/shared/VersionsPanel.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import MInput from '@/components/mds/MInput.vue'
-import MSwitch from '@/components/mds/MSwitch.vue'
+import MTag from '@/components/mds/MTag.vue'
 import MDialog from '@/components/mds/MDialog.vue'
 import MSpinner from '@/components/mds/MSpinner.vue'
 import MEmptyState from '@/components/mds/MEmptyState.vue'
@@ -34,6 +38,7 @@ import { useSlideMedia } from '@/composables/useSlideMedia.js'
 import { LAYOUT_LABEL, SPEC_LIMITS } from '@/lib/slideModel.js'
 import { plainText } from '@shared/deck/rich.js'
 import { ratioCss } from '@/lib/format.js'
+import { deckAccess, deckNav, NAV_ROUTE } from '@/lib/deckActions.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -48,6 +53,8 @@ const id = route.params.code || route.params.id
 const ed = useEditor(id, { onOutline: (d) => router.replace(deckPath(d, 'outline')) })
 const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, assets, media, videoLibrary } = ed
 useDeckUrl(deck, 'edit')
+const access = computed(() => (deck.value ? deckAccess(deck.value) : 'owner'))
+const isOwner = computed(() => access.value === 'owner')
 
 const view = ref('slides') // 'slides' | 'deck'
 const frame = ref(null)
@@ -70,12 +77,22 @@ function onInsert({ layout, template }) {
 const sheetOpen = computed({ get: () => !!sheet.value, set: (v) => !v && (sheet.value = '') })
 const moreItems = computed(() => [
   { key: 'settings', label: 'Thiết kế & thiết lập bài', icon: 'palette' },
+  { key: 'versions', label: 'Phiên bản & handoff', icon: 'history' },
+  ...(isOwner.value ? [{ key: 'share', label: 'Chia sẻ', icon: 'user-plus' }] : []),
   { key: 'html', label: 'Tải HTML (có chuyển động)', icon: 'file-export' },
   { key: 'pdf', label: 'Tải PDF', icon: 'download' },
-  { key: 'duplicate', label: 'Nhân bản bài', icon: 'copy' },
-  { key: 'd', divider: true },
-  { key: 'remove', label: 'Xóa bài', icon: 'trash', danger: true },
+  { key: 'duplicate', label: isOwner.value ? 'Nhân bản bài' : 'Nhân bản về bài của tôi', icon: 'copy' },
+  ...(isOwner.value ? [{ key: 'd', divider: true }, { key: 'remove', label: 'Xóa bài', icon: 'trash', danger: true }] : []),
 ])
+
+/* Chia sẻ (chủ bài) + phiên bản/handoff (chủ bài, người được mời sửa) — màn con toàn màn hình */
+const shareOpen = ref(false)
+const versionsOpen = ref(false)
+const setShareVisibility = (isPublic) => ed.updateMeta({ visibility: isPublic ? 'public' : 'private' })
+function onRestored(d) {
+  ed.applyDeck(d)
+  versionsOpen.value = false
+}
 const slideItems = computed(() => {
   const n = draft.value?.spec.slides.length || 0
   const i = selected.value
@@ -127,6 +144,8 @@ async function onSave() {
 const busy = ref('')
 async function onMore(key) {
   if (key === 'settings') return (view.value = 'deck')
+  if (key === 'versions') return (versionsOpen.value = true)
+  if (key === 'share') return (shareOpen.value = true)
   if (key === 'remove') return (confirmRemove.value = true)
   busy.value = key
   try {
@@ -191,7 +210,7 @@ onMounted(ed.load)
 </script>
 
 <template>
-  <MobileShell :title="view === 'deck' ? 'Thiết kế & thiết lập' : draft?.title || 'Chỉnh sửa'" back="/decks" :on-back="onBack" :show-more="!!draft && view === 'slides'" @more="sheet = 'more'">
+  <MobileShell :title="view === 'deck' ? 'Thiết kế & thiết lập' : draft?.title || 'Chỉnh sửa'" :back="NAV_ROUTE[deckNav(deck)]" :on-back="onBack" :show-more="!!draft && view === 'slides'" @more="sheet = 'more'">
     <template v-if="draft && view === 'slides'" #actions>
       <MButton variant="icon" aria-label="Trình chiếu" @click="router.push(deckPath(deck, 'view'))"><template #icon><MIcon name="eye" :size="24" /></template></MButton>
     </template>
@@ -204,8 +223,8 @@ onMounted(ed.load)
       </MEmptyState>
     </div>
 
-    <div v-else-if="deck && !deck.isOwner" class="px-4 py-10">
-      <MEmptyState title="Bạn chỉ có quyền xem bài này" description="Nhân bản về bài của bạn để chỉnh sửa.">
+    <div v-else-if="deck && access === 'viewer'" class="px-4 py-10">
+      <MEmptyState title="Bạn chỉ có quyền xem bài này" description="Nhân bản về bài của bạn để chỉnh sửa, hoặc nhờ chủ bài cấp quyền Chỉnh sửa.">
         <template #actions><MButton variant="primary" @click="router.push(deckPath(deck, 'view'))">Trình chiếu</MButton></template>
       </MEmptyState>
     </div>
@@ -245,16 +264,20 @@ onMounted(ed.load)
       <FormField label="Tỷ lệ khung hình" hint="Áp dụng ngay" group>
         <RatioPicker :model-value="deck.ratio" compact name="ratio-ed" @update:model-value="(r) => onMeta({ ratio: r }, `Đã đổi tỷ lệ sang ${r}`)" />
       </FormField>
+      <div v-if="isOwner" class="flex min-h-12 items-center justify-between gap-3">
+        <div class="min-w-0">
+          <p class="flex items-center gap-1 text-[15px] font-medium leading-5">Chia sẻ <MTag v-if="deck.visibility === 'public'" color="brand" size="sm">Công khai</MTag></p>
+          <p class="text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">Công khai cho mọi người xem, hoặc mời từng người Chỉ xem / Chỉnh sửa</p>
+        </div>
+        <MButton variant="outline" @click="shareOpen = true"><template #icon><MIcon name="user-plus" :size="16" /></template>Chia sẻ</MButton>
+      </div>
+      <FormAlert v-else tone="info">Bạn đang sửa bài được chia sẻ — thay đổi lưu thẳng vào bài của {{ deck.authorName || 'chủ bài' }}. Thấy bản nào ổn, hãy handoff ở mục Phiên bản.</FormAlert>
       <div class="flex min-h-12 items-center justify-between gap-3">
         <div class="min-w-0">
-          <p class="text-[15px] font-medium leading-5">Công khai</p>
-          <p class="text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">Mọi người dùng đều xem và nhân bản được</p>
+          <p class="text-[15px] font-medium leading-5">Phiên bản &amp; handoff</p>
+          <p class="text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">Chốt bản thấy ổn (tối đa 5){{ isOwner ? ', khôi phục khi cần' : '' }}</p>
         </div>
-        <MSwitch
-          :model-value="deck.visibility === 'public'"
-          aria-label="Công khai"
-          @update:model-value="(v) => onMeta({ visibility: v ? 'public' : 'private' }, v ? 'Đã công khai' : 'Đã chuyển về riêng tư')"
-        />
+        <MButton variant="outline" @click="versionsOpen = true"><template #icon><MIcon name="history" :size="16" /></template>Mở</MButton>
       </div>
     </div>
 
@@ -316,7 +339,7 @@ onMounted(ed.load)
       </div>
     </template>
 
-    <template v-if="draft && deck?.status === 'ready' && deck.isOwner" #footer>
+    <template v-if="draft && deck?.status === 'ready' && access !== 'viewer'" #footer>
       <FormAlert v-if="saveError" class="relative mb-2 max-h-[30dvh] overflow-y-auto">
         <span class="mds-mobile-readable">{{ saveError.message }}</span>
         <ul v-if="saveDetails.length" class="mt-1 list-disc pl-4">
@@ -337,6 +360,12 @@ onMounted(ed.load)
       @select="(k) => (sheet === 'slide' ? onSlideAction(k) : onMore(k))"
     />
 
+    <FullScreenSheet v-if="deck && isOwner" v-model="shareOpen" title="Chia sẻ">
+      <SharePanel compact :deck-id="deck.id" :visibility="deck.visibility" :set-visibility="setShareVisibility" />
+    </FullScreenSheet>
+    <FullScreenSheet v-if="deck" v-model="versionsOpen" title="Phiên bản & handoff">
+      <VersionsPanel v-if="versionsOpen" compact :deck-id="deck.id" :spec-version="deck.specVersion" :dirty="dirty" @restored="onRestored" />
+    </FullScreenSheet>
     <FullScreenSheet v-model="insertOpen" title="Thêm trang">
       <InsertSlidePanel compact @pick="onInsert" />
     </FullScreenSheet>

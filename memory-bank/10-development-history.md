@@ -1,5 +1,23 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-07 — Chia sẻ theo người + handoff phiên bản
+
+### Yêu cầu (chủ dự án)
+Mỗi người là 1 tenant. Bật **công khai** chỉ cho người khác **xem bản trình chiếu**. Chủ bài thiết lập quyền từng người **Chỉ xem / Chỉnh sửa**. Người sửa được **handoff** bản họ thấy ổn, tối đa **5 bản**; khôi phục không chọn handoff → về **bản đầu tiên chủ bài chia sẻ**.
+Chốt qua câu hỏi: mời từng người theo email · chủ bài + người sửa đều handoff, chỉ chủ bài khôi phục · đủ 5 bản phải xoá bớt (không tự đẩy bản cũ) · người chỉ xem/công khai **vẫn** tải HTML/PDF và nhân bản.
+
+### Thay đổi (chi tiết `03` bảng mới, `04` §Chia sẻ theo người, `05` §4, `08`, `09` §Chia sẻ)
+- CSDL: changelog `20261007_100000` — `presentation_shares` (PK bài+người, role viewer/editor), `presentation_versions` (kind baseline/handoff, ảnh chụp spec/title/ratio, `baseline_lock` sinh + unique → 1 bản gốc/bài), tạo bản gốc cho bài đang công khai.
+- Backend: `shareRepository`, `versionRepository` (`ensureBaseline` chịu song song, `createHandoff` transaction + `FOR UPDATE`), `sharingService` (mời/đổi/gỡ, liệt kê/handoff/xoá/xem lại phiên bản); `presentationRepository.accessRole`/`findReadable` + `scope=shared`; `presentationService` 3 cổng `owned`/`editable`/`readable`, người sửa ghi vào tenant chủ bài, `restore`, `toDto` thêm `access`/`shareRole`; `templateService.apply` theo tenant chủ bài; preview `edit=1` cho người sửa; rate-limit `share`; 9 endpoint mới.
+- Frontend: `useSharing`, `useVersions`, `SharePanel`, `VersionsPanel` (xác nhận ngay trong panel); `deckActions` theo vai trò (`deckAccess`/`deckTarget`/`deckMenuItems`/`deckNav`); route `/shared` + mục sidebar "Được chia sẻ với tôi" + bottom nav mobile 5 mục; trình soạn thảo: nút "Chia sẻ" (chủ) thay công tắc Công khai, "Phiên bản" (MDrawer 520px desktop / FullScreenSheet mobile); trang xem: "Chỉnh sửa" cho người sửa, Back theo `deckNav`. Icon mới `history`, `restore`, `user-plus`, `user-share`, `flag`.
+- Hành vi đổi: người khác PATCH bài công khai trả **403 `VIEW_ONLY`** thay vì 404 (đã xem được bài, thiếu quyền sửa).
+
+### Kiểm chứng
+- `npm test`: 120 test / 119 đạt / 0 lỗi (1 skip sẵn có); `test/unit/sharing.test.js` 5/5 (accessRole, mời, handoff, xoá bản, khôi phục); `brand-rich.test.js` thêm ca người sửa áp mẫu → tệp/asset thuộc tenant chủ bài.
+- `npm run build` OK; Docker `docker compose up -d --build app` (8088) + migration; smoke **TẤT CẢ ĐẠT**: người chỉ xem (403 sửa/công khai/phiên bản, preview `edit=1` vẫn `present`, tải + nhân bản OK, người lạ 404), người sửa (lưu, tải ảnh vào tenant chủ, `OWNER_ONLY`), handoff ×5 → `HANDOFF_LIMIT`, `HANDOFF_EXISTS`, `NOT_VERSION_OWNER`, `BASELINE_LOCKED`, **6 handoff song song → đúng 1 bản 201**, khôi phục (người sửa 404, `specVersion` cũ 409, mặc định về bản gốc, về 1 handoff), gỡ quyền → 404.
+- Browser pane desktop 1440 + mobile 375 (chủ + người sửa) — xem `06` §Đã kiểm chứng 2026-10-07. Không cuộn ngang.
+- Chưa kiểm chứng: máy thật/host MISA AMIS; khung xem lại phiên bản trong browser pane (pane chặn iframe sandbox — đã kiểm nội dung bằng `fetch`).
+
 ## 2026-10-07 — Giới hạn truy cập theo IP mạng MISA (`IP_ALLOWLIST`)
 
 ### Yêu cầu

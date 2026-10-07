@@ -22,9 +22,10 @@ const NAV = [
   { key: 'mine', label: 'Bài của tôi', icon: 'folder' },
   { key: 'public', label: 'Công khai', icon: 'share' },
   { key: 'create', label: 'Tạo bài', icon: 'plus', kind: 'fab', ariaLabel: 'Tạo bài trình bày mới' },
+  { key: 'shared', label: 'Chia sẻ', icon: 'user-share', ariaLabel: 'Bài được chia sẻ với tôi' },
   { key: 'account', label: 'Tài khoản', icon: 'user' },
 ]
-const ROUTE_OF = { mine: '/decks', public: '/public', create: '/create', account: '/account' }
+const ROUTE_OF = { mine: '/decks', public: '/public', create: '/create', shared: '/shared', account: '/account' }
 
 async function goBack() {
   if (props.onBack && (await props.onBack()) === false) return

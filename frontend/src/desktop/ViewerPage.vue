@@ -15,6 +15,7 @@ import { get, post, download } from '@/lib/api.js'
 import { formatDateTime, ratioCss } from '@/lib/format.js'
 import { useDeckFrame } from '@/composables/useDeckFrame.js'
 import { useDeckUrl } from '@/composables/useDeckUrl.js'
+import { deckAccess, deckNav, SHARE_ROLE_LABEL } from '@/lib/deckActions.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +31,8 @@ const frame = ref(null)
 const { index, count, step, steps, next, prev, atStart, atEnd } = useDeckFrame(frame, 0, { keys: true })
 
 const src = computed(() => (deck.value?.status === 'ready' ? `/api/presentations/${id}/preview` : ''))
+// Chủ bài và người được mời sửa → nút Chỉnh sửa; người chỉ xem → Nhân bản để sửa.
+const canEdit = computed(() => !!deck.value && deckAccess(deck.value) !== 'viewer')
 const exportMenu = [
   { key: 'html', label: 'HTML một tệp (có chuyển động)', icon: 'file-export' },
   { key: 'pdf', label: 'PDF (không chuyển động)', icon: 'download' },
@@ -67,13 +70,13 @@ function fullscreen() {
 </script>
 
 <template>
-  <DesktopShell :active="deck?.isOwner ? 'mine' : 'public'" full>
+  <DesktopShell :active="deckNav(deck)" full>
     <div v-if="loading" class="flex flex-1 items-center justify-center"><MSpinner :size="32" /></div>
     <div v-else-if="error || deck?.status !== 'ready'" class="flex flex-1 items-center justify-center p-6">
       <MEmptyState
         type="no-result"
         :title="error?.status === 404 ? 'Không tìm thấy bài trình bày' : 'Bài chưa sẵn sàng để trình chiếu'"
-        :description="error?.status === 404 ? 'Bài có thể đã bị xóa, chuyển về riêng tư hoặc bạn không có quyền xem.' : error?.message || 'Vui lòng thử lại sau.'"
+        :description="error?.status === 404 ? 'Bài có thể đã bị xóa, chuyển về riêng tư, bạn đã bị gỡ quyền hoặc không có quyền xem.' : error?.message || 'Vui lòng thử lại sau.'"
       >
         <template #actions><MButton variant="primary" @click="router.push('/decks')">Về danh sách</MButton></template>
       </MEmptyState>
@@ -87,7 +90,8 @@ function fullscreen() {
             {{ deck.isOwner ? 'Bài của bạn' : deck.authorName || 'Người dùng khác' }} · {{ deck.slideCount }} trang · {{ deck.ratio }} · cập nhật {{ formatDateTime(deck.updatedAt) }}
           </p>
         </div>
-        <MTag :color="deck.visibility === 'public' ? 'brand' : 'neutral'" size="sm">{{ deck.visibility === 'public' ? 'Công khai' : 'Riêng tư' }}</MTag>
+        <MTag v-if="deck.shareRole" :color="deck.shareRole === 'editor' ? 'info' : 'neutral'" size="sm">Được chia sẻ · {{ SHARE_ROLE_LABEL[deck.shareRole] }}</MTag>
+        <MTag v-else :color="deck.visibility === 'public' ? 'brand' : 'neutral'" size="sm">{{ deck.visibility === 'public' ? 'Công khai' : 'Riêng tư' }}</MTag>
         <div class="flex items-center gap-1">
           <MButton variant="icon" aria-label="Trước" :disabled="atStart" @click="prev"><template #icon><MIcon name="chevron-left" :size="20" /></template></MButton>
           <span class="min-w-[56px] whitespace-nowrap text-center text-[13px] font-medium tabular-nums">{{ index + 1 }} / {{ count }}<span v-if="steps" class="text-[var(--mds-text-secondary)]" :title="`Đã hiện ${step}/${steps} bước của trang`"> · {{ step }}/{{ steps }}</span></span>
@@ -99,7 +103,7 @@ function fullscreen() {
             <MButton variant="outline" :loading="busy === 'html' || busy === 'pdf'" aria-haspopup="menu"><template #icon><MIcon name="download" :size="16" /></template>Tải xuống<MIcon name="chevron-down" :size="16" /></MButton>
           </template>
         </MDropdownMenu>
-        <MButton v-if="deck.isOwner" variant="primary" @click="router.push(deckPath(deck, 'edit'))"><template #icon><MIcon name="pencil" :size="16" /></template>Chỉnh sửa</MButton>
+        <MButton v-if="canEdit" variant="primary" @click="router.push(deckPath(deck, 'edit'))"><template #icon><MIcon name="pencil" :size="16" /></template>Chỉnh sửa</MButton>
         <MButton v-else variant="primary" :loading="busy === 'duplicate'" @click="act('duplicate')"><template #icon><MIcon name="copy" :size="16" /></template>Nhân bản để sửa</MButton>
       </div>
       <div class="flex min-h-0 flex-1 items-center justify-center bg-[#05070F] p-4">

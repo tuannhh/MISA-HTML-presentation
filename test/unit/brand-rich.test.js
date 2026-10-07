@@ -243,8 +243,18 @@ function fakeWorld() {
   const tpls = [];
   const tplAssets = [];
   const copies = [];
+  // Người được chủ bài mời (presentation_shares) — mô phỏng findReadable thật: chủ bài | được mời (bài ready).
+  const shares = [];
   const repos = {
-    presentations: { findOwned: async (t, id) => decks.find((d) => d.id === id && d.tenant_id === t) || null },
+    presentations: {
+      findReadable: async (t, id) => {
+        const d = decks.find((x) => x.id === id);
+        if (!d) return null;
+        if (d.tenant_id === t) return { ...d, access_role: 'owner' };
+        const s = shares.find((x) => x.presentation_id === id && x.user_id === t);
+        return s && d.status === 'ready' ? { ...d, access_role: s.role === 'editor' ? 'editor' : 'viewer' } : null;
+      },
+    },
     assets: {
       listOwnedForPresentation: async (t, pid) => deckAssets.filter((a) => a.tenant_id === t && a.presentation_id === pid),
       countForPresentation: async (pid, kind) => deckAssets.filter((a) => a.presentation_id === pid && a.kind === kind).length,
@@ -273,7 +283,7 @@ function fakeWorld() {
   };
   const storage = { copy: async (from, to) => copies.push([from, to]), removePrefix: async () => {}, get: async () => Buffer.from('') };
   const svc = createTemplateService({ repos, storage, signer: { url: (id) => `/s/${id}` }, audit: { record: async () => {} } });
-  return { svc, U1, U2, D1, D2, tpls, copies, deckAssets };
+  return { svc, U1, U2, D1, D2, tpls, copies, deckAssets, shares };
 }
 
 test('mẫu thương hiệu: lưu sao chép ảnh sang kho mẫu; chặn ảnh không thuộc bài / không phải ảnh', async () => {
@@ -311,4 +321,23 @@ test('mẫu thương hiệu: mẫu riêng tư người khác không áp được
   // Không áp vào bài của người khác.
   await assert.rejects(w.svc.apply({ id: w.U2 }, w.D1, t.id), { status: 404 });
   await assert.rejects(w.svc.update({ id: w.U1 }, t.id, { visibility: 'everyone' }), { code: 'INVALID_VISIBILITY' });
+});
+
+test('mẫu thương hiệu: người được mời SỬA áp mẫu → ảnh vào kho của CHỦ BÀI; người chỉ xem bị chặn (403)', async () => {
+  const w = fakeWorld();
+  const t = await w.svc.create({ id: w.U1 }, { name: 'Chiến dịch', presentationId: w.D1, design: { theme: 'sand', brand: { cover: A, footerText: true } } });
+  await w.svc.update({ id: w.U1 }, t.id, { visibility: 'public' });
+  // U2 chỉ xem bài D1 của U1 → không áp được, không lưu mẫu từ bài đó được.
+  w.shares.push({ presentation_id: w.D1, user_id: w.U2, role: 'viewer' });
+  await assert.rejects(w.svc.apply({ id: w.U2 }, w.D1, t.id), { status: 403, code: 'VIEW_ONLY' });
+  await assert.rejects(w.svc.create({ id: w.U2 }, { name: 'x', presentationId: w.D1, design: { brand: { cover: A } } }), { status: 403 });
+  // Nâng lên quyền sửa → áp được; tệp + asset thuộc tenant chủ bài (U1), không phải người áp.
+  w.shares[0].role = 'editor';
+  w.copies.length = 0;
+  const res = await w.svc.apply({ id: w.U2 }, w.D1, t.id);
+  assert.ok(w.copies[0][1].startsWith(`tenants/${w.U1}/presentations/${w.D1}/`));
+  assert.equal(w.deckAssets.find((a) => a.id === res.assets[0].id).tenant_id, w.U1);
+  // Lưu thành mẫu từ bài được mời sửa → mẫu thuộc người lưu (U2), ảnh sao chép từ bài của U1.
+  const mine = await w.svc.create({ id: w.U2 }, { name: 'Bản của tôi', presentationId: w.D1, design: { brand: { cover: A } } });
+  assert.equal(w.tpls.find((x) => x.id === mine.id).tenant_id, w.U2);
 });

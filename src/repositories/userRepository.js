@@ -9,6 +9,12 @@ export function createUserRepository(pool) {
       return rows[0] || null;
     },
 
+    // Chia sẻ bài theo email: chỉ trả thông tin công khai của tài khoản đang hoạt động.
+    async findActiveByEmail(email) {
+      const [rows] = await pool.execute("SELECT id, email, display_name FROM users WHERE email = ? AND status = 'active' LIMIT 1", [email]);
+      return rows[0] || null;
+    },
+
     async findById(id) {
       const [rows] = await pool.execute(`SELECT ${PUBLIC_COLS} FROM users WHERE id = ? LIMIT 1`, [id]);
       return rows[0] || null;

@@ -1,6 +1,7 @@
 // Kiểm thử khói end-to-end trên server đang chạy (cần Gemini thật + Internet cho YouTube): 2 tenant, tạo dàn ý từ văn bản,
 // duyệt/sửa dàn ý + gắn media (logo tách nền, video tải lên, YouTube) + thiết kế → dựng bài, cách ly tenant, công khai,
-// sửa có khoá phiên bản, phát video theo Range, xem trước, xuất HTML (nhúng video, phông)/PDF.
+// sửa có khoá phiên bản, phát video theo Range, xem trước, xuất HTML (nhúng video, phông)/PDF,
+// chia sẻ theo người (chỉ xem / chỉnh sửa), handoff tối đa 5 bản (kể cả gửi song song), khôi phục về bản gốc / bản handoff.
 // Dùng: BASE=http://localhost:3000 node test/smoke/smoke.mjs
 import assert from 'node:assert/strict';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -198,7 +199,8 @@ assert.equal(r.json.data.assets, undefined);
 r = await b.req('GET', '/api/presentations?scope=public');
 assert.ok(r.json.data.some((d) => d.id === id));
 r = await b.req('PATCH', `/api/presentations/${id}`, { title: 'sửa bài người khác' });
-assert.equal(r.status, 404);
+assert.equal(r.status, 403);
+assert.equal(r.json.error.code, 'VIEW_ONLY');
 r = await b.req('POST', `/api/presentations/${id}/duplicate`);
 assert.equal(r.status, 201);
 assert.equal(r.json.data.visibility, 'private');
@@ -230,4 +232,152 @@ r = await a.req('PATCH', `/api/presentations/${id}`, { visibility: 'private' });
 r = await b.req('GET', `/api/presentations/${id}`);
 assert.equal(r.status, 404);
 console.log('✓ chuyển lại private → B mất quyền xem');
+
+/* ---------------- Chia sẻ theo người + handoff + khôi phục ---------------- */
+const c = client();
+await c.init();
+r = await c.req('POST', '/api/auth/register', { email: `c-${stamp}@misa.com.vn`, password: 'Matkhau12345', displayName: 'Người Dùng C' });
+assert.equal(r.status, 201);
+const shareUrl = `/api/presentations/${id}/shares`;
+r = await b.req('POST', shareUrl, { email: `c-${stamp}@misa.com.vn`, role: 'viewer' });
+assert.equal(r.status, 404, 'người ngoài không quản lý chia sẻ');
+r = await a.req('POST', shareUrl, { email: `khong-co-${stamp}@misa.com.vn`, role: 'viewer' });
+assert.equal(r.json.error.code, 'USER_NOT_FOUND');
+r = await a.req('POST', shareUrl, { email: `A-${stamp}@MISA.com.vn`, role: 'viewer' });
+assert.equal(r.json.error.code, 'SELF_SHARE');
+r = await a.req('POST', shareUrl, { email: `b-${stamp}@misa.com.vn`, role: 'owner' });
+assert.equal(r.json.error.code, 'INVALID_ROLE');
+r = await a.req('POST', shareUrl, { email: ` B-${stamp}@MISA.com.vn `, role: 'viewer' });
+assert.equal(r.status, 201, JSON.stringify(r.json));
+const bId = r.json.data.share.userId;
+r = await a.req('GET', shareUrl);
+assert.deepEqual(r.json.data.shares.map((x) => [x.userId, x.role]), [[bId, 'viewer']]);
+
+// B chỉ xem: xem/tải/nhân bản được; không sửa, không handoff, không đổi công khai
+r = await b.req('GET', `/api/presentations/${id}`);
+assert.equal(r.status, 200);
+assert.deepEqual([r.json.data.access, r.json.data.shareRole, r.json.data.assets], ['viewer', 'viewer', undefined]);
+r = await b.req('GET', '/api/presentations?scope=shared');
+assert.ok(r.json.data.some((d) => d.id === id && d.access === 'viewer'));
+for (const [m, path, body, code] of [
+  ['PATCH', `/api/presentations/${id}`, { title: 'B sửa' }, 'VIEW_ONLY'],
+  ['PATCH', `/api/presentations/${id}`, { visibility: 'public' }, 'VIEW_ONLY'],
+  ['POST', `/api/presentations/${id}/versions`, { specVersion: 1 }, 'VIEW_ONLY'],
+  ['GET', `/api/presentations/${id}/versions`, undefined, 'VIEW_ONLY'],
+]) {
+  r = await b.req(m, path, body);
+  assert.equal(r.status, 403, `${m} ${path}`);
+  assert.equal(r.json.error.code, code);
+}
+r = await b.req('GET', `/api/presentations/${id}/preview?edit=1`, undefined, { raw: true });
+assert.equal(r.status, 200);
+assert.match(await r.text(), /id="deck"[^>]*data-mode="present"/, 'người chỉ xem không nhận khung sửa (edit=1 bị bỏ qua)');
+r = await b.req('GET', `/api/presentations/${id}/export.html`, undefined, { raw: true });
+assert.equal(r.status, 200);
+r = await b.req('POST', `/api/presentations/${id}/duplicate`);
+assert.equal(r.status, 201);
+r = await c.req('GET', `/api/presentations/${id}`);
+assert.equal(r.status, 404, 'người không được mời không xem được bài riêng tư');
+console.log('✓ mời B "Chỉ xem": B xem, tải, nhân bản được; sửa/handoff/công khai → 403 VIEW_ONLY; C không được mời → 404');
+
+// Nâng B lên "Chỉnh sửa": B lưu bài, tải ảnh (asset vào tenant của A), không đổi công khai, không chia sẻ/xoá/khôi phục
+r = await a.req('PATCH', `${shareUrl}/${bId}`, { role: 'editor' });
+assert.equal(r.json.data.share.role, 'editor');
+r = await b.req('GET', `/api/presentations/${id}`);
+assert.equal(r.json.data.access, 'editor');
+assert.ok(Array.isArray(r.json.data.assets));
+r = await b.req('PATCH', `/api/presentations/${id}`, { visibility: 'public' });
+assert.equal(r.json.error.code, 'OWNER_ONLY');
+r = await b.req('DELETE', `/api/presentations/${id}`);
+assert.equal(r.status, 404);
+r = await b.req('GET', shareUrl);
+assert.equal(r.status, 404);
+const editImg = await sharp({ create: { width: 320, height: 200, channels: 3, background: '#2563EB' } }).png().toBuffer();
+fd = new FormData();
+fd.set('file', new Blob([editImg], { type: 'image/png' }), 'anh-cua-b.png');
+r = await b.req('POST', `/api/presentations/${id}/assets`, undefined, { form: fd });
+assert.equal(r.status, 201, JSON.stringify(r.json));
+const bAsset = r.json.data.id;
+r = await a.req('GET', `/api/presentations/${id}`);
+assert.ok(r.json.data.assets.some((x) => x.id === bAsset), 'ảnh B tải lên thuộc bài (tenant của A)');
+
+async function saveAs(cl, title) {
+  const cur = (await cl.req('GET', `/api/presentations/${id}`)).json.data;
+  cur.spec.slides[0].title = title;
+  const res = await cl.req('PATCH', `/api/presentations/${id}`, { spec: cur.spec, specVersion: cur.specVersion });
+  assert.equal(res.status, 200, JSON.stringify(res.json));
+  return res.json.data;
+}
+const verUrl = `/api/presentations/${id}/versions`;
+let cur = await saveAs(b, 'B sửa lần 1');
+r = await b.req('POST', verUrl, { specVersion: cur.specVersion - 1 });
+assert.equal(r.json.error.code, 'VERSION_CONFLICT');
+r = await b.req('POST', verUrl, { specVersion: cur.specVersion, note: 'B chốt bản 1' });
+assert.equal(r.status, 201, JSON.stringify(r.json));
+assert.equal(r.json.data.handoffs, 1);
+assert.equal(r.json.data.canRestore, false);
+const firstHandoff = r.json.data.items.find((x) => x.kind === 'handoff');
+r = await a.req('POST', verUrl, { specVersion: cur.specVersion });
+assert.equal(r.json.error.code, 'HANDOFF_EXISTS');
+for (let i = 2; i <= 5; i += 1) {
+  const who = i % 2 ? b : a;
+  cur = await saveAs(who, `Bản ${i}`);
+  r = await who.req('POST', verUrl, { specVersion: cur.specVersion });
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+}
+assert.equal(r.json.data.handoffs, 5);
+cur = await saveAs(a, 'Bản 6');
+r = await a.req('POST', verUrl, { specVersion: cur.specVersion });
+assert.equal(r.status, 409);
+assert.equal(r.json.error.code, 'HANDOFF_LIMIT');
+r = await a.req('GET', verUrl);
+const ownerHandoff = r.json.data.items.find((x) => x.kind === 'handoff' && x.createdBy.id !== bId);
+const baselineV = r.json.data.items.find((x) => x.kind === 'baseline');
+assert.ok(baselineV && r.json.data.canRestore);
+r = await b.req('DELETE', `${verUrl}/${ownerHandoff.id}`);
+assert.equal(r.json.error.code, 'NOT_VERSION_OWNER');
+r = await a.req('DELETE', `${verUrl}/${baselineV.id}`);
+assert.equal(r.json.error.code, 'BASELINE_LOCKED');
+r = await b.req('GET', `${verUrl}/${firstHandoff.id}/preview`, undefined, { raw: true });
+assert.equal(r.status, 200);
+assert.match(r.headers.get('content-security-policy'), /sandbox allow-scripts/);
+assert.ok((await r.text()).includes('B sửa lần 1'), 'xem lại đúng nội dung bản handoff');
+console.log('✓ nâng B lên "Chỉnh sửa": B lưu bài + tải ảnh (vào tenant A); handoff 5 bản, bản thứ 6 → HANDOFF_LIMIT, trùng → HANDOFF_EXISTS; không xoá bản người khác/bản gốc');
+
+// Đồng thời: còn 4/5 chỗ → 6 yêu cầu handoff song song cùng phiên bản → đúng 1 bản được tạo
+r = await b.req('DELETE', `${verUrl}/${firstHandoff.id}`);
+assert.equal(r.status, 200);
+assert.equal(r.json.data.handoffs, 4);
+cur = (await a.req('GET', `/api/presentations/${id}`)).json.data;
+const burst = await Promise.all([a, b, a, b, a, b].map((cl) => cl.req('POST', verUrl, { specVersion: cur.specVersion })));
+assert.equal(burst.filter((x) => x.status === 201).length, 1, JSON.stringify(burst.map((x) => x.status)));
+assert.ok(burst.filter((x) => x.status !== 201).every((x) => x.status === 409));
+r = await a.req('GET', verUrl);
+assert.equal(r.json.data.handoffs, 5);
+console.log('✓ 6 handoff song song → đúng 1 bản, còn lại 409; tổng vẫn 5/5');
+
+// Khôi phục: chỉ chủ bài; không chọn → bản gốc; chọn bản handoff → đúng bản đó; phiên bản cũ → 409
+r = await b.req('POST', `/api/presentations/${id}/restore`, { specVersion: cur.specVersion });
+assert.equal(r.status, 404);
+r = await a.req('POST', `/api/presentations/${id}/restore`, { specVersion: cur.specVersion - 1 });
+assert.equal(r.json.error.code, 'VERSION_CONFLICT');
+r = await a.req('POST', `/api/presentations/${id}/restore`, { specVersion: cur.specVersion });
+assert.equal(r.status, 200, JSON.stringify(r.json));
+assert.equal(r.json.data.spec.slides[0].title, 'Tiêu đề đã sửa', 'không chọn bản → về bản gốc (lúc công khai lần đầu)');
+const bản3 = (await a.req('GET', verUrl)).json.data.items.find((x) => x.kind === 'handoff' && x.specVersion === firstHandoff.specVersion + 2);
+r = await a.req('POST', `/api/presentations/${id}/restore`, { versionId: bản3.id, specVersion: r.json.data.specVersion });
+assert.equal(r.status, 200, JSON.stringify(r.json));
+assert.equal(r.json.data.spec.slides[0].title, 'Bản 3');
+r = await b.req('GET', `/api/presentations/${id}`);
+assert.equal(r.json.data.spec.slides[0].title, 'Bản 3', 'người được chia sẻ thấy ngay bản khôi phục');
+console.log('✓ khôi phục: B → 404; mặc định về bản gốc; chọn handoff "Bản 3" → đúng nội dung; phiên bản cũ → 409');
+
+// Gỡ chia sẻ → B mất quyền
+r = await a.req('DELETE', `${shareUrl}/${bId}`);
+assert.equal(r.status, 200);
+r = await b.req('GET', `/api/presentations/${id}`);
+assert.equal(r.status, 404);
+r = await b.req('GET', '/api/presentations?scope=shared');
+assert.ok(!r.json.data.some((d) => d.id === id));
+console.log('✓ gỡ chia sẻ → B không còn thấy bài');
 console.log('TẤT CẢ ĐẠT');

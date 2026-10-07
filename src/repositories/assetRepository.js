@@ -1,5 +1,6 @@
 // Truy cập bảng assets (ảnh trong slide + thumbnail). Đọc được = chủ sở hữu, hoặc asset thuộc
-// bài trình bày công khai đã sẵn sàng. storage_key luôn do server sinh.
+// bài trình bày đã sẵn sàng mà công khai / người đọc được mời. storage_key luôn do server sinh.
+// Asset luôn thuộc tenant của CHỦ BÀI (kể cả khi người được mời sửa tải lên) — service truyền tenant của bài.
 import { tenantClause } from './tenantScope.js';
 
 const COLS = 'a.id, a.tenant_id, a.presentation_id, a.kind, a.mime, a.bytes, a.width, a.height, a.storage_key, a.original_name, a.created_at';
@@ -19,8 +20,9 @@ export function createAssetRepository(pool) {
       const t = tenantClause(tenantId, 'a');
       const [rows] = await pool.execute(
         `SELECT ${COLS} FROM assets a JOIN presentations p ON p.id = a.presentation_id
-          WHERE a.id = ? AND (${t.sql} OR (p.visibility = 'public' AND p.status = 'ready')) LIMIT 1`,
-        [id, ...t.params],
+          WHERE a.id = ? AND (${t.sql} OR (p.status = 'ready' AND (p.visibility = 'public'
+            OR EXISTS (SELECT 1 FROM presentation_shares s WHERE s.presentation_id = p.id AND s.user_id = ?)))) LIMIT 1`,
+        [id, ...t.params, t.params[0]],
       );
       return rows[0] || null;
     },

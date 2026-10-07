@@ -144,18 +144,29 @@ POST /build {outlineVersion, outline?} → (lưu nếu có outline) → startBui
 - Ảnh mới: `POST /:id/assets` → trả asset id + URL ký → gắn vào `image.asset` của slide trong nháp. Trang có ô media (`MEDIA_LAYOUTS`) chọn được tab Ảnh / Video; Lưu bỏ video ở bố cục không có ô media, bỏ `palette` khi theme không phải `custom`.
 - Bảng **Thiết kế** (màu, nền, phông, logo) dùng chung giữa bước dàn ý và trình soạn thảo (`DesignPanel.vue`).
 
-## 4. Chia sẻ & đa tenant
+## 4. Chia sẻ & đa tenant (cập nhật 2026-10-07: chia sẻ theo người + handoff)
 
-| Thao tác | Chủ sở hữu | Người khác (bài public + ready) | Người khác (bài private) |
-|---|---|---|---|
-| Xem / trình chiếu / xem trước | ✅ | ✅ | ❌ 404 |
-| Tải HTML / PDF | ✅ | ✅ | ❌ 404 |
-| Nhân bản | ✅ | ✅ (thành bản private của mình) | ❌ 404 |
-| Sửa / đổi tỷ lệ / chia sẻ / xoá / thêm ảnh | ✅ | ❌ | ❌ |
+Mỗi người dùng là 1 tenant; **dữ liệu bài (dòng `presentations`, asset, tệp) luôn thuộc tenant của chủ bài**. Chia sẻ chỉ cấp quyền truy cập, không chuyển dữ liệu. Quyền tính theo từng người (`presentationRepository.accessRole`): `owner` (chủ) · `editor` (được mời Chỉnh sửa) · `viewer` (được mời Chỉ xem **hoặc** bài công khai — công khai chỉ cho **xem bản trình chiếu**).
 
-- Công khai chỉ khi `status='ready'`. `published_at` giữ mốc lần công khai đầu tiên; chuyển về private → NULL.
-- Mọi truy vấn theo tenant đi qua `tenantClause()`; truy vấn "public" là ngoại lệ có chủ đích, luôn kèm `visibility='public' AND status='ready'`.
-- Trả 404 (không phải 403) khi không có quyền để không lộ sự tồn tại của bài.
+| Thao tác | Chủ bài | Được mời "Chỉnh sửa" | Được mời "Chỉ xem" / bài công khai | Không có quyền |
+|---|---|---|---|---|
+| Xem / trình chiếu | ✅ | ✅ | ✅ | ❌ 404 |
+| Tải HTML / PDF, nhân bản về bài của mình | ✅ | ✅ | ✅ (chủ dự án chốt: vẫn cho tải + nhân bản) | ❌ 404 |
+| Sửa nội dung, tên, tỷ lệ; thêm ảnh/video/logo; áp/lưu mẫu thương hiệu; khung sửa trực tiếp | ✅ | ✅ (ghi vào bài + tenant của chủ) | ❌ 403 `VIEW_ONLY` | ❌ 404 |
+| Handoff phiên bản, xem lại phiên bản | ✅ | ✅ | ❌ 403 | ❌ 404 |
+| Xoá bản handoff | ✅ mọi bản | ✅ chỉ bản mình chụp (403 `NOT_VERSION_OWNER`) | ❌ | ❌ |
+| Khôi phục phiên bản | ✅ | ❌ 404 | ❌ | ❌ |
+| Công khai / mời người / đổi quyền / gỡ quyền | ✅ | ❌ (`OWNER_ONLY` cho công khai, 404 cho mời) | ❌ | ❌ |
+| Xoá bài, duyệt dàn ý, dựng bài | ✅ | ❌ 404 | ❌ | ❌ |
+
+- **Mời theo email** (người dùng đang hoạt động, không mời được chính mình), ≤ 100 người/bài. Mời lại = đổi quyền. Bài phải `ready` (người được mời chỉ thấy bài `ready`).
+- **Bản gốc (`baseline`)**: chụp tự động **lần đầu chia sẻ** — lần mời đầu tiên hoặc lần bật công khai đầu tiên (gọi lại không ghi đè; 1 bản/bài nhờ unique `baseline_lock`). Changelog 2026-10-07 tạo bản gốc cho bài đang công khai. Không xoá được.
+- **Handoff**: chủ bài và người được mời sửa "chốt" **bản đang lưu** mà họ thấy ổn (kèm ghi chú ≤ 200 ký tự). Máy chủ chụp từ dòng `presentations` trong transaction có khoá dòng: `specVersion` client gửi phải bằng bản đang lưu (lệch → `VERSION_CONFLICT`), mỗi `spec_version` chỉ handoff 1 lần (`HANDOFF_EXISTS`), **tối đa 5 bản** — đủ thì phải xoá bớt (`HANDOFF_LIMIT`, không tự đẩy bản cũ ra). Giao diện chặn handoff khi còn thay đổi chưa lưu.
+- **Khôi phục** (chỉ chủ bài): chọn 1 bản handoff; **không chọn → mặc định về bản gốc** (chưa từng chia sẻ → `NO_BASELINE`, phải chọn handoff). Thay `spec` + `title` + `ratio`, khoá lạc quan theo `specVersion` chủ đang thấy (có người vừa lưu → 409). Ảnh chụp chuẩn hoá lại kiểu **lenient** + gỡ asset không còn thuộc bài (`dropForeignAssets`). Khôi phục không tạo phiên bản mới — muốn giữ bản hiện tại thì handoff trước (giao diện nhắc).
+- Công khai chỉ khi `status='ready'`. `published_at` giữ mốc lần công khai đầu tiên; chuyển về private → NULL. Tắt công khai không gỡ người được mời.
+- Mọi truy vấn theo tenant đi qua `tenantClause()`; truy vấn "public"/"được mời" là ngoại lệ có chủ đích, luôn kèm `status='ready' AND (visibility='public' OR có dòng presentation_shares của người gọi)`.
+- Trả 404 khi không truy cập được bài (không lộ sự tồn tại); trả **403** khi đã xem được bài nhưng thiếu quyền thao tác (`VIEW_ONLY`, `OWNER_ONLY`, `NOT_VERSION_OWNER`) để giao diện báo rõ lý do.
+- Audit: `presentation.share_add` / `share_update` / `share_remove`, `presentation.handoff` / `handoff_remove`, `presentation.restore`, `presentation.shared_edit` (người được mời sửa lưu bài).
 
 ## 5. Xuất bản
 

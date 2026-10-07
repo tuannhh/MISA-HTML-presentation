@@ -36,11 +36,12 @@ watch(collapsed, (v) => {
 
 const items = computed(() => [
   { key: 'mine', label: 'Bài của tôi', icon: 'folder' },
+  { key: 'shared', label: 'Được chia sẻ với tôi', icon: 'user-share' },
   { key: 'public', label: 'Thư viện công khai', icon: 'share' },
   { key: 'account', label: 'Tài khoản', icon: 'user' },
   ...(isAdmin() ? [{ key: 'admin', label: 'Quản trị', icon: 'users' }] : []),
 ])
-const ROUTE_OF = { mine: '/decks', public: '/public', account: '/account', admin: '/admin/users' }
+const ROUTE_OF = { mine: '/decks', shared: '/shared', public: '/public', account: '/account', admin: '/admin/users' }
 const current = computed(() => props.active)
 const onNav = (key) => ROUTE_OF[key] && router.push(ROUTE_OF[key])
 

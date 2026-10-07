@@ -17,6 +17,7 @@ const routes = [
   { path: '/register', component: Holder, meta: { guest: true, title: 'Đăng ký', ...pair(() => import('./desktop/RegisterPage.vue'), () => import('./mobile/RegisterPage.vue')) } },
   { path: '/change-password', component: Holder, meta: { auth: true, allowMustChange: true, title: 'Đổi mật khẩu', ...pair(() => import('./desktop/ChangePasswordPage.vue'), () => import('./mobile/ChangePasswordPage.vue')) } },
   { path: '/decks', component: Holder, meta: { auth: true, nav: 'mine', title: 'Bài của tôi', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },
+  { path: '/shared', component: Holder, meta: { auth: true, nav: 'shared', title: 'Được chia sẻ với tôi', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },
   { path: '/public', component: Holder, meta: { auth: true, nav: 'public', title: 'Thư viện công khai', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },
   { path: '/create', component: Holder, meta: { auth: true, nav: 'create', title: 'Tạo bài trình bày', ...pair(() => import('./desktop/CreatePage.vue'), () => import('./mobile/CreatePage.vue')) } },
   // Bài trình bày: /<tên-bài>/<mã 8 ký tự>/<tính năng> (tên chỉ để đọc; định vị bằng mã — xem lib/deckPath.js).

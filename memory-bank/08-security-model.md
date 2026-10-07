@@ -23,7 +23,11 @@
 ## Phân quyền & cách ly tenant
 
 - Mỗi người dùng = 1 tenant. **Mọi** truy vấn dữ liệu theo tenant đi qua `repositories/tenantScope.js` (`tenantClause`, `assertTenantId`) — không ghép chuỗi `tenant_id` thủ công.
-- Đọc bài của người khác chỉ khi `visibility='public' AND status='ready'`; ghi chỉ chủ sở hữu. Không đủ quyền → **404** (không lộ tồn tại).
+- Đọc bài của người khác chỉ khi `status='ready' AND (visibility='public' OR có dòng presentation_shares của chính người gọi)` (`findReadable`, `assets.findReadable`). Không truy cập được → **404** (không lộ tồn tại).
+- **Quyền ghi theo vai trò trên bài** (2026-10-07, `05` §4) — service dùng đúng 3 cổng: `owned()` (chỉ chủ: xoá, công khai, mời/gỡ, khôi phục, dàn ý/dựng), `editable()` (chủ + người được mời sửa: lưu spec/tên/tỷ lệ, media, mẫu, handoff; người chỉ xem → 403 `VIEW_ONLY`), `readable()` (xem, tải, nhân bản). Vai trò tính **ở server** từ `tenant_id` + `presentation_shares.role` (`accessRole`) — không bao giờ nhận vai trò từ client.
+- Người được mời sửa ghi vào **dòng + tenant của chủ bài** (`updateOwned(row.tenant_id, …)`, asset/tệp dưới `tenants/<chủ bài>/…`) — không tạo dữ liệu trong tenant của người sửa; `assertMedia`/`dropForeignAssets` vẫn chỉ nhận asset thuộc chính bài.
+- Mời người theo email: chỉ tài khoản `active`; thông điệp `USER_NOT_FOUND` có thể cho biết email chưa có tài khoản — chấp nhận vì chỉ người đã đăng nhập + là chủ bài ready mới gọi được, kèm rate-limit `share` 60/10 phút/người để chặn dò email hàng loạt; audit mọi lần mời/đổi/gỡ.
+- Phiên bản (bản gốc/handoff) chụp **phía máy chủ** từ dòng `presentations` (`INSERT … SELECT`), client chỉ gửi `specVersion` + ghi chú. Khôi phục chuẩn hoá lại spec (lenient) + `dropForeignAssets` trước khi ghi. Giới hạn 5 handoff kiểm trong transaction có `SELECT … FOR UPDATE` (smoke: 6 request song song → đúng 1 bản).
 - Admin chỉ có quyền quản trị tài khoản; **không** có đường đọc bài private của tenant khác.
 - ID từ URL được kiểm định UUID (`uuidParam`) trước khi chạm DB.
 - Spec lưu vào DB luôn qua `normalizeSpec` (allowlist trường) + `dropForeignAssets` (chỉ giữ asset thuộc chính bài) → không thể tham chiếu ảnh/video/logo của tenant khác.
@@ -49,7 +53,7 @@
 - `/api/presentations/:id/preview` trả CSP: `sandbox allow-scripts allow-popups` (origin `null` — script trong bài không đọc được cookie/DOM ứng dụng), script/style chỉ chạy với **nonce**, `connect-src 'none'` (không gọi mạng), `frame-ancestors 'self'`.
 - iframe phía giao diện cũng đặt `sandbox="allow-scripts allow-popups"` — không cấp `allow-same-origin`/fullscreen; video phát ở lớp phủ của app (xem 05 §8).
 - Vì iframe không có cookie, ảnh/video dùng **URL ký HMAC** (`lib/signedUrl.js`, khoá = `SESSION_SECRET`, có hạn `exp`) — so sánh chữ ký bằng `timingSafeEqual`.
-- Chế độ sửa (`?edit=1`, chỉ chủ sở hữu): khung nhận `deck:render` (HTML slide do renderer dùng chung của **ứng dụng** sinh từ bản nháp — mọi chuỗi đã `esc()`) chỉ từ `window.parent`, chèn bằng `<template>.innerHTML` (script không chạy khi chèn kiểu này; CSP nonce chặn thuộc tính sự kiện). Chiều ngược lại ứng dụng coi khung là **không tin cậy**: đường dẫn trường qua allowlist (`lib/editPaths.js`, map không prototype), toạ độ kẹp số hữu hạn, id phần tử phải có trong bản nháp; máy chủ vẫn chuẩn hoá strict khi lưu.
+- Chế độ sửa (`?edit=1`, chủ + người được mời sửa; người chỉ xem bị bỏ qua cờ): khung nhận `deck:render` (HTML slide do renderer dùng chung của **ứng dụng** sinh từ bản nháp — mọi chuỗi đã `esc()`) chỉ từ `window.parent`, chèn bằng `<template>.innerHTML` (script không chạy khi chèn kiểu này; CSP nonce chặn thuộc tính sự kiện). Chiều ngược lại ứng dụng coi khung là **không tin cậy**: đường dẫn trường qua allowlist (`lib/editPaths.js`, map không prototype), toạ độ kẹp số hữu hạn, id phần tử phải có trong bản nháp; máy chủ vẫn chuẩn hoá strict khi lưu.
 - Chromium (PDF/thumbnail): chặn mọi request trừ `data:`/`about:blank`; nội dung đã inline sẵn (ảnh, phông, ảnh bìa video).
 - Chữ định dạng từ khung (`⟦…⟧`): thuộc tính chỉ nhận token màu trong `RICH_COLORS`, `#RRGGBB`, `b`, `n` — sai bất kỳ → cả thẻ thành chữ thường; `richHtml` escape chữ, `style` chỉ ghép từ giá trị đã kiểm (không thể chèn `url(...)`/`;` vào CSS). Máy chủ chuẩn hoá lại khi lưu.
 
@@ -68,7 +72,7 @@
 
 ## Rate limit
 
-Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube), xuất PDF (bảo vệ CPU Chromium). Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503. Ảnh AI: `aiImage` 40 lượt/10 phút/người + hàng đợi `AI_IMAGES_CONCURRENCY`, quá 12 chờ → 503; tìm ảnh: `imageSearch` 40/phút.
+Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube; handoff dùng chung bucket này), mời người chia sẻ (`share` — chống dò email), xuất PDF (bảo vệ CPU Chromium). Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503. Ảnh AI: `aiImage` 40 lượt/10 phút/người + hàng đợi `AI_IMAGES_CONCURRENCY`, quá 12 chờ → 503; tìm ảnh: `imageSearch` 40/phút.
 
 ## Nguồn bên ngoài (ảnh Internet)
 
@@ -77,7 +81,7 @@ Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài +
 
 ## Kiểm toán
 
-`audit_logs` ghi: đăng ký, đăng nhập (thành công/thất bại), đổi mật khẩu, tạo/dựng (`presentation.build`)/xoá/nhân bản bài, đổi chế độ chia sẻ, xuất HTML/PDF, mọi thao tác admin.
+`audit_logs` ghi: đăng ký, đăng nhập (thành công/thất bại), đổi mật khẩu, tạo/dựng (`presentation.build`)/xoá/nhân bản bài, đổi chế độ chia sẻ, mời/đổi quyền/gỡ người (`presentation.share_*`), người được mời sửa lưu bài (`presentation.shared_edit`, meta `owner`), handoff/xoá handoff/khôi phục, xuất HTML/PDF, mọi thao tác admin.
 
 ## Trình chiếu từng ý / 3D (2026-10-06)
 - Tin `deck:step`/`deck:cmd` vào khung chỉ mang hướng (`±1`) hoặc lệnh trong allowlist (`black`, `esc`) — engine bỏ qua giá trị khác. `deck:slide` gửi ra thêm `step/steps` là số nguyên.

@@ -1,9 +1,12 @@
 <script setup>
-// Danh sách mobile: list row (ảnh bìa nhỏ + tên + metadata), tìm kiếm 48px, thao tác qua bottom sheet.
+// Danh sách mobile (Bài của tôi / Được chia sẻ / Công khai): list row (ảnh bìa nhỏ + tên + metadata), tìm kiếm 48px,
+// thao tác qua bottom sheet; chủ bài mở màn con Chia sẻ toàn màn hình.
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MobileShell from './MobileShell.vue'
 import ActionSheet from './ActionSheet.vue'
+import FullScreenSheet from './FullScreenSheet.vue'
+import SharePanel from '@/shared/SharePanel.vue'
 import DeckThumb from '@/shared/DeckThumb.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import MInput from '@/components/mds/MInput.vue'
@@ -14,14 +17,24 @@ import MEmptyState from '@/components/mds/MEmptyState.vue'
 import MDialog from '@/components/mds/MDialog.vue'
 import MSpinner from '@/components/mds/MSpinner.vue'
 import { useDecks } from '@/composables/useDecks.js'
-import { deckMenuItems, deckTarget, VISIBILITY_LABEL } from '@/lib/deckActions.js'
+import { deckMenuItems, deckTarget, deckAccess, VISIBILITY_LABEL, SHARE_ROLE_LABEL } from '@/lib/deckActions.js'
 import { STATUS_TAG, relativeTime } from '@/lib/format.js'
 
 const route = useRoute()
 const router = useRouter()
-const scope = route.meta.nav === 'public' ? 'public' : 'mine'
+const scope = ['public', 'shared'].includes(route.meta.nav) ? route.meta.nav : 'mine'
 const list = useDecks(scope)
-const { rows, total, page, q, loading, error, busy, pendingRemove } = list
+const { rows, total, page, q, loading, error, busy, pendingRemove, pendingShare } = list
+const COPY = {
+  mine: { title: 'Bài của tôi', empty: 'Chưa có bài trình bày', emptyDesc: 'Tải tài liệu, dán link hoặc nhập nội dung để AI dựng bài.' },
+  shared: { title: 'Được chia sẻ với tôi', empty: 'Chưa có bài được chia sẻ', emptyDesc: 'Khi chủ bài mời bạn theo email, bài sẽ hiện ở đây.' },
+  public: { title: 'Thư viện công khai', empty: 'Chưa có bài công khai', emptyDesc: 'Bài được chia sẻ công khai sẽ hiện ở đây (chỉ xem).' },
+}
+const copy = COPY[scope]
+const shareOpen = computed({ get: () => !!pendingShare.value, set: (v) => !v && (pendingShare.value = null) })
+async function setShareVisibility(isPublic) {
+  await list.setVisibility(pendingShare.value, isPublic ? 'public' : 'private')
+}
 const sheetFor = ref(null)
 const sheetOpen = computed({ get: () => !!sheetFor.value, set: (v) => !v && (sheetFor.value = null) })
 const lastPage = computed(() => Math.max(1, Math.ceil(total.value / list.pageSize)))
@@ -36,7 +49,7 @@ onMounted(list.load)
 </script>
 
 <template>
-  <MobileShell :title="scope === 'public' ? 'Thư viện công khai' : 'Bài của tôi'" :nav="scope">
+  <MobileShell :title="copy.title" :nav="scope">
     <div class="sticky top-0 z-10 bg-[var(--mds-bg)] px-4 py-2">
       <MInput :model-value="q" type="search" enterkeyhint="search" placeholder="Tìm theo tên bài" clearable aria-label="Tìm theo tên bài" @update:model-value="list.search">
         <template #prefix><MIcon name="search" :size="16" /></template>
@@ -55,8 +68,8 @@ onMounted(list.load)
     <div v-else-if="!rows.length && !error" class="px-4 py-10">
       <MEmptyState
         :type="q ? 'no-result' : 'initial'"
-        :title="q ? 'Không tìm thấy bài phù hợp' : scope === 'public' ? 'Chưa có bài công khai' : 'Chưa có bài trình bày'"
-        :description="q ? 'Thử từ khóa khác.' : scope === 'public' ? 'Bài được chia sẻ công khai sẽ hiện ở đây.' : 'Tải tài liệu, dán link hoặc nhập nội dung để AI dựng bài.'"
+        :title="q ? 'Không tìm thấy bài phù hợp' : copy.empty"
+        :description="q ? 'Thử từ khóa khác.' : copy.emptyDesc"
       >
         <template v-if="!q && scope === 'mine'" #actions>
           <MButton variant="primary" @click="router.push('/create')"><template #icon><MIcon name="plus" :size="16" /></template>Tạo bài</MButton>
@@ -76,6 +89,7 @@ onMounted(list.load)
             <span class="mt-1 flex gap-1">
               <MTag v-if="d.status !== 'ready'" :color="STATUS_TAG[d.status].color" size="sm">{{ STATUS_TAG[d.status].label }}</MTag>
               <MTag v-if="d.isOwner" :color="d.visibility === 'public' ? 'brand' : 'neutral'" size="sm">{{ VISIBILITY_LABEL[d.visibility] }}</MTag>
+              <MTag v-else-if="d.shareRole" :color="deckAccess(d) === 'editor' ? 'info' : 'neutral'" size="sm">{{ SHARE_ROLE_LABEL[deckAccess(d)] }}</MTag>
             </span>
           </span>
         </RouterLink>
@@ -95,6 +109,9 @@ onMounted(list.load)
     </div>
 
     <ActionSheet v-model="sheetOpen" :title="sheetFor?.title" :items="sheetFor ? deckMenuItems(sheetFor) : []" @select="onSheet" />
+    <FullScreenSheet v-model="shareOpen" title="Chia sẻ">
+      <SharePanel v-if="pendingShare" compact :deck-id="pendingShare.id" :visibility="pendingShare.visibility" :set-visibility="setShareVisibility" />
+    </FullScreenSheet>
 
     <MDialog :model-value="!!pendingRemove" type="danger" title="Xóa bài trình bày?" confirm-text="Xóa" width="calc(100vw - 32px)" @update:model-value="(v) => !v && cancelRemove()" @confirm="list.confirmRemove()" @cancel="cancelRemove">
       <p class="text-[15px] leading-6">Bài <strong>{{ pendingRemove?.title }}</strong> cùng toàn bộ ảnh sẽ bị xóa vĩnh viễn.</p>

@@ -16,7 +16,7 @@ function disposition(title, ext) {
   return `attachment; filename="${ascii}.${ext}"; filename*=UTF-8''${encodeURIComponent(base)}.${ext}`;
 }
 
-export function presentationRoutes({ service, templates, config, limits }) {
+export function presentationRoutes({ service, templates, sharing, config, limits }) {
   const r = Router();
   // Tệp nguồn: ghi thẳng ra đĩa (tổng tới MAX_UPLOAD_MB, không giữ trong RAM); tên tệp do server sinh (UUID).
   const maxSourceBytes = config.limits.maxUploadMb * 1048576;
@@ -70,7 +70,7 @@ export function presentationRoutes({ service, templates, config, limits }) {
 
   r.get('/', auth, async (req, res) => {
     const { page, pageSize } = paging(req.query, { maxPageSize: 48, defaultPageSize: 24 });
-    const scope = req.query.scope === 'public' ? 'public' : 'mine';
+    const scope = ['public', 'shared'].includes(req.query.scope) ? req.query.scope : 'mine';
     const { rows, total } = await service.list(req.user, { scope, q: req.query.q, page, pageSize });
     ok(res, rows, { page, pageSize, total, hasNext: page * pageSize < total });
   });
@@ -153,9 +153,7 @@ export function presentationRoutes({ service, templates, config, limits }) {
   });
 
   // Trang trình chiếu: HTML do renderer sinh, chạy trong CSP sandbox (origin null) + nonce.
-  r.get('/:id/preview', auth, id, async (req, res) => {
-    const nonce = randomBytes(16).toString('base64');
-    const html = await service.preview(req.user, req.params.id, nonce, { edit: req.query.edit === '1' });
+  function sendDeckHtml(req, res, html, nonce) {
     const origin = `${req.protocol}://${req.get('host')}`;
     res.set({
       'Content-Security-Policy': deckCsp(nonce, origin),
@@ -164,6 +162,48 @@ export function presentationRoutes({ service, templates, config, limits }) {
       'Content-Type': 'text/html; charset=utf-8',
     });
     res.send(html);
+  }
+
+  r.get('/:id/preview', auth, id, async (req, res) => {
+    const nonce = randomBytes(16).toString('base64');
+    sendDeckHtml(req, res, await service.preview(req.user, req.params.id, nonce, { edit: req.query.edit === '1' }), nonce);
+  });
+
+  /* ---- chia sẻ theo người (chỉ chủ bài) ---- */
+  r.get('/:id/shares', auth, id, async (req, res) => ok(res, await sharing.listShares(req.user, req.params.id)));
+
+  r.post('/:id/shares', auth, id, limits.share, async (req, res) => {
+    const out = await sharing.addShare(req.user, req.params.id, pick(req.body, ['email', 'role']), req.ip);
+    ok(res, out, null, out.created ? 201 : 200);
+  });
+
+  r.patch('/:id/shares/:userId', auth, id, uuidParam('userId'), async (req, res) => {
+    ok(res, await sharing.updateShare(req.user, req.params.id, req.params.userId, pick(req.body, ['role']), req.ip));
+  });
+
+  r.delete('/:id/shares/:userId', auth, id, uuidParam('userId'), async (req, res) => {
+    await sharing.removeShare(req.user, req.params.id, req.params.userId, req.ip);
+    ok(res, { removed: true });
+  });
+
+  /* ---- phiên bản: bản gốc + handoff (chủ bài, người sửa); khôi phục (chủ bài) ---- */
+  r.get('/:id/versions', auth, id, async (req, res) => ok(res, await sharing.listVersions(req.user, req.params.id)));
+
+  r.post('/:id/versions', auth, id, limits.media, async (req, res) => {
+    ok(res, await sharing.handoff(req.user, req.params.id, pick(req.body, ['specVersion', 'note']), req.ip), null, 201);
+  });
+
+  r.delete('/:id/versions/:versionId', auth, id, uuidParam('versionId'), async (req, res) => {
+    ok(res, await sharing.removeVersion(req.user, req.params.id, req.params.versionId, req.ip));
+  });
+
+  r.get('/:id/versions/:versionId/preview', auth, id, uuidParam('versionId'), async (req, res) => {
+    const nonce = randomBytes(16).toString('base64');
+    sendDeckHtml(req, res, await service.previewVersion(req.user, req.params.id, req.params.versionId, nonce), nonce);
+  });
+
+  r.post('/:id/restore', auth, id, async (req, res) => {
+    ok(res, await sharing.restore(req.user, req.params.id, pick(req.body, ['versionId', 'specVersion']), req.ip));
   });
 
   r.get('/:id/export.html', auth, id, async (req, res) => {
