@@ -8,6 +8,9 @@ import { createApp } from './app.js';
 async function main() {
   const config = loadConfig();
   logger.info('config_loaded', { config: redactConfig(config) });
+  if (config.isProd && !config.ipAllowlist.length) {
+    logger.warn('ip_allowlist_empty', { message: 'IP_ALLOWLIST trống — ứng dụng nhận truy cập từ mọi IP' });
+  }
 
   const pool = createPool(config.db);
   await verifyTables(pool);

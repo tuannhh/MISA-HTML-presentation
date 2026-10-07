@@ -37,6 +37,10 @@ PROXY_PORT=80 docker compose --profile proxy up -d
 
 Trong `.env`: `TRUST_PROXY=1`, `APP_BASE_URL` = địa chỉ qua proxy; chạy HTTPS thì thêm `SESSION_COOKIE_SECURE=true`. Nginx cài sẵn trên máy chủ: chép khối `server` trong tệp cấu hình, đổi `proxy_pass` thành `http://127.0.0.1:<APP_PORT>`. Chi tiết: [`memory-bank/07`](memory-bank/07-deployment-infrastructure.md).
 
+### Mạng MISA: giới hạn IP + tên miền cần mở ra ngoài
+
+Ứng dụng chạy trên máy chủ MISA, chỉ IP trong `IP_ALLOWLIST` (`.env`) được truy cập; để trống = chưa giới hạn. Hướng dẫn cho DevOps (điền IP, `TRUST_PROXY`, kiểm tra, danh sách tên miền máy chủ cần gọi ra ngoài, checklist): [`docs/DEVOPS-NETWORK.md`](docs/DEVOPS-NETWORK.md).
+
 ## Phát triển
 
 ```bash

@@ -1,5 +1,20 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-07 — Giới hạn truy cập theo IP mạng MISA (`IP_ALLOWLIST`)
+
+### Yêu cầu
+Backend chạy trên máy chủ MISA, chỉ cho truy cập từ IP MISA. Thiết lập cơ chế trước; IP cụ thể DevOps cài sau. (Không deploy Cloud Run.)
+
+### Thay đổi (chi tiết `08` §Giới hạn IP)
+- `src/lib/ipAllowlist.js` (`parseIpAllowlist`, `createIpMatcher`, `normalizeIp` — `net.BlockList`, IP/CIDR/khoảng, IPv4/IPv6), `src/middleware/ipAllowlist.js` (403 JSON/HTML, miễn `/api/health*`, log `ip_blocked` có giới hạn tần suất).
+- `config.ipAllowlist` ← `IP_ALLOWLIST` (phẩy/khoảng trắng), mục sai → fail-fast; `server.js` cảnh báo khi production để trống; `app.js` gắn middleware ngay sau helmet.
+- `.env.example` (`IP_ALLOWLIST=` + hướng dẫn), `deploy/nginx/default.conf` (khối `allow/deny` tuỳ chọn, ghi chú `real_ip`).
+- Tài liệu DevOps `docs/DEVOPS-NETWORK.md` (liên kết từ README): chiều vào (IP_ALLOWLIST, TRUST_PROXY theo mô hình, lệnh kiểm tra), chiều ra (Gemini bắt buộc; Pixabay, Google Docs/Drive, YouTube, link bất kỳ theo tính năng; những gì KHÔNG gọi ra), trình duyệt người dùng, build image, checklist. Lưu ý: chưa hỗ trợ proxy ra ngoài bắt buộc (safeFetch kiểm IP lúc kết nối).
+
+### Đã kiểm chứng
+- Unit 114/114 (mới `ip-allowlist.test.js` 5 test: so khớp, mục sai, cấu hình, middleware 403 JSON/HTML + health mở + không tin XFF khi `TRUST_PROXY=0`, sau 1 proxy IP giả chèn trước bị bỏ).
+- Docker 8088 (override compose tạm): danh sách không chứa IP host → `/`, `/api/auth/me`, `/deck-assets/deck3d.js` = 403, health 200, XFF giả vẫn 403, container healthy; danh sách chứa IP host + `TRUST_PROXY=1` → trực tiếp 8088 và qua Nginx 8090 đều 200, XFF giả qua proxy bị bỏ. Trả lại cấu hình thường (danh sách rỗng) → smoke **TẤT CẢ ĐẠT**.
+
 ## 2026-10-06 — Trình chiếu từng ý (bút trình chiếu), phóng to khi bấm, nền 3D + logo nổi khối (three.js)
 
 ### Yêu cầu

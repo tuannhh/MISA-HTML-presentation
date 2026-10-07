@@ -13,6 +13,8 @@ Tiền tố chung `/api`. Mọi response thành công: `{ "data": ..., "meta": {
 
 ## Hệ thống
 
+Khi `IP_ALLOWLIST` có giá trị: mọi đường dẫn (trừ 2 route health) từ IP ngoài danh sách → **403** `IP_NOT_ALLOWED` (`/api/*` JSON, còn lại trang HTML).
+
 | Method | Path | Mô tả |
 |---|---|---|
 | GET | `/api/health` | Liveness, không chạm DB → `{status:'ok'}` |

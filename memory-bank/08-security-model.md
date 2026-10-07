@@ -13,6 +13,13 @@
 - Token đồng bộ trong phiên, header `X-CSRF-Token`, so sánh `timingSafeEqual`; kiểm tra thêm `Origin` cho mọi request ghi.
 - Helmet: CSP chặt cho ứng dụng (`script-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`, `media-src 'self' blob:`, `frame-src 'self' https://www.youtube-nocookie.com` — chỉ để phát video trong lớp phủ), `X-Frame-Options: DENY`, CORP same-origin, Referrer-Policy strict-origin-when-cross-origin, ẩn `x-powered-by`.
 
+## Giới hạn IP (mạng MISA) — 2026-10-07
+- Máy chủ backend đặt trong mạng MISA → chỉ IP trong `IP_ALLOWLIST` được truy cập. Middleware `middleware/ipAllowlist.js` (đặt ngay sau helmet, trước mọi route) áp cho **toàn bộ** ứng dụng: API, giao diện SPA, phông/gói 3D; chỉ miễn `/api/health` và `/api/health/ready` (healthcheck Docker/LB).
+- So khớp bằng `net.BlockList` (`lib/ipAllowlist.js`): IP đơn, CIDR, khoảng `a-b`, IPv4 + IPv6; `::ffff:a.b.c.d` quy về IPv4. Mục sai → cấu hình báo lỗi, ứng dụng không khởi động (không lặng lẽ bỏ qua). Danh sách rỗng = không giới hạn (DevOps điền IP thật sau).
+- Bị chặn → 403, `Cache-Control: no-store`: `/api/*` trả `{error:{code:'IP_NOT_ALLOWED'}}`, còn lại trả trang HTML ngắn "chỉ truy cập được từ mạng nội bộ MISA". Log `ip_blocked` (IP đã chuẩn hoá) tối đa 1 lần/phút mỗi IP.
+- IP lấy từ `req.ip` → phụ thuộc `TRUST_PROXY`: 0 = IP kết nối (bỏ qua `X-Forwarded-For`); sau N proxy đặt **đúng** N (Express lấy IP thứ N từ phải của XFF, IP giả client chèn phía trước bị bỏ). Đặt dư → client giả được IP. Khi `TRUST_PROXY>0` không được mở cổng app trực tiếp ra ngoài (gọi thẳng app thì XFF do client tự viết).
+- Tệp HTML xuất ra chạy offline nên không chịu giới hạn này (đúng ý: chỉ chặn truy cập máy chủ).
+
 ## Phân quyền & cách ly tenant
 
 - Mỗi người dùng = 1 tenant. **Mọi** truy vấn dữ liệu theo tenant đi qua `repositories/tenantScope.js` (`tenantClause`, `assertTenantId`) — không ghép chuỗi `tenant_id` thủ công.

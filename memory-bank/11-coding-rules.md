@@ -38,4 +38,5 @@
 - Viết code + comment tiếng Việt, ngắn gọn, giải thích **vì sao**.
 - Trước khi commit: `npm test` đạt; nếu chạm luồng chính, chạy smoke test trên Docker.
 - Sau khi thay đổi: cập nhật memory bank tương ứng + `10-development-history.md` (bắt buộc).
+- Thêm/bớt lời gọi từ máy chủ ra Internet (tên miền mới) → cập nhật bảng chiều ra trong `docs/DEVOPS-NETWORK.md` để DevOps mở firewall.
 - Commit message tiếng Việt hoặc tiếng Anh, mô tả thay đổi; không đẩy `.env`, `data/`, `tmp/`, `dist/`, `node_modules/`.

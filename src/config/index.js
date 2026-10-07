@@ -1,6 +1,7 @@
 // Tầng cấu hình duy nhất của ứng dụng: mọi nơi khác đọc cấu hình qua module này,
 // không tự đọc process.env. Fail-fast khi thiếu/sai cấu hình nhạy cảm ở production.
 import path from 'node:path';
+import { parseIpAllowlist } from '../lib/ipAllowlist.js';
 
 const DEV_SESSION_SECRET = 'dev-only-session-secret-change-me';
 const RATIOS = ['16:9', '4:3', '2:1', '3:1'];
@@ -44,6 +45,9 @@ export function loadConfig() {
     port: int('PORT', 3000, { min: 1, max: 65535 }),
     appBaseUrl: str('APP_BASE_URL', 'http://localhost:3000'),
     trustProxy: int('TRUST_PROXY', 0, { min: 0, max: 10 }),
+    // Chỉ cho truy cập từ các IP/dải IP này (máy chủ đặt trong mạng MISA; DevOps điền IP thật). Rỗng = không giới hạn.
+    // Phân tách bằng dấu phẩy/khoảng trắng; nhận IP đơn, CIDR, khoảng a-b; IPv4 + IPv6. Xem lib/ipAllowlist.js.
+    ipAllowlist: Object.freeze(str('IP_ALLOWLIST').split(/[\s,;]+/).filter(Boolean)),
     session: Object.freeze({
       secret: str('SESSION_SECRET', isProd ? '' : DEV_SESSION_SECRET),
       cookieSecure: bool('SESSION_COOKIE_SECURE', isProd),
@@ -141,6 +145,8 @@ function validate(config) {
   if (config.isProd && config.session.secret.length < 32) errors.push('SESSION_SECRET phải dài tối thiểu 32 ký tự');
   if (config.isProd && !config.db.password) errors.push('Thiếu DB_PASSWORD');
   if (!config.isTest && !config.gemini.apiKey) errors.push('Thiếu GEMINI_API_KEY');
+  const badIps = parseIpAllowlist(config.ipAllowlist).errors;
+  if (badIps.length) errors.push(`IP_ALLOWLIST có mục không hợp lệ: ${badIps.join(', ')}`);
   if (errors.length) {
     throw new Error(`Cấu hình không hợp lệ:\n - ${errors.join('\n - ')}`);
   }

@@ -9,6 +9,7 @@ import { logger } from './lib/logger.js';
 import { loadUser } from './middleware/auth.js';
 import { csrfProtection, securityHeaders, rateLimits } from './middleware/security.js';
 import { errorHandler, notFoundApi } from './middleware/errorHandler.js';
+import { ipAllowlist } from './middleware/ipAllowlist.js';
 import { MySqlSessionStore } from './repositories/sessionStore.js';
 import { authRoutes } from './routes/authRoutes.js';
 import { presentationRoutes } from './routes/presentationRoutes.js';
@@ -44,6 +45,8 @@ export function createApp({ config, pool, repos, services }) {
   });
 
   app.use(securityHeaders());
+  // Chỉ IP trong IP_ALLOWLIST (mạng MISA) mới vào được — đặt trước mọi route, kể cả giao diện tĩnh.
+  app.use(ipAllowlist(config.ipAllowlist));
 
   // Phông của bài trình bày: công khai, cho phép khung sandbox (origin null) tải. Chỉ tệp trong danh sách cho phép.
   const fontHeaders = { 'Content-Type': 'font/woff2', 'Cache-Control': 'public, max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' };

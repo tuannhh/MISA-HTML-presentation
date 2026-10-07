@@ -16,6 +16,10 @@
 - `upstream { server app:3000; }` chỉ phân giải DNS 1 lần lúc Nginx khởi động → `docker compose up -d --build app` có thể đổi IP container → 502. Dùng `resolver 127.0.0.11` + `zone` + `server app:3000 resolve` (Nginx ≥ 1.27.3).
 - Express trả JS với `text/javascript` → phải có trong `gzip_types` (không chỉ `application/javascript`).
 
+### `IP_ALLOWLIST` phụ thuộc `TRUST_PROXY`
+- Sau Nginx mà để `TRUST_PROXY=0` → `req.ip` là IP container/máy Nginx → mọi người bị chặn (hoặc nếu lỡ thêm IP Nginx vào danh sách thì ai qua proxy cũng lọt). Đặt `TRUST_PROXY` = đúng số lớp proxy.
+- Docker Desktop (macOS) mọi request từ máy host hiện IP `192.168.65.1` (cổng publish qua userland proxy); Linux server iptables DNAT giữ IP thật. Kiểm thử chặn/cho phép trên Docker local dùng override compose ở thư mục tạm, không sửa `.env`.
+
 ### `CHROME_NO_SANDBOX=true`
 - Chromium trong container chạy với `--no-sandbox` vì container không có user namespace cho sandbox của Chrome. Bù lại: Chromium chỉ render HTML do chính server sinh (đã escape), chặn mọi request mạng, chạy dưới user `node`. Không bật trên máy dev nếu không cần.
 

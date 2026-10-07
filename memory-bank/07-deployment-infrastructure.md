@@ -13,6 +13,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `APP_PORT` | | 8080 | (compose) cổng mở ra máy chủ → `3000` |
 | `APP_BASE_URL` | ✅ (production) | `http://localhost:3000` | URL người dùng truy cập — dùng kiểm Origin (CSRF) |
 | `TRUST_PROXY` | | 0 | Số proxy tin cậy (1 khi sau Nginx/Traefik) |
+| `IP_ALLOWLIST` | (DevOps điền khi lên server MISA) | rỗng = không giới hạn | IP/dải IP được truy cập (mạng MISA): IP đơn, CIDR, khoảng `a-b`, IPv4/IPv6; phân tách phẩy/khoảng trắng. Mục sai → không khởi động. Rỗng ở production → log cảnh báo `ip_allowlist_empty`. Xem 08 §Giới hạn IP |
 | `SESSION_SECRET` | ✅ | | ≥ 32 ký tự ngẫu nhiên; cũng là khoá HMAC ký URL ảnh |
 | `SESSION_COOKIE_SECURE` | | true khi production | `true` khi chạy HTTPS |
 | `SESSION_MAX_AGE_HOURS` | | 12 | |
@@ -102,6 +103,8 @@ PROXY_PORT=80 docker compose --profile proxy up -d      # Nginx :PROXY_PORT → 
 | `server_tokens off`, `gzip` (gồm `text/javascript`) | | Ẩn phiên bản; JS 51 KB → 20 KB |
 
 Phía app khi đặt sau proxy: `TRUST_PROXY=1` (2 nếu còn 1 lớp LB/TLS trước Nginx), `APP_BASE_URL` = địa chỉ người dùng truy cập; HTTPS thì `SESSION_COOKIE_SECURE=true`. Production nên chỉ mở cổng proxy ra ngoài (cổng app để nội bộ/firewall).
+Hướng dẫn mạng cho DevOps (giới hạn IP, `TRUST_PROXY`, danh sách tên miền chiều ra, checklist): [`docs/DEVOPS-NETWORK.md`](../docs/DEVOPS-NETWORK.md) — thêm/bớt lời gọi ra ngoài thì cập nhật tệp này.
+Giới hạn IP mạng MISA (`IP_ALLOWLIST`) làm ở **ứng dụng**; `default.conf` có sẵn khối `allow/deny` (comment) nếu DevOps muốn chặn thêm ở Nginx — khi đó giữ 2 danh sách khớp nhau.
 Nginx cài trên máy chủ (không dùng compose): chép khối `upstream` + `server`, bỏ `resolver`/`zone`/`resolve`, đổi máy chủ upstream thành `127.0.0.1:<APP_PORT>`, thêm `listen 443 ssl` + chứng chỉ.
 
 Đã kiểm chứng qua proxy (2026-10-05): 297 MB (WAV 250 MB + PDF 47 MB) tạo bài thành công trong 75s; 301 MB → app trả 413 JSON sau ~2,5s (luồng không bị Nginx gom lại); 330 MB → Nginx 413 tức thì (giao diện hiện "Tổng dung lượng tệp vượt giới hạn máy chủ cho phép"); đăng nhập/CSRF hoạt động qua proxy; tạo lại container app với IP khác (192.168.112.3 → .5) → proxy vẫn 200 không cần restart.
