@@ -12,6 +12,7 @@ import { isUuid } from '../repositories/tenantScope.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 import { LOGO_MOTIONS } from '../../shared/deck/bg3d.js';
 import { VARIANTS, STYLES } from '../../shared/deck/variants.js';
+import { cleanMoves, cleanHide } from '../../shared/deck/layers.js';
 import { FREE_TYPES, TEXT_STYLES, TEXT_ALIGNS, TEXT_VALIGNS, TEXT_COLORS, FILLS, SHAPES, SHAPE_FILLS, TABLE_STYLES, RADII, SIZE_RANGE } from '../../shared/deck/free.js';
 
 export { SPEC_LIMITS };
@@ -362,6 +363,11 @@ function cleanSlide(c, v, i, seen) {
   slide.variant = VARIANTS[slide.layout]?.includes(o.variant) ? o.variant : '';
   // Cách trình chiếu (người dùng chọn, không qua AI): mặc định 'auto' = không lưu trường.
   if (BUILDS.includes(o.build)) slide.build = o.build;
+  // Tinh chỉnh tay (không qua AI, shared/deck/layers.js): ô chữ đã dời (trang có bố cục) + hoạ tiết đã tắt. Mục sai bị bỏ, không báo lỗi.
+  const moves = slide.layout !== 'free' ? cleanMoves(o.moves) : null;
+  if (moves) slide.moves = moves;
+  const hide = cleanHide(o.hide);
+  if (hide) slide.hide = hide;
   return slide;
 }
 

@@ -1,5 +1,25 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-11 — Dời chữ + cỡ chữ, xoá / thay hoạ tiết, nhận diện sơ đồ + ảnh giao diện
+
+### Yêu cầu (chủ dự án)
+1. Chữ trong trang di chuyển được vị trí; (bổ sung) chỉnh được **cỡ chữ**. 2. Xoá được hoạ tiết trang trí, thay bằng ảnh / hình khối khác.
+3. Nhận diện hình cần đưa vào bài chưa tốt → nhận diện chính xác 2 loại MISA dùng nhiều nhất: **sơ đồ** và **ảnh giao diện màn hình**. Tinh thần: tự động là chính, chỉnh sửa là phụ.
+
+### Thay đổi (chi tiết `05` §15, `06`, `08`, `09`, `11` quy tắc 15)
+- `shared/deck/layers.js` (mới): `cleanMoves`/`moveAttr` (vị trí % + cỡ chữ 0,5–3), `DECORS`/`decorsFor`/`cleanHide`/`hideClasses`. `limits.moves = 40`.
+- Renderer: `E()` gắn `data-mv`/`data-fz`/`translate`+`zoom` ở mọi chế độ; lớp `x-<hoạ tiết>` trên `<section>`; `data-dc` cho hoạ tiết bấm được (bìa/kết, số trang mục, ngoặc trích dẫn, VS). `theme.css`: ẩn + nắn bố cục khi tắt hoạ tiết, nhóm nút `#mvg`, menu `#dcm`, vùng chạm 44px trên màn cảm ứng.
+- Engine: tay nắm dời ô chữ (hút chỗ cũ/đường giữa, Shift/Alt, bấm đúp, phím mũi tên) + A+/A−, `deck:move`; menu hoạ tiết `deck:deco`; `fit-m` khi đo tràn; hoãn dựng lại khi đang kéo; bám lại ô chữ sau khi dựng lại; nhóm nút xếp ngang + né `#rtb` trên khung thấp.
+- `specService.cleanSlide` nhận `moves` (trừ `free`) + `hide`. App: `editPaths` (`applyFrameMove`, `applyDeco`, `convertElement`, `shiftMoves`, `setDecorHidden`), `useLiveDeck` (`deck:move`/`deck:deco`, `onNotice`), `useEditor` (`changeLayout` bỏ moves + lọc hide, `setDecorAll`), `DecorPanel.vue`, nút đổi ảnh ↔ hình khối ở `FreeElementsPanel`.
+- Nhận diện hình: `visualService.js` thay `pdfShotService.js` — PDF + PPTX/DOCX/ODP/ODT (LibreOffice headless, `sanitizeOffice`, hàng đợi tuần tự), `gemini.locateVisuals` (screenshot | diagram + loại sơ đồ), cắt theo loại + gọt viền sơ đồ, bỏ trùng, `mergeEmbedded`. `ingestService` trả `docs`; `presentationService` gắn sơ đồ (`fit:contain`) + `outlineService.placeDiagrams`; prompt dàn ý có mục SƠ ĐỒ. Cấu hình `config.visuals` (`OFFICE_VISUALS`, `SOFFICE_PATH`, `OFFICE_RENDER_TIMEOUT_MS`, `PDF_UI_SHOTS_MAX` mặc định 24). Dockerfile cài LibreOffice impress/writer nogui + phông Carlito/Caladea/Liberation (image ~2,03 GB). `docs/DEVOPS-NETWORK.md`: không thêm tên miền ra ngoài.
+
+### Kiểm chứng
+- `npm test` 134/134 (mới `layers.test.js` 10 ca: moves/size/hide, renderer, applyFrameMove, shiftMoves, applyDeco, convertElement, fixture mẫu; `visuals.test.js` thay `ui-shots.test.js`: boxToRegion theo loại, extractVisuals với AI giả, sanitizeOffice, readBuffer docs, mergeEmbedded, placeDiagrams). `npm run build` OK.
+- Docker 8088 + smoke **TẤT CẢ ĐẠT**.
+- AI thật trên Docker: PPTX mẫu (python-pptx) → 2 sơ đồ (quy trình, kiến trúc) + 1 giao diện, trang thẻ chữ bị bỏ đúng, mỗi sơ đồ 1 trang image contain, `embeddedMerged 1`; PDF OneAI → 3 sơ đồ + 7 ảnh giao diện, khung cắt chính xác (ảnh ghép kiểm tay).
+- Puppeteer + Chrome thật (`tmp/editor-layers-e2e.mjs`, 1600×1000): A+ ×3 → cỡ 1,3, nhóm nút vẫn hiện; kéo → `data-mv` + bảng "1 ô chữ đã chỉnh"; bấm hình bìa → menu 3 mục → thay bằng hình khối (lớp `x-art`, 1 phần tử, công tắc tự tắt); Lưu → spec có `moves`/`hide`/`elements`; HTML xuất có `data-mv`, `zoom:1.3`, `x-art`; menu "Thay bằng ảnh" mở bộ chọn "Ảnh — trang 1"; 0 lỗi trang. Mobile 390×844 (`tmp/editor-layers-mobile.mjs`): chạm chữ → nhóm nút 44px, A− đổi cỡ, bảng hoạ tiết hiển thị, 0 lỗi.
+- Chưa kiểm chứng: máy thật iOS/Android (kéo tay nắm bằng ngón tay); tệp PPTX/DOCX thật lớn (> 50 trang) về thời gian LibreOffice trên máy chủ MISA; chọn ảnh thật trong bộ chọn sau "Thay bằng ảnh" (E2E mới kiểm tới bước mở bộ chọn "Ảnh — trang 1").
+
 ## 2026-10-07 — Chia sẻ theo người + handoff phiên bản
 
 ### Yêu cầu (chủ dự án)

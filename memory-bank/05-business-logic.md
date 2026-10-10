@@ -27,6 +27,9 @@ Bài trình bày được lưu dưới dạng **spec JSON** (`presentations.spec
                /* chỉ ở MEDIA_LAYOUTS: cover, section, bullets, image, quote — thay chỗ ô ảnh, khung 16:9 */,
       "variant": "<biến thể trình bày của layout — §9; '' = mặc định>",
       "elements": [ /* phần tử tự do; ở layout khác free = lớp CHÈN ĐÈ lên trang (logo, chữ, ảnh, hình) — §13 */ ],
+      "moves": { "<đường dẫn ô chữ>": { "x", "y" /* % rộng/cao trang, ±100, so với chỗ bố cục đặt */, "s" /* cỡ chữ ×0,5–3, mặc định 1 */ } }
+               /* chỉnh tay vị trí + cỡ chữ từng ô (không ở layout free; ≤ 40 mục) — §15 */,
+      "hide": [ "glow|grid|bg|art|secno|qmark|vs|icons|nums|arrows" ] /* hoạ tiết trang trí đã tắt — §15 */,
       "notes": "ghi chú người trình bày" }
   ]
 }
@@ -143,6 +146,7 @@ POST /build {outlineVersion, outline?} → (lưu nếu có outline) → startBui
 - Rời trang khi nháp chưa lưu → hộp thoại xác nhận. Nếu component bị unmount do đổi bề mặt desktop↔mobile, nháp được giữ trong `pendingDrafts` (RAM) và khôi phục nếu `specVersion` vẫn khớp.
 - Ảnh mới: `POST /:id/assets` → trả asset id + URL ký → gắn vào `image.asset` của slide trong nháp. Trang có ô media (`MEDIA_LAYOUTS`) chọn được tab Ảnh / Video; Lưu bỏ video ở bố cục không có ô media, bỏ `palette` khi theme không phải `custom`.
 - Bảng **Thiết kế** (màu, nền, phông, logo) dùng chung giữa bước dàn ý và trình soạn thảo (`DesignPanel.vue`).
+- **Dời chữ, đổi cỡ chữ, xoá / thay hoạ tiết** ngay trên khung (2026-10-11) — §15.
 
 ## 4. Chia sẻ & đa tenant (cập nhật 2026-10-07: chia sẻ theo người + handoff)
 
@@ -250,13 +254,9 @@ Tab **Nhập nội dung**: chữ người dùng nhập là **cơ sở nội dung
 ## 11. Ảnh giao diện phần mềm từ PDF + tấm nền ảnh + màu nhấn rực (2026-10-06)
 
 Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trước đây PDF chỉ cho chữ → bài toàn chữ. Nay **ưu tiên đưa ảnh UI vào bài**.
-- **Cắt ảnh** (`pdfShotService.extractPdfUiShots`, gọi đầu `generateOutline`): `pdftoppm` (poppler-utils, có trong Docker) render ≤ `PDF_UI_SHOT_PAGES` trang
-  cạnh dài 2000px → ảnh trang 1024px gửi `gemini.locateUiShots` (1 lượt, prompt `UI_SHOTS_PROMPT`: chỉ lấy màn hình phần mềm web/mobile/tablet,
-  cụm điện thoại liền nhau = 1 vùng; bỏ logo, QR, sơ đồ, ảnh người, bảng giá) → `box_2d` 0–1000 + `device` + `title` + `quality` 1–3.
-  `boxToRegion` nới 0,5%/phía, bỏ vùng < 12% cạnh hoặc > 90% diện tích trang; bỏ `quality` 1; bỏ ảnh trùng (dHash 64 bit, Hamming ≤ 6);
-  tối đa `PDF_UI_SHOTS_MAX`. Cắt từ bản render (không trích ảnh nhúng) → giữ đúng ảnh chồng lớp/PNG trong suốt trên nền trang gốc.
-  Lỗi bất kỳ (thiếu pdftoppm, PDF mật khẩu, AI lỗi) → `[]`, log `pdf_ui_shots_failed`, bài vẫn tạo được.
-- Ảnh cắt đứng **đầu** danh sách IMGn (luôn có hình xem trước), mô tả "ẢNH GIAO DIỆN PHẦN MỀM (device) cắt từ trang N…".
+- **Cắt ảnh**: từ 2026-10-11 thay bằng `visualService` — nhận diện cả **sơ đồ** lẫn ảnh giao diện, cả PDF lẫn PPTX/DOCX/ODP/ODT (§15).
+  Nguyên tắc giữ nguyên: render trang rồi cắt theo `box_2d` (không trích ảnh nhúng), lỗi bất kỳ → `[]`, bài vẫn tạo được.
+- Ảnh cắt đứng **đầu** danh sách IMGn (luôn có hình xem trước), mô tả "ẢNH GIAO DIỆN PHẦN MỀM (device) cắt từ trang N…" hoặc "SƠ ĐỒ <loại> cắt từ trang N…".
 - **Phân loại**: `screenshot` nay được gắn vào trang như `photo` (ảnh từ PDF luôn là screenshot; ảnh trong PPTX/DOCX được AI xếp `screenshot`
   cũng được gắn). Prompt: dùng MỖI screenshot đúng 1 lần ở trang đúng tính năng (image + 2–4 ý; 2–3 màn hình cùng nhóm → gallery);
   bài giới thiệu sản phẩm → ảnh tổng quan đẹp nhất lên trang bìa.
@@ -343,3 +343,47 @@ Chỉ xuất **HTML + PDF** (không PowerPoint — PPTX không giữ được ch
 - Phần tử **Logo 3D** (`type: 'logo3d'`, `image`, `motion: swing|float|turn`, `depth 0,1–1`): nút "Logo 3D" ở bảng phần tử (trang tự do + lớp chèn), mặc định lấy logo của bài (bản tách nền nếu có). Xếp chồng 40 lớp ảnh thành khối, vệt sáng quét qua, xoay trong ±50° (không lật mặt sau). Logo PNG nền trong suốt đẹp nhất.
 - Trình chiếu: WebGL riêng cho từng logo của **trang đang chiếu**, giải phóng khi rời trang. PDF: chụp 1 khung nghiêng thay ảnh phẳng. Soạn thảo / không WebGL: ảnh phẳng có bóng đổ.
 - Gói 3D (`dist/deck-runtime/deck3d.js`, ~540 KB) chỉ nhúng vào bản tự chứa (xuất HTML/PDF/thumbnail) khi bài **có dùng 3D** (`uses3d`); khung xem trước tải qua `/deck-assets/deck3d.js?v=<băm>` (trình soạn thảo luôn tải để đổi nền 3D thấy ngay).
+
+## 15. Dời chữ, cỡ chữ, hoạ tiết + nhận diện sơ đồ / ảnh giao diện (2026-10-11)
+
+Tinh thần: **tự động là chính** (AI nhận diện và đặt hình đúng chỗ), chỉnh tay là phụ (kéo/đổi cỡ/xoá hoạ tiết ngay trên khung).
+
+### Dời ô chữ + đổi cỡ chữ (`slide.moves`, `shared/deck/layers.js`)
+- Mỗi ô chữ có `data-e` (đường dẫn, vd. `title`, `items.2.text`, `stats.0.value`) dời được bằng **tay nắm** `#mvg` của engine (rê chuột lên chữ;
+  điện thoại: chạm vào chữ). Nhóm nút: tay nắm (kéo; hút về chỗ cũ / đường giữa trang trong ±14px khung, Shift = giữ thẳng hàng, Alt = không hút, bấm đúp = về chỗ cũ,
+  phím mũi tên nhích 6px / Shift 40px) + **A+ / A−** (±10%, Shift ±25%, 50–300%). Khung thấp (< 420px, điện thoại) → nhóm nút nằm ngang dưới ô chữ, né thanh định dạng `#rtb`; màn cảm ứng nút 44px.
+- Engine gửi `deck:move {index, path, x%, y%, s}` → `editPaths.applyFrameMove` (allowlist `isMovePath`, kẹp ±100% và 0,5–3, mục về gốc bị xoá) → dựng lại.
+- Lưu: `specService.cleanSlide` → `cleanMoves` (≤ 40 mục, đường dẫn hợp lệ; layout `free` bỏ). Đổi layout (`useEditor.changeLayout`) xoá `moves`; đổi chỗ / xoá mục
+  trong danh sách (`SlideFields.move/removeAt`) gọi `shiftMoves` để vị trí đi theo mục.
+- Renderer (`moveAttr`, mọi chế độ — trình chiếu, xuất HTML/PDF): `data-mv="xpx ypx"` + `data-fz` + `style="translate:(x/s)px (y/s)px;zoom:s"`.
+  Dùng thuộc tính **`translate`** (không `transform`) để không đụng hiệu ứng của engine; chia cho `s` vì `zoom` nhân cả translate (`09`).
+  `fitSlide` thêm lớp `fit-m` (tắt translate) khi đo tràn để tự co chữ không bị lệch.
+
+### Hoạ tiết trang trí (`slide.hide`)
+- Khoá (`DECORS`): `glow` quầng sáng, `grid` lưới kẻ, `bg` nền động riêng trang, `art` hình trang trí bìa/kết, `secno` số lớn trang mục, `qmark` dấu ngoặc trích dẫn,
+  `vs` biểu tượng giữa 2 cột so sánh, `icons` biểu tượng thẻ/ý, `nums` số thứ tự, `arrows` mũi tên quy trình/dòng thời gian. `decorsFor(layout)` chỉ trả khoá có ở bố cục đó.
+- Renderer thêm lớp `x-<khoá>` vào `<section>`; CSS ẩn hoạ tiết và **nắn lại bố cục** (vd. `x-secno` bỏ cột số, `x-art` bìa bỏ cột hình).
+- **Bấm hoạ tiết trên khung** (hoạ tiết `pick`: art, secno, qmark, vs — gắn `data-dc` ở chế độ sửa) → menu `#dcm`: *Thay bằng ảnh* (bìa: ô media của trang; nơi khác: phần tử ảnh
+  đè đúng hộp hoạ tiết + mở chọn ảnh) · *Thay bằng hình khối* (phần tử hình tròn/bo góc đè đúng hộp) · *Xoá hoạ tiết*. Engine gửi `deck:deco {index, key, action, box%}` → `editPaths.applyDeco`
+  (đầy 30 phần tử → báo "đầy"). Phần tử thay thế là phần tử chèn đè thường: kéo/đổi cỡ/xoá được; `FreeElementsPanel` có nút **Đổi thành hình khối ↔ Đổi thành ảnh** (`convertElement`, giữ id/vị trí/cỡ).
+- Bảng **"Hoạ tiết, vị trí & cỡ chữ"** (`DecorPanel.vue`, trong `SlideFields`, desktop + mobile): công tắc từng hoạ tiết, *Hiện lại tất cả*, *Áp cho mọi trang*
+  (`useEditor.setDecorAll` — mỗi trang chỉ nhận khoá hợp bố cục), số ô chữ đã chỉnh + *Đặt lại vị trí & cỡ chữ*.
+
+### Nhận diện sơ đồ + ảnh giao diện (`src/services/visualService.js`)
+- **Nguồn trang**: PDF → `pdftoppm`; PPTX/DOCX/ODP/ODT (`ingestService.readBuffer` trả `docs`) → **LibreOffice headless** chuyển PDF rồi render như PDF.
+  Chuyển đổi chạy **tuần tự** (hàng đợi 1 tiến trình), hồ sơ `-env:UserInstallation` riêng mỗi lần, proxy giả, timeout `OFFICE_RENDER_TIMEOUT_MS`;
+  tệp được `sanitizeOffice` trước: bỏ quan hệ `TargetMode="External"`, trường INCLUDEPICTURE/INCLUDETEXT/LINK/DDE, `vbaProject`/activeX, href tuyệt đối/có scheme trong ODF.
+- **AI** `gemini.locateVisuals` (1 lượt/≤ 40 trang, prompt `VISUALS_PROMPT`): mỗi hình → `kind` `screenshot` | `diagram`, `device` (web/mobile/tablet), `diagramType`
+  (process, architecture, model, org, mindmap, ecosystem, other), `title`, `quality` 1–3, `box_2d`. KHÔNG lấy: logo, icon lẻ, QR, ảnh chụp thật,
+  ảnh trang trí/nền, biểu đồ số liệu (chart), bảng chữ/bảng giá, khối gạch đầu dòng, hàng thẻ chữ rời nhau không mũi tên/quan hệ, cả trang slide.
+- **Cắt**: `boxToRegion` theo loại — giao diện nới 0,5%, tối thiểu 12% cạnh; sơ đồ nới 2%, tối thiểu 10%, rồi `trimEdges` gọt viền nền đồng màu (sharp trim, chỉ nhận khi
+  còn ≥ 35% mỗi chiều). Bỏ `quality` 1, bỏ trùng dHash ≤ 6, tối đa `PDF_UI_SHOTS_MAX` (24).
+- **Gộp ảnh nhúng** (`mergeEmbedded`): ảnh nhúng trong PPTX/DOCX trùng hình đã cắt (Hamming ≤ 10) bị bỏ khỏi danh sách; nếu ảnh gốc nét hơn (rộng ≥ 1,3×, không trong suốt) thì dùng ảnh gốc thay bản cắt.
+- **Dàn ý**: sơ đồ được gắn vào trang (như screenshot), `look = {fit:'contain'}` không khung trình duyệt; ảnh nhúng AI xếp `diagram` (cạnh dài ≥ 480px) cũng là sơ đồ.
+  Prompt: mỗi sơ đồ 1 trang `image` (2–3 ý giải thích ngắn), không đưa vào gallery/bìa/kết, không lặp lại bằng trang `process`. Chốt chặn `outlineService.placeDiagrams`
+  (sau `placeUserMedia`, trước khi chèn ảnh giao diện bỏ sót): trang AI gắn sơ đồ mà không hợp (có ảnh khác/video, bìa/kết, > 4 ý) → gỡ sơ đồ khỏi trang đó; trang hợp → `image` chỉ 1 sơ đồ.
+  Sơ đồ còn lại: còn hạn mức trang → chèn trang `image` mới ngay sau trang trùng từ nhiều nhất (≥ 2 từ) hoặc trước trang kết; hết hạn mức → vào trang `auto`/`bullets`
+  chưa có media (≤ 4 ý), không có chỗ thì bỏ.
+- Log `outline_ready`: `visualShots`, `embeddedMerged`, `diagrams`, `diagramsPlaced`, `diagramsAdded`; lỗi `visual_shots_failed {step}` (`soffice_missing`, `pdftoppm_missing`…).
+- Đã kiểm với AI thật (Docker): PPTX mẫu → 2 sơ đồ (quy trình, kiến trúc) + 1 giao diện, trang thẻ bị bỏ đúng; PDF OneAI → 3 sơ đồ + 7 giao diện cắt chính xác.
+

@@ -65,7 +65,10 @@
         "poster": null,
         "title": "Video giới thiệu giải pháp",
         "caption": ""
-      }
+      },
+      "hide": [
+        "secno"
+      ]
     },
     {
       "id": "s04",
@@ -135,7 +138,18 @@
           "text": "Dashboard điều hành trên di động.",
           "value": "BI"
         }
-      ]
+      ],
+      "moves": {
+        "title": {
+          "x": 4,
+          "y": 0,
+          "s": 1.2
+        },
+        "items.0.title": {
+          "x": 0,
+          "y": -3
+        }
+      }
     },
     {
       "id": "s06",

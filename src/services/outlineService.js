@@ -216,6 +216,88 @@ export function placeUserMedia(slides, required, { room = 0, force = true, chunk
   return { added, moved };
 }
 
+// Từ có nghĩa (≥ 3 ký tự) của tiêu đề/nội dung — so khớp sơ đồ với trang liên quan.
+const words = (t) => new Set(String(t || '').toLowerCase().normalize('NFC').split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
+const overlap = (a, b) => {
+  let n = 0;
+  for (const w of a) if (b.has(w)) n += 1;
+  return n;
+};
+
+/**
+ * Sơ đồ (quy trình, kiến trúc, mô hình…) cần được THẤY rõ: mỗi sơ đồ 1 trang ảnh lớn (bố cục image, ≤ 4 ý bên cạnh).
+ * - Trang AI đặt sơ đồ: chỉ giữ 1 sơ đồ và chỉ khi trang không kèm ảnh khác, không phải bìa/kết, ≤ 4 dòng → đổi sang bố cục image;
+ *   còn lại gỡ sơ đồ ra đặt lại (giữ nguyên cấu trúc trang thẻ/số liệu/bộ sưu tập).
+ * - Sơ đồ chưa có chỗ: thêm trang image riêng (tiêu đề = tên sơ đồ AI nhận diện), đặt ngay sau trang có nội dung gần nhất (trước
+ *   trang kết) khi còn hạn mức trang; hết hạn mức → gắn vào trang chữ ngắn chưa có media, ưu tiên trang cùng chủ đề; không còn
+ *   chỗ thì bỏ (sơ đồ cắt tự động không bắt buộc).
+ * @param {Array} slides  trang dàn ý đã chuẩn hoá
+ * @param {Array<{asset:string, title?:string}>} diagrams
+ * @param {{ room?: number }} o  room = số trang còn được thêm
+ * @returns {{ added: number, moved: number, placed: number }}
+ */
+export function placeDiagrams(slides, diagrams, { room = 0 } = {}) {
+  const byId = new Map(diagrams.map((d) => [d.asset, d]));
+  if (!byId.size) return { added: 0, moved: 0, placed: 0 };
+  const used = new Set();
+  let moved = 0;
+  const dgImg = (asset, caption = '') => ({ asset, caption, fit: 'contain' });
+  for (const s of slides) {
+    const imgs = s.images || [];
+    if (!imgs.some((im) => byId.has(im.asset))) continue;
+    const others = imgs.filter((im) => !byId.has(im.asset));
+    const dg = imgs.find((im) => byId.has(im.asset) && !used.has(im.asset));
+    const fits = dg && !others.length && !s.video && !['cover', 'closing'].includes(s.layout) && (s.points || []).length <= 4;
+    moved += imgs.length - others.length - (fits ? 1 : 0);
+    if (fits) {
+      used.add(dg.asset);
+      s.images = [dgImg(dg.asset, dg.caption)];
+      s.layout = 'image';
+    } else {
+      s.images = others;
+      if (!others.length && (s.layout === 'image' || s.layout === 'gallery') && !s.video) s.layout = 'auto';
+      if (others.length === 1 && s.layout === 'gallery') s.layout = 'image';
+    }
+  }
+  const left = [...byId.values()].filter((d) => !used.has(d.asset));
+  let added = 0;
+  const closingAt = () => (slides.length > 1 && slides[slides.length - 1].layout === 'closing' ? slides.length - 1 : slides.length);
+  // Trang gần chủ đề nhất (theo từ chung với tên sơ đồ) — chỉ tính khi chung ≥ 2 từ.
+  const best = (d, list) => {
+    const w = words(d.title);
+    let top = null;
+    let score = 1;
+    for (const x of list) {
+      const n = overlap(w, words(`${x.s.title} ${(x.s.points || []).join(' ')}`));
+      if (n > score) {
+        score = n;
+        top = x;
+      }
+    }
+    return top;
+  };
+  for (const d of left) {
+    if (room > 0) {
+      const near = best(d, slides.map((s, i) => ({ s, i })).filter(({ i, s }) => i > 0 && i < closingAt() && s.layout !== 'cover'));
+      const at = near ? near.i + 1 : closingAt();
+      slides.splice(Math.min(at, closingAt()), 0, { id: `s-${randomUUID().slice(0, 8)}`, layout: 'image', title: d.title || 'Sơ đồ', subtitle: '', points: [], notes: '', images: [dgImg(d.asset)], video: null });
+      used.add(d.asset);
+      added += 1;
+      room -= 1;
+      continue;
+    }
+    const spots = slides
+      .map((s, i) => ({ s, i }))
+      .filter(({ s, i }) => i > 0 && i < closingAt() && !s.video && !(s.images || []).length && ['auto', 'bullets'].includes(s.layout) && (s.points || []).length <= 4);
+    const spot = best(d, spots) || spots[0];
+    if (!spot) continue;
+    spot.s.images = [dgImg(d.asset)];
+    spot.s.layout = 'image';
+    used.add(d.asset);
+  }
+  return { added, moved, placed: used.size };
+}
+
 /* ---------------- dàn ý → slide ---------------- */
 // "Tiêu đề: mô tả" / "Mốc — nội dung" → { title, text }. Dòng ngắn không có dấu tách = chỉ tiêu đề.
 export function splitPoint(pt) {

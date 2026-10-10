@@ -60,6 +60,12 @@
   render trang (`pdftoppm -scale-to 2000`) rồi cắt theo `box_2d` của Gemini mới ra đúng thứ người xem thấy. PDF 20 trang/50 MB: render ~7 giây,
   AI khoanh vùng ~20 giây. Hộp AI đôi khi lẹm vài chữ tiêu đề slide sát mép ảnh (vd. "ất") — chấp nhận, nới mép chỉ 0,5%.
 
+### Nhận diện hình: LibreOffice + gọt viền sơ đồ (2026-10-11)
+- `soffice` chạy song song với cùng hồ sơ người dùng → khoá/treo. Luôn: hàng đợi tuần tự trong `visualService`, `-env:UserInstallation=file://<thư mục tạm riêng>`, timeout + kill.
+- Trang PPTX dùng Calibri/Cambria: thiếu phông → LibreOffice thay phông khác cỡ, chữ tràn khung, hộp AI lệch. Image cài `fonts-crosextra-carlito/caladea` + `fonts-liberation2` (cùng số đo).
+- Gọt viền sơ đồ (`sharp().trim`) có thể ăn mất cả hình khi nền sơ đồ cùng màu nền trang → chỉ nhận bản gọt khi còn ≥ 35% mỗi chiều (50% từng loại bỏ nhầm sơ đồ hợp lệ).
+- Ảnh nhúng PPTX thường trùng đúng hình đã cắt → phải `mergeEmbedded` (dHash ≤ 10) nếu không AI thấy 2 bản và đặt 2 lần.
+
 ### Gemini bước dựng bài chậm hơn bước dàn ý
 - `designDeck` trả JSON lớn (đủ mọi trường slide) → 1–3 phút với ~8 trang; dàn ý chỉ ~30–60 giây. Nếu AI bỏ trang/sai `ref`, `composeDeckFromOutline` tự dựng trang từ dàn ý — bài **luôn** đủ số trang người dùng đã duyệt.
 
@@ -107,6 +113,14 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 
 ### Khung sửa trực tiếp: hoãn dựng lại phải xét `document.hasFocus()`
 - Engine hoãn `deck:render` khi người dùng đang gõ trong khung. Bấm sang ô bên ngoài (ứng dụng) thì `document.activeElement` của khung **vẫn trỏ vào ô cũ** → nếu chỉ xét activeElement, mọi lần dựng lại sau đó bị hoãn mãi (sửa ở bảng bên phải không thấy trên khung). Điều kiện đúng: `isContentEditable && deck.contains(a) && document.hasFocus()`.
+
+### Dời ô chữ: `zoom` nhân cả `translate` (2026-10-11)
+- Ô chữ đổi cỡ bằng CSS `zoom: s` + dời bằng `translate` → độ dời thực tế = translate × s (đã đo trong Chrome). Renderer/engine ghi `translate: (x/s)px (y/s)px` để vị trí lưu (`data-mv`, % trang) không đổi khi đổi cỡ.
+- Không dùng `transform` cho vị trí ô chữ: engine ghi đè `transform` khi chạy hiệu ứng vào → chữ nhảy về chỗ cũ. Thuộc tính `translate` cộng dồn độc lập.
+- `fitSlide` (tự co chữ khi tràn) phải đo **không có** translate (lớp `.fit-m`), nếu không ô chữ dời ra mép bị tính là tràn → thu nhỏ cả trang.
+- Sau A+/A− trang được dựng lại (node mới) → engine bám lại ô chữ cùng `data-e` và **giữ chỗ nhóm nút** khi chuột còn trên đó; nếu đặt lại theo ô chữ (cao lên) thì cú bấm kế tiếp trượt sang nút khác.
+- Khung thấp (điện thoại) thanh định dạng `#rtb` (z-index 1000) đè nhóm nút → chạm A− trúng `#rtb`. `placeGrip` xếp ngang dưới ô chữ khi khung < 420px và né hộp `#rtb`.
+- Puppeteer: `touchscreen.tap(x, y)` theo toạ độ trang không tới được iframe sandbox (khác tiến trình) → dùng `elementHandle.tap()` trong frame.
 
 ### Kéo phần tử: `setPointerCapture` đổi đích của `dblclick`
 - Khối `.fe` gọi `setPointerCapture` khi nhấn → `click`/`dblclick` sau đó có `e.target` là **chính khối**, không phải chữ/ảnh bên trong → `closest('[data-m]')` rỗng, bấm đúp không mở gì. Lấy phần tử thật bằng `document.elementFromPoint` (nằm trong khối), không thấy thì lấy `[data-m]`/`[data-e]` đầu tiên của khối.

@@ -44,6 +44,11 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 // "Áp cho mọi trang" ở mục Trình chiếu của trang đang chọn.
+// "Áp cho mọi trang" ở mục Hoạ tiết & vị trí chữ.
+function onDecorAll(hide) {
+  const n = ed.setDecorAll(hide)
+  toast.success(hide.length ? `Đã áp hoạ tiết cho ${n} trang` : `Đã hiện lại hoạ tiết trên ${n} trang`)
+}
 function onBuildAll(build) {
   const n = ed.setBuildAll(build)
   toast.success(`Đã áp cách trình chiếu cho ${n} trang`)
@@ -60,7 +65,7 @@ const view = ref('slides') // 'slides' | 'deck'
 const frame = ref(null)
 const strip = ref(null)
 const sm = useSlideMedia(draft, selected)
-const live = useLiveDeck(frame, { draft, deck, selected, assets, onMedia: sm.open, onSave: () => onSave() })
+const live = useLiveDeck(frame, { draft, deck, selected, assets, onMedia: sm.open, onSave: () => onSave(), onNotice: (t) => toast.info(t) })
 const selectedElId = computed(() => (live.selectedEl.value?.index === selected.value ? live.selectedEl.value.id : ''))
 const isFree = computed(() => slide.value?.layout === 'free')
 watch(selected, async (i) => {
@@ -335,7 +340,7 @@ onMounted(ed.load)
           :deck-logo="draft.spec.logo"
           @media="(m) => sm.open({ ...m, index: selected })"
         />
-        <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="assets" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" :ratio="deck.ratio" :asset-url="ed.assetUrl" studio @change-layout="ed.changeLayout" @build-all="onBuildAll" @media="(m) => sm.open({ ...m, index: selected })" />
+        <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="assets" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" :ratio="deck.ratio" :asset-url="ed.assetUrl" studio @change-layout="ed.changeLayout" @build-all="onBuildAll" @decor-all="onDecorAll" @media="(m) => sm.open({ ...m, index: selected })" />
       </div>
     </template>
 

@@ -5,8 +5,8 @@
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { deckParts } from '@shared/deck/render.js';
 import { fontFaceCss } from '@shared/deck/fonts.js';
-import { applyFrameEdit } from '@/lib/editPaths.js';
-import { prepareSpecForSave, clone, SPEC_LIMITS } from '@/lib/slideModel.js';
+import { applyFrameEdit, applyFrameMove, applyDeco, convertElement as convertEl } from '@/lib/editPaths.js';
+import { prepareSpecForSave, clone, SPEC_LIMITS, ratioNum } from '@/lib/slideModel.js';
 import { newElementId } from '@shared/deck/free.js';
 
 const FONT_BASE = '/deck-assets/fonts/';
@@ -14,9 +14,10 @@ const fin = (v, min, max) => (Number.isFinite(v) ? Math.min(max, Math.max(min, M
 
 /**
  * @param {Ref<HTMLIFrameElement>} frameRef
- * @param {{ draft: Ref, deck: Ref, selected: Ref<number>, assets: Ref<Array>, onMedia?: Function, onSave?: Function }} o
+ * @param {{ draft: Ref, deck: Ref, selected: Ref<number>, assets: Ref<Array>, onMedia?: Function, onSave?: Function, onNotice?: Function }} o
+ *   onNotice(text) — báo ngắn cho người dùng (vd. trang đã đủ số phần tử).
  */
-export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, onSave }) {
+export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, onSave, onNotice }) {
   const ready = ref(false);
   // Phần tử trang tự do đang chọn trên khung: { index, id } | null
   const selectedEl = ref(null);
@@ -105,6 +106,13 @@ export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, 
         if (el && x !== null && y !== null && w !== null && h !== null) Object.assign(el, { x, y, w, h });
         break;
       }
+      case 'deck:move':
+        // Ô chữ của trang có bố cục được kéo dời (x/y % khung) / đổi cỡ (s) — đường dẫn theo danh sách cho phép, số bị kẹp.
+        if (draft.value) applyFrameMove(draft.value.spec, idx, d.path, d.x, d.y, d.s);
+        break;
+      case 'deck:deco':
+        if (typeof d.key === 'string' && typeof d.action === 'string') decoAction(idx, d.key, d.action, d.box);
+        break;
       case 'deck:save':
         onSave?.();
         break;
@@ -158,10 +166,32 @@ export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, 
     if (to === 'front') s.elements.push(el);
     else s.elements.unshift(el);
   }
+  // Hoạ tiết bấm trên khung: xoá / thay bằng hình khối / thay bằng ảnh (mở hộp chọn ảnh cho phần tử mới hoặc ô media bìa).
+  function decoAction(i, key, action, box) {
+    const s = slideAt(i);
+    if (!s) return;
+    const r = applyDeco(s, key, action, box, { ratio: ratioNum(deck.value?.ratio) });
+    if (r.full) onNotice?.(`Mỗi trang tối đa ${SPEC_LIMITS.elements} phần tử — đã xoá hoạ tiết, chưa thêm được phần tử thay thế`);
+    if (r.element) {
+      selectedEl.value = { index: i, id: r.element.id };
+      setTimeout(() => post({ type: 'deck:select', id: r.element.id }), 260);
+    }
+    if (r.media) setTimeout(() => onMedia?.({ index: i, ...r.media }), 60);
+  }
+  // Đổi phần tử chèn ảnh ↔ hình khối (giữ vị trí); đổi sang ảnh → mở hộp chọn ảnh luôn.
+  function convertElement(i, id, to) {
+    const s = slideAt(i);
+    const el = s ? convertEl(s, id, to) : null;
+    if (!el) return null;
+    selectedEl.value = { index: i, id: el.id };
+    setTimeout(() => post({ type: 'deck:select', id: el.id }), 260);
+    if (to === 'image') setTimeout(() => onMedia?.({ index: i, path: `elements.${el.id}`, kind: 'image', aspect: (el.w * ratioNum(deck.value?.ratio)) / el.h }), 60);
+    return el;
+  }
   const selectElement = (id, edit = false) => {
     selectedEl.value = id ? { index: selected.value, id } : null;
     post({ type: 'deck:select', id, edit });
   };
 
-  return { ready, selectedEl, renderNow, schedule, addElement, removeElement, duplicateElement, reorderElement, selectElement, elementAt };
+  return { ready, selectedEl, renderNow, schedule, addElement, removeElement, duplicateElement, reorderElement, selectElement, elementAt, convertElement };
 }

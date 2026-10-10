@@ -5,6 +5,7 @@ import { get, patch, del, post, download, ApiError } from '@/lib/api.js';
 import { newSlide, duplicateSlide, ensureLayoutContent, prepareSpecForSave, clone, SPEC_LIMITS, BUILD_LAYOUTS } from '@/lib/slideModel.js';
 import { useMedia } from '@/composables/useMedia.js';
 import { withDesignDefaults } from '@/lib/design.js';
+import { decorsFor } from '@shared/deck/layers.js';
 
 // Bản nháp chưa lưu được giữ tạm khi trang bị gỡ (vd. đổi bề mặt desktop ↔ mobile khi xoay/thu nhỏ cửa sổ).
 const pendingDrafts = new Map();
@@ -161,7 +162,25 @@ export function useEditor(id, { onOutline } = {}) {
   function changeLayout(layout) {
     if (!slide.value) return;
     slide.value.layout = layout;
+    // Vị trí chữ đã dời thuộc về bố cục cũ; hoạ tiết đã tắt chỉ giữ loại bố cục mới còn có.
+    delete slide.value.moves;
+    const keep = (slide.value.hide || []).filter((k) => decorsFor(layout).includes(k));
+    if (keep.length) slide.value.hide = keep;
+    else delete slide.value.hide;
     ensureLayoutContent(slide.value);
+  }
+  // "Áp cho mọi trang" ở mục Hoạ tiết: tắt đúng các hoạ tiết này trên mọi trang có chúng (hoạ tiết khác hiện lại).
+  function setDecorAll(hide) {
+    const want = new Set(Array.isArray(hide) ? hide : []);
+    let n = 0;
+    for (const s of draft.value?.spec.slides || []) {
+      const keys = decorsFor(s.layout);
+      const next = keys.filter((k) => want.has(k));
+      if (next.length) s.hide = next;
+      else delete s.hide;
+      n += 1;
+    }
+    return n;
   }
 
   /* ---- media ---- */
@@ -189,7 +208,7 @@ export function useEditor(id, { onOutline } = {}) {
 
   return {
     deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, previewKey, assets, media, videoLibrary,
-    load, save, discard, applyDeck, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout, setBuildAll,
+    load, save, discard, applyDeck, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout, setBuildAll, setDecorAll,
     uploadImage, assetUrl, exportHtml, exportPdf, remove, duplicate,
   };
 }

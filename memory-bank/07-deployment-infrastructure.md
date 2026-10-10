@@ -42,10 +42,13 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `MAX_IMAGES_PER_DECK` | | 60 | Ảnh rút từ tài liệu nguồn |
 | `MAX_VIDEO_MB` / `MAX_VIDEOS_PER_DECK` | | 150 / 10 | Video tải lên chèn vào slide (MP4/MOV/WebM) — dung lượng 1 tệp / số video mỗi bài |
 | `MAX_CREATE_MEDIA` | | 20 | Số ảnh/video gửi kèm tối đa khi tạo bài (luôn được đưa vào bài) |
-| `PDF_UI_SHOTS` | | true | Cắt ảnh giao diện phần mềm từ PDF nguồn để đưa vào bài |
-| `PDF_UI_SHOT_PAGES` | | 40 | Số trang PDF đầu tiên được render để tìm ảnh giao diện |
-| `PDF_UI_SHOTS_MAX` | | 16 | Số ảnh giao diện tối đa cắt từ PDF mỗi lần tạo |
+| `PDF_UI_SHOTS` | | true | Nhận diện + cắt **sơ đồ** và **ảnh giao diện phần mềm** từ tư liệu nguồn để đưa vào bài (tên biến giữ từ bản cũ) |
+| `PDF_UI_SHOT_PAGES` | | 40 | Tổng số trang tư liệu (PDF + PPTX/DOCX đã render) được xem để tìm hình |
+| `PDF_UI_SHOTS_MAX` | | 24 | Số hình (sơ đồ + giao diện) tối đa cắt mỗi lần tạo |
 | `PDFTOPPM_PATH` | | pdftoppm | Đường dẫn poppler `pdftoppm` (Docker cài `poppler-utils`; thiếu → bỏ qua bước cắt ảnh) |
+| `OFFICE_VISUALS` | | true | Render PPTX/DOCX/ODP/ODT bằng LibreOffice để nhận diện hình như PDF; false → chỉ PDF |
+| `SOFFICE_PATH` | | soffice | Đường dẫn LibreOffice (Docker cài `libreoffice-*-nogui`; thiếu → bỏ qua tệp Office, log `soffice_missing`) |
+| `OFFICE_RENDER_TIMEOUT_MS` | | 120000 | Thời gian tối đa chuyển 1 tệp Office → PDF (10 000–600 000) |
 | `EXPORT_VIDEO_MB` | | 200 | HTML xuất nhúng video tải lên (base64) khi **tổng** ≤ ngưỡng; vượt → khung ảnh bìa không phát. 0 = không nhúng |
 | `ORT_DISABLE_TELEMETRY` | | `1` (Dockerfile) | onnxruntime-node (tách nền logo) bản Linux gửi telemetry về Microsoft → luôn tắt. `cutoutService` cũng tự đặt nếu thiếu |
 | `GENERATION_CONCURRENCY` / `RENDER_CONCURRENCY` | | 2 / 2 | Song song AI / Chromium |
@@ -74,7 +77,7 @@ docker compose up -d --build
 docker compose exec app node scripts/create-admin.js admin@misa.com.vn "Quản trị viên"   # in mật khẩu tạm 1 lần
 ```
 
-- Image `Dockerfile`: `node:24-bookworm-slim` + `chromium` + font Noto/DejaVu + `tini`; build giao diện trong stage build (`npm run build` = vite + `scripts/build-deck3d.mjs` → `dist/deck-runtime/deck3d.js`, stage build phải COPY script này); chạy user `node`; `shm_size: 512mb` cho Chromium.
+- Image `Dockerfile`: `node:24-bookworm-slim` + `chromium` + `poppler-utils` + LibreOffice headless (impress/writer nogui, phông Carlito/Caladea/Liberation — image ~2,03 GB) + font Noto/DejaVu + `tini`; build giao diện trong stage build (`npm run build` = vite + `scripts/build-deck3d.mjs` → `dist/deck-runtime/deck3d.js`, stage build phải COPY script này); chạy user `node`; `shm_size: 512mb` cho Chromium.
 - onnxruntime-node đóng gói binary mọi nền tảng (~290 MB): Dockerfile xoá hết trừ `linux/<kiến trúc build>` (còn ~25 MB). Build image cho kiến trúc khác (vd. máy Mac arm64 → server amd64) phải `docker buildx build --platform linux/amd64` để `node -p process.arch` ra đúng kiến trúc đích.
 - `models/u2netp.onnx` (4.6 MB) được COPY vào image; thiếu tệp → tách nền tự lùi về theo màu nền.
 - MySQL 8.4: baseline `startup/database/schema.sql` được mount vào `docker-entrypoint-initdb.d` → **chỉ chạy ở lần tạo volume đầu tiên**. Thay đổi lược đồ sau đó: viết changelog trong `startup/database/changelogs/` và chạy thủ công.

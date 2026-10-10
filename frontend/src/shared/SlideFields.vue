@@ -12,6 +12,8 @@ import ImagePicker from './ImagePicker.vue'
 import VideoPicker from './VideoPicker.vue'
 import MTabs from '@/components/mds/MTabs.vue'
 import IconPicker from './IconPicker.vue'
+import DecorPanel from './DecorPanel.vue'
+import { shiftMoves } from '@/lib/editPaths.js'
 import { LAYOUTS, LAYOUT_FIELDS, TONE_OPTIONS, VARIANT_LABELS, ITEM_IMAGE_LAYOUTS, BUILD_OPTIONS, BUILD_LAYOUTS, ratioNum, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
 import { VARIANTS, fits, resolveVariant } from '@shared/deck/variants.js'
 import { plainText, repaintRich } from '@shared/deck/rich.js'
@@ -30,7 +32,7 @@ const props = defineProps({
   // URL xem trước ảnh theo mã asset (ảnh/logo thay biểu tượng của mục).
   assetUrl: { type: Function, default: () => '' },
 })
-const emit = defineEmits(['change-layout', 'media', 'build-all'])
+const emit = defineEmits(['change-layout', 'media', 'build-all', 'decor-all'])
 
 const s = computed(() => props.slide)
 // Ô ảnh chỉ nhận ảnh (asset cũ không có kind = ảnh).
@@ -98,11 +100,18 @@ const tagsText = computed({
   },
 })
 
-function move(list, i, dir) {
+// Đổi chỗ / xoá mục trong danh sách — vị trí chữ đã kéo dời (slide.moves) đi theo mục.
+function move(key, i, dir) {
+  const list = s.value[key]
   const j = i + dir
   if (j < 0 || j >= list.length) return
+  shiftMoves(s.value, key, { from: i, to: j })
   const [x] = list.splice(i, 1)
   list.splice(j, 0, x)
+}
+function removeAt(key, i) {
+  shiftMoves(s.value, key, { remove: i })
+  s.value[key].splice(i, 1)
 }
 
 // Mỗi dòng một ý (xuống dòng bên trong 1 ý — gõ trên khung xem trước — hiển thị thành dấu cách ở form).
@@ -116,7 +125,7 @@ function setPoints(col, v) {
 
 function setGalleryImage(i, v) {
   if (v) s.value.images.splice(i, 1, v)
-  else s.value.images.splice(i, 1)
+  else removeAt('images', i)
 }
 </script>
 
@@ -149,6 +158,8 @@ function setGalleryImage(i, v) {
         <MButton variant="ghost" class="self-start" @click="emit('build-all', build)"><template #icon><MIcon name="copy" :size="16" /></template>Áp cho mọi trang</MButton>
       </div>
     </FormField>
+
+    <DecorPanel :slide="s" @decor-all="(h) => emit('decor-all', h)" />
 
     <FormField v-if="has('kicker')" label="Nhãn chủ đề" hint="Dòng nhỏ phía trên tiêu đề, 1–3 từ">
       <MInput v-bind="rx(s, 'kicker')" :error="tooLong(s.kicker, L.kicker)" placeholder="Ví dụ: Thực trạng" />
@@ -193,9 +204,9 @@ function setGalleryImage(i, v) {
         <div class="flex items-center justify-between">
           <span class="text-[12px] font-semibold text-[var(--mds-text-secondary)]">Số liệu {{ i + 1 }}</span>
           <div class="flex">
-            <MButton variant="icon" aria-label="Lên" :disabled="i === 0" @click="move(s.stats, i, -1)"><template #icon><MIcon name="chevron-up" :size="16" /></template></MButton>
-            <MButton variant="icon" aria-label="Xuống" :disabled="i === s.stats.length - 1" @click="move(s.stats, i, 1)"><template #icon><MIcon name="chevron-down" :size="16" /></template></MButton>
-            <MButton variant="icon" aria-label="Xoá số liệu" @click="s.stats.splice(i, 1)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Lên" :disabled="i === 0" @click="move('stats', i, -1)"><template #icon><MIcon name="chevron-up" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Xuống" :disabled="i === s.stats.length - 1" @click="move('stats', i, 1)"><template #icon><MIcon name="chevron-down" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Xoá số liệu" @click="removeAt('stats', i)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
           </div>
         </div>
         <div class="grid grid-cols-3 gap-2">
@@ -215,9 +226,9 @@ function setGalleryImage(i, v) {
         <div class="flex items-center justify-between gap-2">
           <span class="text-[12px] font-semibold text-[var(--mds-text-secondary)]">{{ itemLabel }} {{ i + 1 }}</span>
           <div class="flex">
-            <MButton variant="icon" aria-label="Lên" :disabled="i === 0" @click="move(s.items, i, -1)"><template #icon><MIcon name="chevron-up" :size="16" /></template></MButton>
-            <MButton variant="icon" aria-label="Xuống" :disabled="i === s.items.length - 1" @click="move(s.items, i, 1)"><template #icon><MIcon name="chevron-down" :size="16" /></template></MButton>
-            <MButton variant="icon" aria-label="Xoá mục" @click="s.items.splice(i, 1)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Lên" :disabled="i === 0" @click="move('items', i, -1)"><template #icon><MIcon name="chevron-up" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Xuống" :disabled="i === s.items.length - 1" @click="move('items', i, 1)"><template #icon><MIcon name="chevron-down" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Xoá mục" @click="removeAt('items', i)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
           </div>
         </div>
         <MInput v-bind="rx(it, 'title')" placeholder="Tiêu đề" :error="tooLong(it.title, L.itemTitle)" />
@@ -245,9 +256,9 @@ function setGalleryImage(i, v) {
         <div class="flex items-center justify-between">
           <span class="text-[12px] font-semibold text-[var(--mds-text-secondary)]">{{ stepLabel }} {{ i + 1 }}</span>
           <div class="flex">
-            <MButton variant="icon" aria-label="Lên" :disabled="i === 0" @click="move(s.steps, i, -1)"><template #icon><MIcon name="chevron-up" :size="16" /></template></MButton>
-            <MButton variant="icon" aria-label="Xuống" :disabled="i === s.steps.length - 1" @click="move(s.steps, i, 1)"><template #icon><MIcon name="chevron-down" :size="16" /></template></MButton>
-            <MButton variant="icon" aria-label="Xoá bước" @click="s.steps.splice(i, 1)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Lên" :disabled="i === 0" @click="move('steps', i, -1)"><template #icon><MIcon name="chevron-up" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Xuống" :disabled="i === s.steps.length - 1" @click="move('steps', i, 1)"><template #icon><MIcon name="chevron-down" :size="16" /></template></MButton>
+            <MButton variant="icon" aria-label="Xoá bước" @click="removeAt('steps', i)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
           </div>
         </div>
         <MInput v-bind="rx(st, 'value')" :placeholder="s.layout === 'timeline' ? 'Mốc thời gian (Tuần 1–2, Q3/2026…)' : 'Nhãn (tuỳ chọn)'" :error="tooLong(st.value, L.itemValue)" />
@@ -263,7 +274,7 @@ function setGalleryImage(i, v) {
       <div v-for="(col, i) in s.columns" :key="i" class="flex flex-col gap-2 rounded-lg border border-[var(--mds-border)] p-3">
         <div class="flex items-center justify-between">
           <span class="text-[12px] font-semibold text-[var(--mds-text-secondary)]">Cột {{ i + 1 }}</span>
-          <MButton variant="icon" aria-label="Xoá cột" :disabled="s.columns.length <= 2" @click="s.columns.splice(i, 1)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
+          <MButton variant="icon" aria-label="Xoá cột" :disabled="s.columns.length <= 2" @click="removeAt('columns', i)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
         </div>
         <MInput v-bind="rx(col, 'title')" placeholder="Tiêu đề cột" :error="tooLong(col.title, L.colTitle)" />
         <div class="grid grid-cols-2 gap-2">

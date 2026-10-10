@@ -808,3 +808,76 @@ body.edit .ib[data-m]::after { content: "Đổi"; font-size: 20px; padding: 8px 
 /* ---------- lớp phần tử chèn thêm trên trang có bố cục (ảnh, logo, chữ, hình khối) ---------- */
 .free.over { z-index: 4; pointer-events: none; }
 body.edit .free.over > .fe { pointer-events: auto; }
+
+/* ---------- tinh chỉnh tay trên trang có bố cục (shared/deck/layers.js) ---------- */
+/* Ô chữ đã kéo dời: `translate` đặt sẵn trong style của ô; chữ nội tuyến cần là khối để translate có tác dụng. */
+span[data-mv], b[data-mv], small[data-mv] { display: inline-block; }
+/* Engine đo tràn chữ (co --k) ở vị trí gốc — không tính phần ô chữ bị kéo ra ngoài. */
+.slide.fit-m [data-mv] { translate: none !important; }
+/* Hoạ tiết đã tắt (slide.hide → lớp x-<khoá>). */
+.x-glow > .glow { display: none; }
+.x-glow > .sbg { background: none; }
+.x-grid > .sbg::after { display: none; }
+/* Tắt nền động riêng trang này: tấm nền màu chuyển sắc phủ canvas (vẫn giữ quầng sáng nếu chưa tắt). */
+.x-bg > .sbg {
+  background:
+    radial-gradient(1400px 900px at 88% 6%, var(--glow-a), transparent 62%),
+    radial-gradient(1100px 800px at 6% 100%, var(--glow-b), transparent 62%),
+    linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%);
+}
+.x-bg.x-glow > .sbg { background: linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%); }
+.x-art .cv-art, .x-art .cv-ghost { display: none; }
+.x-art .cv:has(> .cv-art) { grid-template-columns: minmax(0, 1fr); }
+.x-secno .sec-no { display: none; }
+.x-secno .sec { grid-template-columns: minmax(0, 1fr); }
+.x-secno .sec.has-media { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+.x-qmark .qt-mark { display: none; }
+.x-vs .vs { visibility: hidden; }
+.x-vs .cmp-mid { display: none; }
+.x-icons .ib:not(.ib-img), .x-icons .pts li > .ic, .x-icons .cl-tag > .ic { display: none; }
+.x-icons .crow > .ib:not(.ib-img) { display: grid; visibility: hidden; }
+.x-nums :is(.ag-n, .bn, .cn, .ps-n, .chev-n, .kicker .num) { display: none; }
+.x-arrows .arr { display: none; }
+
+/* Chế độ sửa: hoạ tiết bấm được (xoá / thay bằng ảnh, hình khối) + tay nắm kéo dời ô chữ + menu hoạ tiết (kích thước theo màn hình). */
+body.edit [data-dc] { cursor: pointer; }
+body.edit [data-dc]:hover { outline: 4px dashed color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 10px; border-radius: 12px; }
+body.edit [data-dc].dc-on { outline: 4px solid var(--accent); outline-offset: 10px; }
+body.edit .cmp-mid[data-dc] { pointer-events: auto; }
+body.edit [data-mv] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
+#mvg {
+  position: fixed; z-index: 999; display: none; flex-direction: column; gap: 2px; padding: 3px; border-radius: 9px;
+  background: #111827; color: #F9FAFB; box-shadow: 0 6px 18px rgba(0, 0, 0, .35), 0 0 0 1px rgba(255, 255, 255, .12);
+  font: 700 13px/1 Inter, system-ui, sans-serif; user-select: none; -webkit-user-select: none;
+}
+#mvg.on { display: flex; }
+#mvg.row { flex-direction: row; }
+#mvg button { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; display: grid; place-items: center; background: none; color: inherit; font: inherit; cursor: pointer; }
+#mvg button:hover { background: rgba(255, 255, 255, .14); }
+#mvg button:focus-visible { outline: 2px solid #60A5FA; outline-offset: 1px; }
+#mvg .mv-grip { cursor: grab; touch-action: none; }
+#mvg .mv-grip.drag { cursor: grabbing; background: #2563EB; }
+#mvg .mv-fz sup { font-size: 10px; margin-left: 1px; }
+#mvg svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+#mvt {
+  position: fixed; z-index: 999; display: none; padding: 5px 8px; border-radius: 6px; background: #111827; color: #F9FAFB;
+  font: 600 12px/1.2 Inter, system-ui, sans-serif; pointer-events: none; white-space: nowrap;
+}
+#mvt.on { display: block; }
+#dcm {
+  position: fixed; z-index: 1000; display: none; flex-direction: column; min-width: 210px; padding: 6px; gap: 2px;
+  background: #111827; color: #F9FAFB; border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35), 0 0 0 1px rgba(255, 255, 255, .08);
+  font: 500 13px/1.2 Inter, system-ui, sans-serif;
+}
+#dcm.on { display: flex; }
+#dcm .dcm-h { padding: 6px 8px 8px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .6; }
+#dcm button { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+#dcm button:hover, #dcm button:focus-visible { background: rgba(255, 255, 255, .12); outline: none; }
+#dcm button.dcm-del { color: #FCA5A5; }
+/* Màn cảm ứng (điện thoại / máy tính bảng): vùng chạm ≥ 44px cho tay nắm, A+/A− và menu hoạ tiết. */
+@media (pointer: coarse) {
+  #mvg button { width: 44px; height: 44px; }
+  #mvg svg { width: 22px; height: 22px; }
+  #mvg .mv-fz { font-size: 15px; }
+  #dcm button { min-height: 44px; font-size: 15px; }
+}

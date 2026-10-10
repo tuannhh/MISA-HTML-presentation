@@ -15,10 +15,10 @@ import { Semaphore } from '../lib/semaphore.js';
 import { badRequest, conflict, forbidden, notFound, tooLarge, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
 import { sniffVideo, VIDEO_MIME } from '../lib/fileType.js';
 import { normalizeSpec, collectAssetIds, dropForeignAssets, remapAssetIds, themeForTone, cleanImageEdit, SPEC_LIMITS } from './specService.js';
-import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia } from './outlineService.js';
+import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia, placeDiagrams } from './outlineService.js';
 import { precheckSource, precheckMedia, ingestSource, fitPieces } from './ingestService.js';
 import { prepareMedia } from './mediaService.js';
-import { extractPdfUiShots } from './pdfShotService.js';
+import { extractVisuals, mergeEmbedded } from './visualService.js';
 import { TONE_THEMES } from '../../shared/deck/render.js';
 import { THEME_PRESETS, CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
 import { DEFAULT_FONT } from '../../shared/deck/fonts.js';
@@ -201,12 +201,15 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       // Media người dùng gửi kèm: lưu thành asset của bài trước khi gọi AI (AI xem để đặt đúng trang).
       const user = await storeUserMedia(tenantId, id, input.userMedia);
       let previewBytes = user.previewBytes;
-      // PDF: cắt ảnh giao diện phần mềm từ các trang (ưu tiên đưa vào bài) — đứng đầu danh sách ảnh để AI luôn được xem.
-      const pdfs = source.media.filter((m) => m.kind === 'pdf');
-      const shots = config.pdfShots.enabled && pdfs.length && config.pdfShots.maxShots
-        ? await extractPdfUiShots(pdfs, { gemini, bin: config.pdfShots.bin, tempDir: config.storage.tempDir, maxPages: config.pdfShots.maxPages, maxShots: config.pdfShots.maxShots })
+      // Tư liệu có trang (PDF, slide/văn bản Office): render trang → AI nhận diện + cắt ảnh giao diện phần mềm và sơ đồ (ưu tiên đưa
+      // vào bài) — đứng đầu danh sách ảnh để AI dựng dàn ý luôn được xem. Ảnh nhúng trùng hình đã cắt → gộp làm 1.
+      const V = config.visuals;
+      const pages = [...source.media.filter((m) => m.kind === 'pdf').map((m) => ({ ...m, kind: 'pdf' })), ...(source.docs || []).map((d) => ({ ...d, kind: 'office' }))];
+      const shots = V.enabled && pages.length && V.maxShots
+        ? await extractVisuals(pages, { gemini, bin: V.bin, soffice: V.soffice, office: V.office, officeTimeoutMs: V.officeTimeoutMs, tempDir: config.storage.tempDir, maxPages: V.maxPages, maxShots: V.maxShots })
         : [];
-      const images = await normalizeExtractedImages([...shots, ...source.images], { max: config.limits.maxImagesPerDeck });
+      const { images: embedded, merged } = await mergeEmbedded(shots, source.images);
+      const images = await normalizeExtractedImages([...shots, ...embedded], { max: config.limits.maxImagesPerDeck });
       const assetIds = [];
       for (const img of images) {
         const assetId = randomUUID();
@@ -251,14 +254,22 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         const m = /^VID(\d+)$/i.exec(String(ref || '').trim());
         return m ? user.videos[Number(m[1]) - 1]?.video || null : null;
       };
-      // Kiểu hiển thị ảnh gắn vào trang: ảnh chụp thật → cover; ảnh giao diện/đồ hoạ → trọn khung (contain) trên nền trắng,
+      // Kiểu hiển thị ảnh gắn vào trang: ảnh chụp thật → cover; ảnh giao diện/sơ đồ/đồ hoạ → trọn khung (contain) trên nền trắng,
       // ảnh giao diện máy tính có thêm khung trình duyệt.
       const kindOf = new Map((Array.isArray(raw?.imageKinds) ? raw.imageKinds : []).map((k) => [mapRef(k?.ref), k?.kind]));
       const look = new Map();
       const ui = new Set();
+      // Sơ đồ: hình cắt từ trang đã nhận diện là sơ đồ, hoặc ảnh nhúng AI (đã xem) phân loại diagram và đủ lớn để đọc được.
+      const diagrams = new Map();
       images.forEach((img, i) => {
         const aid = assetIds[i];
-        const shot = img.ui || (modelImages[i].preview && kindOf.get(aid) === 'screenshot');
+        const seen = !!modelImages[i].preview;
+        if (img.diagram || (!img.ui && seen && kindOf.get(aid) === 'diagram' && Math.max(img.width, img.height) >= 480)) {
+          diagrams.set(aid, { asset: aid, title: img.diagram?.title || '' });
+          look.set(aid, { fit: 'contain' });
+          return;
+        }
+        const shot = img.ui || (seen && kindOf.get(aid) === 'screenshot');
         if (shot) {
           ui.add(aid);
           const web = img.ui ? img.ui.device === 'web' : img.width / img.height >= 1.2;
@@ -293,19 +304,21 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         return { asset: u.asset, fit: (kind && kind !== 'photo') || looksLikeGraphic(u.traits) ? 'contain' : 'cover' };
       });
       const userImageIds = new Set(required.map((u) => u.asset));
-      const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid) || ui.has(aid) || userImageIds.has(aid));
+      const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid) || ui.has(aid) || diagrams.has(aid) || userImageIds.has(aid));
       const { outline } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: input.autoSlides, slideCount: input.slideCount, aiImages: !!input.aiImages } });
       if (!outline.slides.length) throw unprocessable('AI không lập được dàn ý từ tài liệu này', 'AI_EMPTY');
       const maxSlides = input.autoSlides ? AUTO_MAX_SLIDES : input.slideCount;
       capOutline(outline, maxSlides);
       const placed = placeUserMedia(outline.slides, { images: required, videos: user.videos.map((v) => v.video) }, { room: Math.max(0, maxSlides - outline.slides.length) });
-      // Ảnh giao diện cắt từ PDF mà AI chưa dùng: chèn vào trang chữ còn trống / gom thành trang ảnh khi còn hạn mức trang (không bắt buộc).
+      // Sơ đồ: mỗi sơ đồ 1 trang ảnh lớn; sơ đồ AI chưa dùng → trang riêng cạnh nội dung liên quan khi còn hạn mức (không bắt buộc).
+      const dgPlaced = placeDiagrams(outline.slides, [...diagrams.values()], { room: Math.max(0, maxSlides - outline.slides.length) });
+      // Ảnh giao diện đã cắt mà AI chưa dùng: chèn vào trang chữ còn trống / gom thành trang ảnh khi còn hạn mức trang (không bắt buộc).
       const uiLeft = [...ui].filter((aid) => !outline.slides.some((sl) => (sl.images || []).some((im) => im.asset === aid))).map((aid) => ({ asset: aid, ...look.get(aid) }));
       const uiPlaced = placeUserMedia(outline.slides, { images: uiLeft, videos: [] }, { room: Math.max(0, maxSlides - outline.slides.length), force: false, chunk: 4, title: 'Giao diện sản phẩm' });
       await presentations.setOutlineResult(tenantId, id, { outline, title: input.title ? null : outline.title });
       const kinds = {};
       for (const k of kindOf.values()) if (k) kinds[k] = (kinds[k] || 0) + 1;
-      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, uiShots: shots.length, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, droppedImages, kinds, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
+      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, visualShots: shots.length, embeddedMerged: merged, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, diagrams: diagrams.size, diagramsPlaced: dgPlaced.placed, diagramsAdded: dgPlaced.added, droppedImages, kinds, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi lập dàn ý. Vui lòng thử lại.';
       if (!(err instanceof HttpError)) logger.error('outline_failed', { id, err });

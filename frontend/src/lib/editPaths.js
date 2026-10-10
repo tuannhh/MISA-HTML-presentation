@@ -3,6 +3,8 @@
 // Đường dẫn tương đối (không dùng alias @shared) để kiểm thử đơn vị chạy thẳng bằng Node.
 import { SPEC_LIMITS as L } from '../../../shared/deck/limits.js';
 import { hasRich, canonicalRich, cutRich, plainText } from '../../../shared/deck/rich.js';
+import { isMovePath, MOVE_LIMIT, MOVE_RANGE, DECORS, cleanHide, cleanSize } from '../../../shared/deck/layers.js';
+import { newElement } from '../../../shared/deck/free.js';
 
 const clean = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
 const cut = (v, max) => clean(v).slice(0, max);
@@ -117,4 +119,124 @@ export function setMedia(slide, path, { image, video } = {}) {
   if (t.kind === 'element-image' && image !== undefined) t.element.image = image;
   if (t.kind === 'element-video' && video !== undefined) t.element.video = video;
   return true;
+}
+
+/* ---- tinh chỉnh tay trên trang có bố cục (shared/deck/layers.js) ---- */
+const num = (v, min, max) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n * 100) / 100)) : null;
+};
+
+/**
+ * Ô chữ được kéo dời / đổi cỡ trên khung (engine gửi 'deck:move'): x/y = % khung so với chỗ bố cục đặt, size = hệ số cỡ chữ
+ * (không gửi = giữ cỡ hiện có); về chỗ cũ + cỡ gốc = xoá mục.
+ * @returns {boolean} true nếu bản nháp thay đổi
+ */
+export function applyFrameMove(spec, index, path, x, y, size) {
+  const s = at(spec?.slides, index);
+  if (!s || s.layout === 'free' || !isMovePath(path)) return false;
+  const X = num(x, -MOVE_RANGE, MOVE_RANGE);
+  const Y = num(y, -MOVE_RANGE, MOVE_RANGE);
+  if (X === null || Y === null) return false;
+  const moves = { ...(s.moves || {}) };
+  const old = moves[path];
+  const S = size === undefined || size === null ? old?.s ?? 1 : cleanSize(size);
+  const reset = Math.abs(X) < 0.05 && Math.abs(Y) < 0.05 && S === 1;
+  if (reset) {
+    if (!old) return false;
+    delete moves[path];
+  } else {
+    if (old && old.x === X && old.y === Y && (old.s ?? 1) === S) return false;
+    if (!old && Object.keys(moves).length >= MOVE_LIMIT) return false;
+    moves[path] = S === 1 ? { x: X, y: Y } : { x: X, y: Y, s: S };
+  }
+  if (Object.keys(moves).length) s.moves = moves;
+  else delete s.moves;
+  return true;
+}
+
+/** Bật/tắt 1 hoạ tiết của trang (hidden = true → ẩn). */
+export function setDecorHidden(slide, key, hidden) {
+  if (!slide || !DECORS[key]) return false;
+  const cur = new Set(slide.hide || []);
+  if (cur.has(key) === !!hidden) return false;
+  if (hidden) cur.add(key);
+  else cur.delete(key);
+  const next = cleanHide([...cur]);
+  if (next) slide.hide = next;
+  else delete slide.hide;
+  return true;
+}
+
+// Hình khối thay hoạ tiết: gần giống dáng hoạ tiết cũ.
+const DECO_SHAPE = { art: 'circle', vs: 'circle', qmark: 'round', secno: 'round' };
+
+/**
+ * Thao tác trên hoạ tiết bấm chọn ở khung (engine gửi 'deck:deco'): 'hide' xoá, 'shape' / 'image' = xoá + đặt hình khối / ảnh
+ * vào đúng hộp của hoạ tiết (box % khung). Hình bìa thay bằng ảnh → dùng ô media của trang bìa (bố cục tự chia cột).
+ * @returns {{ changed: boolean, element?: object, media?: { path: string, kind: 'image', aspect: number } }}
+ */
+export function applyDeco(slide, key, action, box, { ratio = 16 / 9, maxElements = L.elements } = {}) {
+  if (!slide || slide.layout === 'free' || !DECORS[key]?.pick || !['hide', 'image', 'shape'].includes(action)) return { changed: false };
+  const b = box && typeof box === 'object' ? box : {};
+  const rect = { x: num(b.x, -50, 100) ?? 40, y: num(b.y, -50, 100) ?? 30, w: num(b.w, 2, 100) ?? 20, h: num(b.h, 2, 100) ?? 20 };
+  if (action === 'image' && key === 'art' && slide.layout === 'cover') return { changed: false, media: { path: 'slot', kind: 'image', aspect: 1 } };
+  if (action === 'hide') return { changed: setDecorHidden(slide, key, true) };
+  if ((slide.elements || []).length >= maxElements) return { changed: setDecorHidden(slide, key, true), full: true };
+  setDecorHidden(slide, key, true);
+  const el =
+    action === 'shape'
+      ? newElement('shape', { ...rect, shape: DECO_SHAPE[key] || 'round', fill: key === 'vs' ? 'accent' : 'soft' })
+      : newElement('image', { ...rect, radius: key === 'vs' || key === 'art' ? 'circle' : 'md' });
+  slide.elements = slide.elements || [];
+  slide.elements.push(el);
+  return { changed: true, element: el, media: action === 'image' ? { path: `elements.${el.id}`, kind: 'image', aspect: (rect.w * ratio) / rect.h } : undefined };
+}
+
+/**
+ * Đổi kiểu phần tử chèn: ảnh ↔ hình khối (giữ vị trí, kích thước, thứ tự lớp, "hiện khi bấm").
+ * @returns {object|null} phần tử mới (cùng id) hoặc null
+ */
+export function convertElement(slide, id, to) {
+  const list = slide?.elements;
+  const k = Array.isArray(list) ? list.findIndex((e) => e.id === id) : -1;
+  if (k < 0 || !['image', 'shape'].includes(to) || list[k].type === to) return null;
+  const src = list[k];
+  if (!['image', 'shape'].includes(src.type)) return null;
+  const keep = { id: src.id, x: src.x, y: src.y, w: src.w, h: src.h, ...(src.step ? { step: true } : {}) };
+  const el =
+    to === 'shape'
+      ? newElement('shape', { ...keep, shape: src.radius === 'circle' ? 'circle' : src.radius === 'none' ? 'rect' : 'round' })
+      : newElement('image', { ...keep, radius: src.shape === 'circle' ? 'circle' : src.shape === 'rect' ? 'none' : 'md' });
+  el.id = src.id;
+  list.splice(k, 1, el);
+  return el;
+}
+
+/**
+ * Danh sách (items/steps/stats/columns/tags/images) đổi thứ tự hoặc xoá mục trên bảng điều khiển → vị trí chữ đã dời đi theo mục.
+ * op: { from, to } (đổi chỗ) | { remove } (xoá). Gọi TRƯỚC khi đổi mảng.
+ */
+export function shiftMoves(slide, list, op) {
+  if (!slide?.moves) return;
+  const re = new RegExp(`^${list}\\.(\\d+)(\\..*)?$`);
+  const next = {};
+  for (const [k, v] of Object.entries(slide.moves)) {
+    const m = re.exec(k);
+    if (!m) {
+      next[k] = v;
+      continue;
+    }
+    let i = Number(m[1]);
+    if (op.remove !== undefined) {
+      if (i === op.remove) continue;
+      if (i > op.remove) i -= 1;
+    } else if (op.from !== undefined) {
+      if (i === op.from) i = op.to;
+      else if (i === op.to) i = op.from;
+    }
+    next[`${list}.${i}${m[2] || ''}`] = v;
+  }
+  if (Object.keys(next).length) slide.moves = next;
+  else delete slide.moves;
 }

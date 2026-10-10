@@ -9,6 +9,7 @@ import { STYLES, resolveVariant } from './variants.js';
 import { SPEC_LIMITS as LIM } from './limits.js';
 import { TEXT_STYLES } from './free.js';
 import { richHtml, plainText } from './rich.js';
+import { moveAttr, hideClasses } from './layers.js';
 
 export { VARIANTS, STYLES } from './variants.js';
 import { NAMES_3D } from './bg3d.js';
@@ -67,9 +68,13 @@ const rt = (text) => richHtml(text);
 // Chế độ sửa trực tiếp (mode 'edit', chỉ khung xem trước của trình soạn thảo): gắn đường dẫn trường spec vào phần tử chữ
 // (data-e) → engine bật contenteditable và gửi nội dung sửa về ứng dụng. ml = cho phép nhiều dòng. Bản xuất không có thuộc tính này.
 // pl = trường chữ thuần (số liệu, chân trang): không có thanh định dạng, giữ nguyên ký tự gõ vào.
+// Ô chữ người dùng đã kéo dời (slide.moves — shared/deck/layers.js): thêm data-mv + `translate` ở MỌI chế độ (trình chiếu, in, xuất).
 function E(ctx, path, max, ml = false, pl = false) {
-  return ctx.edit ? ` data-e="${esc(path)}" data-max="${max}"${ml ? ' data-ml=""' : ''}${pl ? ' data-pl=""' : ''}` : '';
+  const mv = ctx.moves ? moveAttr(ctx.moves, path, ctx.W, ctx.H) : '';
+  return ctx.edit ? ` data-e="${esc(path)}" data-max="${max}"${ml ? ' data-ml=""' : ''}${pl ? ' data-pl=""' : ''}${mv}` : mv;
 }
+// Hoạ tiết bấm chọn được ở chế độ sửa (xoá / thay bằng ảnh, hình khối) — khoá theo DECORS của layers.js.
+const DC = (ctx, key) => (ctx.edit ? ` data-dc="${key}"` : '');
 // Ô media bấm được để đổi ảnh/video (chế độ sửa): path = 'slot' (ô media của trang) | 'images.N' | 'elements.<id>'.
 const M = (ctx, path) => (ctx.edit ? ` data-m="${esc(path)}"` : '');
 
@@ -178,9 +183,9 @@ function mark(it, ctx, p, fallback) {
 }
 const valueTag = (it, ctx, p) => (it.value ? `<span class="tag"${E(ctx, `${p}.value`, LIM.itemValue)}>${rt(it.value)}</span>` : '');
 
-function coreArt(ctx, iconName) {
+function coreArt(ctx, iconName, pick = true) {
   const id = `g${ctx.index}`;
-  return `<div class="cv-art" data-a="zoom" data-d="6"><svg viewBox="0 0 900 900" aria-hidden="true">
+  return `<div class="cv-art" data-a="zoom" data-d="6"${pick ? DC(ctx, 'art') : ''}><svg viewBox="0 0 900 900" aria-hidden="true">
 <defs><radialGradient id="${id}c"><stop offset="0" style="stop-color:var(--core)"/><stop offset=".38" style="stop-color:var(--accent)"/><stop offset=".78" style="stop-color:var(--accent-2);stop-opacity:.5"/><stop offset="1" style="stop-color:var(--accent-2);stop-opacity:0"/></radialGradient></defs>
 <circle cx="450" cy="450" r="436" fill="none" style="stroke:var(--line-2)" stroke-width="2" stroke-dasharray="2 16" data-loop="spin" data-p="90"/>
 <circle cx="450" cy="450" r="352" fill="none" style="stroke:var(--accent-2)" stroke-opacity=".6" stroke-width="3" stroke-dasharray="190 40 10 40" data-loop="spin" data-p="40" data-dir="-1"/>
@@ -237,7 +242,7 @@ ${chips(s.tags, 32, ctx)}
 ${s.caption ? `<div class="cv-cap" data-a="fade" data-d="44"${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</div>` : ''}
 </div>`;
     // center: chữ giữa trang; có ảnh → ảnh tràn nền, không có → hình minh hoạ mờ phía sau.
-    if (v === 'center') return `${m ? bleed(s.image, ctx) : ''}<div class="body"><div class="cv">${m ? '' : `<div class="cv-ghost">${coreArt(ctx, s.icon)}</div>`}${txt}</div></div>`;
+    if (v === 'center') return `${m ? bleed(s.image, ctx) : ''}<div class="body"><div class="cv">${m ? '' : `<div class="cv-ghost">${coreArt(ctx, s.icon, false)}</div>`}${txt}</div></div>`;
     const art = m ? slot(s, ctx, { d: 14 }) : coreArt(ctx, s.icon);
     return `<div class="body"><div class="cv">${v === 'mirror' ? art + txt : txt + art}</div></div>`;
   },
@@ -246,7 +251,7 @@ ${s.caption ? `<div class="cv-cap" data-a="fade" data-d="44"${E(ctx, 'caption', 
     const img = hasMedia(s);
     // Các biến thể (center/band/ghost) chỉ khác cách đặt số thứ tự phần → xử lý bằng CSS.
     return `<div class="body"><div class="sec${img ? ' has-media' : ''}">
-<div class="sec-no" data-a="zoom" data-d="0">${pad2(ctx.sectionNo)}</div>
+<div class="sec-no" data-a="zoom" data-d="0"${DC(ctx, 'secno')}>${pad2(ctx.sectionNo)}</div>
 <div class="sec-c">${s.kicker ? `<div class="kicker" data-a="left" data-d="6"><span${E(ctx, 'kicker', LIM.kicker)}>${rt(s.kicker)}</span></div>` : ''}
 <h2 class="sec-t" data-a="words" data-d="8" data-s="3"${E(ctx, 'title', LIM.title, true)}>${hl(s.title, s.highlight)}</h2>
 ${s.subtitle ? `<p class="sub" data-a="up" data-d="24" data-dist="40"${E(ctx, 'subtitle', LIM.subtitle, true)}>${rt(s.subtitle)}</p>` : ''}${chips(s.tags, 32, ctx)}</div>
@@ -428,7 +433,7 @@ ${st.value ? `<span class="label" data-a="up" data-d="${18 + i * 7}" data-dist="
     const img = hasMedia(s);
     // center/band chỉ khác cách đặt khối trích dẫn → CSS.
     return `${s.title || s.kicker ? head(s, ctx, { sub: false }) : ''}<div class="body"><div class="qt${img ? ' has-media' : ''}"><div class="qt-c">
-<div class="qt-mark" data-a="pop" data-d="0">“</div>
+<div class="qt-mark" data-a="pop" data-d="0"${DC(ctx, 'qmark')}>“</div>
 <blockquote class="qt-text" data-a="words" data-d="8" data-s="2"${q.text || !s.subtitle ? E(ctx, 'quote.text', LIM.quoteText, true) : E(ctx, 'subtitle', LIM.subtitle, true)}>${rt(q.text || s.subtitle || '')}</blockquote>
 ${q.author ? `<div class="qt-by" data-a="up" data-d="40" data-dist="30"><b${E(ctx, 'quote.author', LIM.quoteAuthor)}>${rt(q.author)}</b>${q.role ? `<span${E(ctx, 'quote.role', LIM.quoteAuthor)}>${rt(q.role)}</span>` : ''}</div>` : ''}
 </div>${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
@@ -447,10 +452,10 @@ ${c.subtitle ? `<span class="label"${E(ctx, `columns.${i}.subtitle`, LIM.colSubt
     };
     if (v === 'split' && two) {
       // Hai nửa trang đối lập, mũi tên chuyển đổi ở giữa (vị trí ở lớp ngoài, hiệu ứng ở lớp trong — engine ghi đè transform).
-      return `${head(s, ctx)}<div class="body"><div class="cmp-split">${colHtml(cols[0], 0)}${colHtml(cols[1], 1)}<div class="cmp-mid"><span data-a="pop" data-d="30">${icon('arrow')}</span></div></div></div>`;
+      return `${head(s, ctx)}<div class="body"><div class="cmp-split">${colHtml(cols[0], 0)}${colHtml(cols[1], 1)}<div class="cmp-mid"${DC(ctx, 'vs')}><span data-a="pop" data-d="30">${icon('arrow')}</span></div></div></div>`;
     }
     const inner = two
-      ? `${colHtml(cols[0], 0)}<div class="vs" data-a="pop" data-d="30">VS</div>${colHtml(cols[1], 1)}`
+      ? `${colHtml(cols[0], 0)}<div class="vs" data-a="pop" data-d="30"${DC(ctx, 'vs')}>VS</div>${colHtml(cols[1], 1)}`
       : cols.map(colHtml).join('');
     return `${head(s, ctx)}<div class="body"><div class="cmp${two ? ' two' : ''}" style="--cols:${Math.max(1, cols.length)}">${inner}</div></div>`;
   },
@@ -631,7 +636,7 @@ export function deckParts(spec, opts) {
 
   const slideHtml = slides.map((s, index) => {
     if (s.layout === 'section') sectionNo += 1;
-    const ctx = { W, H, index, total, sectionNo, assetUrl, assetMeta: opts.assetMeta, videoEmbed: opts.videoEmbed, edit };
+    const ctx = { W, H, index, total, sectionNo, assetUrl, assetMeta: opts.assetMeta, videoEmbed: opts.videoEmbed, edit, moves: s.moves || null };
     const fn = L[s.layout] || L.bullets;
     const v = resolveVariant(s, W / H);
     const lg = logoOn(logo, s) ? logo : null;
@@ -644,7 +649,7 @@ export function deckParts(spec, opts) {
     const ft = s.layout === 'cover' ? '' : `<div class="ft${inFooter ? ` ft-lg ft-${lg.pos}` : ''}">${ftInner}</div>`;
     const abs = lg && !inFooter ? logoImg(lg, `lg-${lg.pos}`) : '';
     const b = brandFor(brand, s, tone);
-    const cls = `${lg ? ` lg-${lg.top ? 'top' : 'bot'}` : ''}${b.cls}`;
+    const cls = `${lg ? ` lg-${lg.top ? 'top' : 'bot'}` : ''}${b.cls}${hideClasses(s.hide)}`;
     const vars = `${lg ? `--lw:${lg.w}px;--lh:${lg.h}px;` : ''}${b.vars}`;
     const style = vars ? ` style="${vars}"` : '';
     // Lớp phần tử chèn thêm (ảnh, logo, chữ…) phía trên bố cục — trang tự do đã tự vẽ phần tử của nó.

@@ -43,6 +43,11 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 // "Áp cho mọi trang" ở mục Trình chiếu của trang đang chọn.
+// "Áp cho mọi trang" ở mục Hoạ tiết & vị trí chữ.
+function onDecorAll(hide) {
+  const n = ed.setDecorAll(hide)
+  toast.success(hide.length ? `Đã áp hoạ tiết cho ${n} trang` : `Đã hiện lại hoạ tiết trên ${n} trang`)
+}
 function onBuildAll(build) {
   const n = ed.setBuildAll(build)
   toast.success(`Đã áp cách trình chiếu cho ${n} trang`)
@@ -58,7 +63,7 @@ const listPath = computed(() => NAV_ROUTE[deckNav(deck.value)])
 
 const frame = ref(null)
 const sm = useSlideMedia(draft, selected)
-const live = useLiveDeck(frame, { draft, deck, selected, assets: ed.assets, onMedia: sm.open, onSave: () => onSave() })
+const live = useLiveDeck(frame, { draft, deck, selected, assets: ed.assets, onMedia: sm.open, onSave: () => onSave(), onNotice: (t) => toast.info(t) })
 // Phần tử trang tự do đang chọn (chỉ khi thuộc trang đang mở).
 const selectedElId = computed(() => (live.selectedEl.value?.index === selected.value ? live.selectedEl.value.id : ''))
 const isFree = computed(() => slide.value?.layout === 'free')
@@ -319,7 +324,7 @@ onMounted(ed.load)
             <p class="mt-2 flex items-center gap-1 text-[12px] text-[var(--mds-text-secondary)]">
               <MIcon name="info-circle" :size="16" />
               <span v-if="isFree">Kéo phần tử để di chuyển, kéo góc để đổi cỡ (Shift giữ tỷ lệ, Alt tắt hít lề) · bấm đúp để sửa chữ/đổi ảnh · Delete xóa · Ctrl+D nhân bản.</span>
-              <span v-else>Bấm vào chữ để sửa · bôi chữ để đổi màu, in đậm, VIẾT HOA · Enter xuống dòng · bấm ảnh/biểu tượng để đổi · <strong>Ctrl+S</strong> để lưu.</span>
+              <span v-else>Bấm vào chữ để sửa · kéo tay nắm bên trái ô chữ để dời, A+/A− đổi cỡ chữ · bôi chữ để đổi màu, in đậm · bấm ảnh/biểu tượng để đổi · bấm hoạ tiết để xoá/thay · <strong>Ctrl+S</strong> để lưu.</span>
             </p>
           </div>
         </section>
@@ -346,7 +351,7 @@ onMounted(ed.load)
                 :deck-logo="draft.spec.logo"
                 @media="(m) => sm.open({ ...m, index: selected })"
               />
-              <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="ed.assets.value" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" :ratio="deck.ratio" :asset-url="ed.assetUrl" studio @change-layout="ed.changeLayout" @build-all="onBuildAll" @media="(m) => sm.open({ ...m, index: selected })" />
+              <SlideFields v-if="slide" :key="slide.id || selected" :slide="slide" :assets="ed.assets.value" :upload="ed.uploadImage" :media="media" :video-library="videoLibrary" :ratio="deck.ratio" :asset-url="ed.assetUrl" studio @change-layout="ed.changeLayout" @build-all="onBuildAll" @decor-all="onDecorAll" @media="(m) => sm.open({ ...m, index: selected })" />
             </template>
             <div v-else class="flex flex-col gap-4">
               <DesignPanel v-model:footer="draft.spec.footer" :design="draft.spec" :media="media" :title="draft.title" :subtitle="draft.spec.slides[0]?.subtitle || ''" :ratio="deck.ratio" />

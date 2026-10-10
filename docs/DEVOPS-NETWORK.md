@@ -121,6 +121,7 @@ Chỉ container **`app`** gọi ra Internet. MySQL và Nginx **không** cần ra
 - Không gửi telemetry: onnxruntime (tách nền logo) đã tắt telemetry Microsoft; mô hình AI tách nền nằm sẵn trong image (`models/`), không tải lúc chạy.
 - Chromium (xuất PDF, ảnh đại diện) chạy trong container và **chặn mọi request mạng**, chỉ render HTML nội bộ.
 - Phông chữ, gói 3D three.js đóng gói sẵn, không tải từ CDN.
+- LibreOffice (headless, có trong image) chỉ dùng để render trang PPTX/DOCX/ODP/ODT thành ảnh khi nhận diện sơ đồ / ảnh giao diện: chạy cục bộ, tệp được **gỡ mọi liên kết ra ngoài** trước khi mở (ảnh liên kết, trường INCLUDEPICTURE/LINK/DDE, macro) và tiến trình chạy với proxy giả trỏ về `127.0.0.1:9` → không phát sinh kết nối ra ngoài, **không cần mở thêm tên miền nào**.
 
 ### 2.4. Lưu ý về proxy ra ngoài
 
@@ -150,7 +151,7 @@ Chỉ cần lúc `docker compose build` (không cần lúc chạy):
 |---|---|
 | `registry-1.docker.io`, `auth.docker.io`, `production.cloudflare.docker.com` | Kéo image `node:24-bookworm-slim`, `mysql:8.4`, `nginx:1.28-alpine` |
 | `registry.npmjs.org` | `npm ci` (gồm binary `sharp` cho Linux) |
-| `deb.debian.org` | `apt-get install chromium poppler-utils fonts-… tini` |
+| `deb.debian.org` | `apt-get install chromium poppler-utils libreoffice-impress-nogui libreoffice-writer-nogui fonts-… tini` (LibreOffice làm image tăng lên ~2 GB) |
 
 Không muốn mở các tên miền này trên máy chủ: build image ở máy CI/build rồi đẩy lên registry nội bộ MISA; khi đó máy chủ chỉ cần kéo image từ registry nội bộ.
 

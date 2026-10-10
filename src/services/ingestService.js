@@ -1,7 +1,9 @@
 // Thu thập nội dung nguồn cho AI: nhiều tệp tải lên (tổng ≤ MAX_UPLOAD_MB), đường link tài liệu
 // (kể cả Google Slides/Docs/Sheets/Drive) hoặc văn bản nhập tay.
-// Kết quả: { pieces: [{label,text}], media: [{kind:'pdf'|'audio', name, size, mime, path?|buffer?}], images: [{buffer,name,hint}] }
-//   pieces = văn bản đọc được ngay; media = PDF/ghi âm để Gemini đọc (OCR) / nghe; ảnh chưa chuẩn hoá.
+// Kết quả: { pieces: [{label,text}], media: [{kind:'pdf'|'audio', name, size, mime, path?|buffer?}], images: [{buffer,name,hint}],
+//            docs: [{ name, ext:'pptx'|'docx'|'odp'|'odt', buffer }] }
+//   pieces = văn bản đọc được ngay; media = PDF/ghi âm để Gemini đọc (OCR) / nghe; ảnh chưa chuẩn hoá;
+//   docs = tài liệu trình bày/văn bản Office gốc — render thành trang (LibreOffice) để cắt sơ đồ, ảnh giao diện (visualService).
 // An toàn: nhận diện loại tệp bằng magic bytes; giới hạn zip-bomb; mọi link đi qua safeFetch (chặn SSRF).
 import { open, readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
@@ -275,12 +277,21 @@ export async function readBuffer(buffer, name, limits, kind = sniff(buffer)) {
   if (kind === 'zip') {
     const zip = await openZip(buffer);
     let doc;
-    if (zip.file('ppt/presentation.xml')) doc = await readPptx(zip);
-    else if (zip.file('word/document.xml')) doc = await readDocx(zip);
-    else if (zip.file('xl/workbook.xml')) doc = await readXlsx(zip);
-    else if (zip.file('content.xml') && zip.file('mimetype')) doc = await readOdf(zip);
-    else throw unsupported(name);
-    return { pieces: doc.text ? [{ label, text: doc.text }] : [], images: doc.images.map((im) => ({ ...im, hint: `${im.hint} (${label})` })), media: [] };
+    let ext = '';
+    if (zip.file('ppt/presentation.xml')) {
+      doc = await readPptx(zip);
+      ext = 'pptx';
+    } else if (zip.file('word/document.xml')) {
+      doc = await readDocx(zip);
+      ext = 'docx';
+    } else if (zip.file('xl/workbook.xml')) doc = await readXlsx(zip);
+    else if (zip.file('content.xml') && zip.file('mimetype')) {
+      doc = await readOdf(zip);
+      const mt = await zip.file('mimetype').async('string');
+      ext = /opendocument\.presentation/.test(mt) ? 'odp' : /opendocument\.text/.test(mt) ? 'odt' : '';
+    } else throw unsupported(name);
+    // Slide/văn bản: giữ tệp gốc để render trang → cắt sơ đồ vẽ bằng hình khối/SmartArt + ảnh giao diện (ảnh nhúng không thấy được).
+    return { pieces: doc.text ? [{ label, text: doc.text }] : [], images: doc.images.map((im) => ({ ...im, hint: `${im.hint} (${label})` })), media: [], docs: ext ? [{ name: label, ext, buffer }] : [] };
   }
   if (IMAGE_TYPES.has(kind)) return { pieces: [], media: [], images: [{ name: label, hint: `ảnh tải lên "${label}"`, buffer }] };
   if (kind === 'text') {
@@ -293,11 +304,12 @@ export async function readBuffer(buffer, name, limits, kind = sniff(buffer)) {
   throw unsupported(name, kind);
 }
 
-const EMPTY = () => ({ pieces: [], media: [], images: [] });
+const EMPTY = () => ({ pieces: [], media: [], images: [], docs: [] });
 function merge(into, part) {
   into.pieces.push(...part.pieces);
   into.media.push(...part.media);
   into.images.push(...part.images);
+  into.docs.push(...(part.docs || []));
   return into;
 }
 

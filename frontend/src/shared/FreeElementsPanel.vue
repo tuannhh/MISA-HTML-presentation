@@ -169,6 +169,11 @@ function delCol() {
 
       <MSwitch :model-value="!!el.step" label="Hiện khi bấm (trình chiếu từng phần)" @update:model-value="setStep" />
 
+      <!-- Đổi qua lại ảnh ↔ hình khối (giữ vị trí, kích thước) — vd. hoạ tiết đã thay bằng hình khối, muốn đổi sang ảnh. -->
+      <MButton v-if="el.type === 'image' || el.type === 'shape'" variant="outline" class="self-start" @click="live.convertElement(idx, el.id, el.type === 'image' ? 'shape' : 'image')">
+        <template #icon><MIcon :name="el.type === 'image' ? 'square-rounded' : 'photo'" :size="16" /></template>{{ el.type === 'image' ? 'Đổi thành hình khối' : 'Đổi thành ảnh' }}
+      </MButton>
+
       <!-- Chữ -->
       <template v-if="el.type === 'text'">
         <FormField label="Nội dung" hint="Hoặc bấm đúp vào chữ trên khung xem trước để sửa trực tiếp">

@@ -119,12 +119,16 @@ export function loadConfig() {
       generationConcurrency: int('GENERATION_CONCURRENCY', 2, { min: 1, max: 8 }),
       renderConcurrency: int('RENDER_CONCURRENCY', 2, { min: 1, max: 8 }),
     }),
-    // Cắt ảnh giao diện phần mềm từ PDF nguồn (render trang bằng poppler pdftoppm → AI khoanh vùng → cắt) để đưa vào bài.
-    pdfShots: Object.freeze({
+    // Nhận diện + cắt ảnh giao diện phần mềm và sơ đồ từ tư liệu (visualService): render trang PDF (poppler pdftoppm), PPTX/DOCX/ODP/ODT
+    // (LibreOffice → PDF) → AI khoanh vùng, phân loại → cắt để đưa nguyên vẹn vào bài. Tên biến PDF_UI_SHOTS* giữ từ bản chỉ cắt PDF.
+    visuals: Object.freeze({
       enabled: bool('PDF_UI_SHOTS', true),
       bin: str('PDFTOPPM_PATH', 'pdftoppm'),
+      office: bool('OFFICE_VISUALS', true),
+      soffice: str('SOFFICE_PATH', 'soffice'),
+      officeTimeoutMs: int('OFFICE_RENDER_TIMEOUT_MS', 120000, { min: 10000, max: 600000 }),
       maxPages: int('PDF_UI_SHOT_PAGES', 40, { min: 1, max: 200 }),
-      maxShots: int('PDF_UI_SHOTS_MAX', 16, { min: 0, max: 60 }),
+      maxShots: int('PDF_UI_SHOTS_MAX', 24, { min: 0, max: 60 }),
     }),
     chromePath: str('CHROME_PATH', ''),
     // Trong container chạy user không đặc quyền, sandbox của Chromium cần user namespace → tắt có kiểm soát (chỉ nạp HTML nội bộ, chặn mạng).

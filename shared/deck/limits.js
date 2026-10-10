@@ -37,6 +37,8 @@ export const SPEC_LIMITS = Object.freeze({
   tableRows: 12,
   tableCols: 8,
   cell: 300,
+  // Tinh chỉnh tay trên trang có bố cục (shared/deck/layers.js): số ô chữ dời được mỗi trang.
+  moves: 40,
   // Ảnh do AI tạo (Nano Banana) theo câu lệnh người dùng; tìm ảnh trên Internet theo từ khoá.
   aiPrompt: 1000,
   searchQuery: 100,
