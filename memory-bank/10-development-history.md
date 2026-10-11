@@ -1,5 +1,9 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-11 — Bỏ đăng ký trên màn đăng nhập
+
+Chủ dự án: bản chạy trên server MISA sẽ dùng đăng nhập bảo mật của MISA (DevOps cài) → bỏ tính năng đăng ký. Đã gỡ trang `/register` (desktop + mobile), liên kết "Đăng ký", câu phụ đề; logo "MISA Presentation" chuyển vào trong thẻ đăng nhập (desktop). `SELF_REGISTRATION` mặc định `false` (API `/register` chỉ để smoke test, phải bật tạm khi chạy smoke). Đã kiểm bằng Chrome desktop 1440px + mobile; chưa commit.
+
 ## 2026-10-11 — Dời chữ + cỡ chữ, xoá / thay hoạ tiết, nhận diện sơ đồ + ảnh giao diện
 
 ### Yêu cầu (chủ dự án)

@@ -2,7 +2,7 @@
 import { reactive } from 'vue';
 import { get, post, setCsrf } from './api.js';
 
-export const session = reactive({ loaded: false, user: null, config: { selfRegistration: true, allowedEmailDomains: [] } });
+export const session = reactive({ loaded: false, user: null, config: { allowedEmailDomains: [] } });
 
 export async function loadSession() {
   const [me, cfg] = await Promise.all([get('/api/auth/me'), get('/api/auth/config').catch(() => null)]);
@@ -14,12 +14,6 @@ export async function loadSession() {
 
 export async function login(email, password) {
   const res = await post('/api/auth/login', { email, password });
-  session.user = res.data.user;
-  return res.data.user;
-}
-
-export async function register(payload) {
-  const res = await post('/api/auth/register', payload);
   session.user = res.data.user;
   return res.data.user;
 }

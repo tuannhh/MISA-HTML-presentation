@@ -88,7 +88,7 @@ export function loadConfig() {
       apiKey: str('GOOGLE_API_KEY'),
     }),
     auth: Object.freeze({
-      selfRegistration: bool('SELF_REGISTRATION', true),
+      selfRegistration: bool('SELF_REGISTRATION', false),
       allowedEmailDomains: list('ALLOWED_EMAIL_DOMAINS', ['misa.com.vn']),
       bcryptRounds: int('BCRYPT_ROUNDS', 12, { min: 4, max: 15 }),
     }),

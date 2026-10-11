@@ -30,7 +30,7 @@ Khi `IP_ALLOWLIST` có giá trị: mọi đường dẫn (trừ 2 route health) 
 | GET | `/config` | Công khai | — | `{ selfRegistration, allowedEmailDomains[] }` |
 | GET | `/csrf` | Công khai | — | `{ token }` |
 | GET | `/me` | Công khai | — | `{ user \| null, csrfToken }` |
-| POST | `/register` | Khách | `email, password, displayName` | 201 `{ user, csrfToken }` — tạo phiên luôn. 403 nếu tắt đăng ký hoặc domain không cho phép |
+| POST | `/register` (mặc định TẮT, không có giao diện) | Khách | `email, password, displayName` | 201 `{ user, csrfToken }` — tạo phiên luôn. 403 nếu tắt đăng ký hoặc domain không cho phép |
 | POST | `/login` | Khách | `email, password` | `{ user, csrfToken }`. Sai → 401 chung "Email hoặc mật khẩu không đúng" |
 | POST | `/logout` | — | — | Huỷ phiên, xoá cookie |
 | POST | `/change-password` | Đăng nhập (cho phép cả khi `mustChangePassword`) | `currentPassword, newPassword` | Tăng `session_version` → mọi phiên khác bị đăng xuất; phiên hiện tại được cấp lại |

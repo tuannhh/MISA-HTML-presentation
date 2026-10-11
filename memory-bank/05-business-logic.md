@@ -185,7 +185,7 @@ Kích thước canvas (`RATIO_SIZES`): 16:9 = 2560×1440, 4:3 = 1920×1440, 2:1 
 
 ## 6. Tài khoản
 
-- Tự đăng ký: bật/tắt bằng `SELF_REGISTRATION`, chỉ domain trong `ALLOWED_EMAIL_DOMAINS` (để trống = mọi domain).
+- Giao diện **không còn đăng ký** (2026-10-11; bản MISA dùng đăng nhập bảo mật do DevOps cài). `SELF_REGISTRATION` mặc định `false`, chỉ mở API `/register` cho smoke test (bật tạm khi chạy smoke); khi bật: chỉ domain trong `ALLOWED_EMAIL_DOMAINS` (để trống = mọi domain).
 - Admin tạo tài khoản / đặt lại mật khẩu → mật khẩu tạm hiển thị **một lần** → người dùng bắt buộc đổi (router chặn mọi trang khác, API trả `MUST_CHANGE_PASSWORD`).
 - Admin đầu tiên: `npm run create-admin -- email "Họ tên"` (xem `07`).
 - Không thể tự khoá/tự hạ quyền; luôn còn ít nhất 1 admin active (`LAST_ADMIN`).

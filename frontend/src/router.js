@@ -14,7 +14,6 @@ const Holder = { render: () => h('div') };
 const routes = [
   { path: '/', redirect: '/decks' },
   { path: '/login', component: Holder, meta: { guest: true, title: 'Đăng nhập', ...pair(() => import('./desktop/LoginPage.vue'), () => import('./mobile/LoginPage.vue')) } },
-  { path: '/register', component: Holder, meta: { guest: true, title: 'Đăng ký', ...pair(() => import('./desktop/RegisterPage.vue'), () => import('./mobile/RegisterPage.vue')) } },
   { path: '/change-password', component: Holder, meta: { auth: true, allowMustChange: true, title: 'Đổi mật khẩu', ...pair(() => import('./desktop/ChangePasswordPage.vue'), () => import('./mobile/ChangePasswordPage.vue')) } },
   { path: '/decks', component: Holder, meta: { auth: true, nav: 'mine', title: 'Bài của tôi', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },
   { path: '/shared', component: Holder, meta: { auth: true, nav: 'shared', title: 'Được chia sẻ với tôi', ...pair(() => import('./desktop/DecksPage.vue'), () => import('./mobile/DecksPage.vue')) } },

@@ -48,7 +48,7 @@ Vai trò trên **từng bài** (2026-10-07, `05` §4) tính theo `deck.access` (
 | Route | Trang | Khách | user | admin | Desktop | Mobile |
 |---|---|---|---|---|---|---|
 | `/` | — | ↪ `/login` | ↪ `/decks` | ↪ `/decks` | — | — |
-| `/login`, `/register` | Đăng nhập / Đăng ký | ✅ | ↪ `/decks` | ↪ `/decks` | AuthLayout | MobileShell, không bottom nav |
+| `/login` | Đăng nhập (không còn đăng ký — 2026-10-11) | ✅ | ↪ `/decks` | ↪ `/decks` | AuthLayout | MobileShell, không bottom nav |
 | `/change-password` | Đổi mật khẩu (bắt buộc hoặc tự chọn) | ↪ `/login` | ✅ | ✅ | AuthLayout (forced) / DesktopShell | MobileShell, footer sticky |
 | `/decks` | Bài của tôi | ↪ `/login?next=` | ✅ | ✅ | Lưới thẻ + tab + tìm kiếm + phân trang | Danh sách hàng + ActionSheet; bottom nav "Bài của tôi" |
 | `/shared` | Được chia sẻ với tôi | ↪ login | ✅ | ✅ | như trên, tab thứ 2; thẻ có tag "Chỉnh sửa"/"Chỉ xem" + tên chủ bài; bấm thẻ: người sửa → `/edit`, người xem → `/view` | như trên; bottom nav "Chia sẻ" (aria "Bài được chia sẻ với tôi") |

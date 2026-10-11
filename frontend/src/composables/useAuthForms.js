@@ -1,7 +1,7 @@
-// Form đăng nhập / đăng ký / đổi mật khẩu — validate phía giao diện khớp chính sách server (10–128 ký tự, có chữ và số).
+// Form đăng nhập / đổi mật khẩu — validate phía giao diện khớp chính sách server (10–128 ký tự, có chữ và số).
 import { reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { session, login, register, changePassword } from '@/lib/session.js';
+import { session, login, changePassword } from '@/lib/session.js';
 import { safeNext } from '@/router.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -50,39 +50,6 @@ export function useLoginForm() {
       after(await login(form.email, form.password));
     } catch (err) {
       formError.value = err.message;
-    } finally {
-      submitting.value = false;
-    }
-  }
-  return { form, errors, submitting, formError, submit };
-}
-
-export function useRegisterForm() {
-  const form = reactive({ displayName: '', email: '', password: '', confirm: '' });
-  const errors = reactive({});
-  const submitting = ref(false);
-  const formError = ref('');
-  const after = useAfterAuth();
-
-  async function submit() {
-    clear(errors);
-    formError.value = '';
-    form.email = form.email.trim();
-    form.displayName = form.displayName.trim();
-    if (form.displayName.length < 2) errors.displayName = 'Nhập họ tên (tối thiểu 2 ký tự)';
-    else if (form.displayName.length > 120) errors.displayName = 'Họ tên tối đa 120 ký tự';
-    if (!EMAIL_RE.test(form.email)) errors.email = 'Nhập email hợp lệ';
-    else if (domainProblem(form.email)) errors.email = domainProblem(form.email);
-    const pw = passwordProblem(form.password);
-    if (pw) errors.password = pw;
-    if (form.confirm !== form.password) errors.confirm = 'Mật khẩu nhập lại không khớp';
-    if (Object.keys(errors).length) return;
-    submitting.value = true;
-    try {
-      after(await register({ email: form.email, password: form.password, displayName: form.displayName }));
-    } catch (err) {
-      if (err.code === 'EMAIL_TAKEN') errors.email = err.message;
-      else formError.value = err.message;
     } finally {
       submitting.value = false;
     }
