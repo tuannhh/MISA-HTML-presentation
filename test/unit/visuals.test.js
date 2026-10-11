@@ -232,3 +232,18 @@ test('renderer: ảnh trọn khung → tấm nền trắng đúng tỷ lệ asse
   assert.match(html, /<figcaption>Quản lý người dùng<\/figcaption>/);
   assert.equal((html.match(/class="media plate/g) || []).length, 1, 'ảnh chụp thật vẫn hiển thị kiểu cover');
 });
+
+test('F10: môi trường truyền cho LibreOffice/pdftoppm không chứa khoá/bí mật của ứng dụng', async () => {
+  const { toolEnv } = await import('../../src/services/visualService.js');
+  const keep = { ...process.env };
+  Object.assign(process.env, { GEMINI_API_KEY: 'k-secret', SESSION_SECRET: 's-secret', DB_PASSWORD: 'p-secret', GOOGLE_API_KEY: 'g-secret', PATH: process.env.PATH || '/usr/bin' });
+  try {
+    const env = toolEnv({ HOME: '/tmp/x' });
+    assert.equal(env.HOME, '/tmp/x');
+    assert.ok(env.PATH);
+    assert.ok(!JSON.stringify(env).includes('secret'), JSON.stringify(Object.keys(env)));
+    assert.deepEqual(Object.keys(env).filter((k) => /KEY|SECRET|PASSWORD|TOKEN/i.test(k)), []);
+  } finally {
+    for (const k of ['GEMINI_API_KEY', 'SESSION_SECRET', 'DB_PASSWORD', 'GOOGLE_API_KEY']) if (!(k in keep)) delete process.env[k];
+  }
+});

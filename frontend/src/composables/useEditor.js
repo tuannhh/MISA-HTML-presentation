@@ -23,6 +23,9 @@ export function useEditor(id, { onOutline } = {}) {
   const selected = ref(0);
   const previewKey = ref(Date.now());
   let pollTimer = null;
+  // Phiên bản máy chủ mà BẢN NHÁP xuất phát từ đó. Lưu luôn gửi phiên bản này (không phải phiên bản mới nhất của `deck`):
+  // nếu người khác đã lưu trong lúc mình sửa thì máy chủ trả 409 thay vì bị ghi đè lặng lẽ.
+  let draftVersion = null;
 
   const dirty = computed(() => !!draft.value && JSON.stringify({ t: draft.value.title, s: draft.value.spec }) !== baseline.value);
   const slide = computed(() => draft.value?.spec?.slides?.[selected.value] || null);
@@ -37,12 +40,15 @@ export function useEditor(id, { onOutline } = {}) {
     return [...out.values()];
   });
 
+  const snapshot = () => JSON.stringify({ t: draft.value?.title, s: draft.value?.spec });
+
   function adopt(d) {
     deck.value = d;
     assets.value = d.assets || [];
     if (['outlining', 'outline'].includes(d.status) && d.isOwner) onOutline?.(d);
     if (d.status === 'ready' && d.spec) {
       draft.value = { title: d.title, spec: withDesignDefaults(clone(d.spec)) };
+      draftVersion = d.specVersion;
       baseline.value = JSON.stringify({ t: draft.value.title, s: draft.value.spec });
       if (selected.value >= d.spec.slides.length) selected.value = Math.max(0, d.spec.slides.length - 1);
     }
@@ -58,6 +64,7 @@ export function useEditor(id, { onOutline } = {}) {
       pendingDrafts.delete(id);
       if (kept && kept.specVersion === deck.value.specVersion) {
         draft.value = kept.draft;
+        draftVersion = kept.specVersion;
         selected.value = Math.min(kept.selected, kept.draft.spec.slides.length - 1);
       }
       schedulePoll();
@@ -90,9 +97,14 @@ export function useEditor(id, { onOutline } = {}) {
     try {
       const spec = prepareSpecForSave(draft.value.spec);
       spec.title = draft.value.title.trim() || spec.title;
-      const body = { spec, specVersion: deck.value.specVersion };
+      const body = { spec, specVersion: draftVersion ?? deck.value.specVersion };
       if (draft.value.title !== deck.value.title) body.title = draft.value.title.trim();
-      adopt((await patch(`/api/presentations/${id}`, body)).data);
+      const sent = snapshot();
+      const res = (await patch(`/api/presentations/${id}`, body)).data;
+      // Người dùng gõ thêm trong lúc chờ phản hồi → giữ bản nháp mới (nền = bản vừa lưu, nên vẫn "chưa lưu"), không để bản máy chủ đè mất.
+      const typed = snapshot() !== sent ? clone(draft.value) : null;
+      adopt(res);
+      if (typed) draft.value = typed;
       // Khung xem trước đã hiển thị bản nháp (dựng trực tiếp) → không cần tải lại khung sau khi lưu.
       return true;
     } catch (err) {
@@ -117,8 +129,13 @@ export function useEditor(id, { onOutline } = {}) {
   // Đổi thuộc tính lưu ngay (tỷ lệ, chia sẻ) — không làm mất bản nháp nội dung đang sửa.
   async function updateMeta(fields) {
     const keep = dirty.value ? clone(draft.value) : null;
+    const keepVersion = draftVersion;
     adopt((await patch(`/api/presentations/${id}`, fields)).data);
-    if (keep) draft.value = keep;
+    if (keep) {
+      // Bản nháp vẫn xuất phát từ phiên bản cũ: nếu người khác đã lưu trong lúc đó, lần lưu sau phải báo xung đột.
+      draft.value = keep;
+      draftVersion = keepVersion;
+    }
     if (fields.ratio) previewKey.value = Date.now();
   }
 
@@ -201,7 +218,7 @@ export function useEditor(id, { onOutline } = {}) {
   };
   window.addEventListener('beforeunload', onBeforeUnload);
   onBeforeUnmount(() => {
-    if (dirty.value) pendingDrafts.set(id, { specVersion: deck.value.specVersion, draft: clone(draft.value), selected: selected.value });
+    if (dirty.value) pendingDrafts.set(id, { specVersion: draftVersion ?? deck.value.specVersion, draft: clone(draft.value), selected: selected.value });
     clearTimeout(pollTimer);
     window.removeEventListener('beforeunload', onBeforeUnload);
   });

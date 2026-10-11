@@ -12,7 +12,7 @@
 - `docker compose up -d --build` — triển khai; `docker compose exec app node scripts/create-admin.js <email> "<Tên>"`.
 
 ## Bắt buộc
-- Chuẩn backend: `C:\MISA-project\xoan-backend-standard`. Chuẩn giao diện: MDS 2.0 `C:\MISA-project\misa-design-system-skill` (composition mobile cho mọi route × vai trò).
+- Chuẩn backend: MISA Backend Standard (`~/.claude/skills/misa-backend-standard`, nguồn `/Users/tuanbui/BackEnd.SKILL`). Chuẩn giao diện: MDS 2.0 (`~/.claude/skills/misa-design-system`). Ứng dụng chạy độc lập trên máy chủ MISA, không nằm trong AMIS Platform → bỏ các nút chức năng chờ tích hợp (9 chấm, AVA, chat, thông báo); bản rút gọn tương đương `~/.claude/skills/xoan-design-system` (composition mobile cho mọi route × vai trò).
 - Không đọc/in/commit secret (`.env`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `SESSION_SECRET`).
 - Mọi truy vấn theo tenant qua `tenantClause`; spec luôn qua `normalizeSpec` + `dropForeignAssets`; chuỗi vào HTML qua `esc()`.
 - Sau mỗi thay đổi: cập nhật `memory-bank/` (tệp liên quan + `10-development-history.md`).

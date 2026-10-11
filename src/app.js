@@ -80,9 +80,9 @@ export function createApp({ config, pool, repos, services }) {
     }
   });
 
-  const limits = rateLimits();
+  const limits = rateLimits(config.rate);
   const api = express.Router();
-  api.use(limits.api);
+  api.use(limits.apiIp);
   api.use(express.json({ limit: '2mb' }));
   api.use(
     session({
@@ -97,6 +97,7 @@ export function createApp({ config, pool, repos, services }) {
     }),
   );
   api.use(loadUser(repos.users));
+  api.use(limits.api);
   api.use(csrfProtection(config));
   api.use('/auth', authRoutes({ auth: services.auth, users: repos.users, limits }));
   api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, sharing: services.sharing, config, limits }));

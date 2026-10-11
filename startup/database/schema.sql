@@ -2,6 +2,8 @@
 -- Idempotent: chạy lại nhiều lần không lỗi. Mọi thay đổi sau này: thêm 1 file vào changelogs/
 -- ĐỒNG THỜI cập nhật file này. Ứng dụng KHÔNG tự chạy file này lúc khởi động (chỉ kiểm tra bảng).
 -- Docker: container MySQL tự áp file này ở lần khởi tạo volume đầu tiên (docker-entrypoint-initdb.d).
+-- TÊN DATABASE: 2 dòng CREATE DATABASE/USE bên dưới đang ghi cứng `misa_presentation`. Nếu DevOps đặt DB_NAME khác, đổi CẢ 2 dòng
+-- cho khớp DB_NAME (nếu không bảng sẽ nằm sai database và ứng dụng báo "thiếu bảng" khi khởi động).
 
 CREATE DATABASE IF NOT EXISTS misa_presentation
   DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_0900_ai_ci;

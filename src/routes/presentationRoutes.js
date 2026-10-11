@@ -1,13 +1,14 @@
 // /api/presentations — danh sách (của tôi / công khai), tạo dàn ý bằng AI, lưu dàn ý, dựng bài, xem, sửa, xoá, nhân bản,
 // media (ảnh, logo + tách nền, video, YouTube), xem trước, xuất.
 import { Router } from 'express';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
 import { deckCsp } from '../middleware/security.js';
 import { ok, pick, paging, uuidParam } from '../lib/validate.js';
 import { tooLarge, notFound } from '../lib/httpError.js';
 import { isUuid } from '../repositories/tenantScope.js';
+import { cappedDiskStorage } from '../lib/cappedDiskStorage.js';
 
 // Tên file tải về: bỏ ký tự cấm, kèm filename* UTF-8 để giữ tiếng Việt.
 function disposition(title, ext) {
@@ -24,7 +25,8 @@ export function presentationRoutes({ service, templates, sharing, config, limits
   const UTF8_NAMES = { defParamCharset: 'utf8' };
   const upload = multer({
     ...UTF8_NAMES,
-    storage: multer.diskStorage({ destination: config.storage.uploadDir, filename: (_req, _file, cb) => cb(null, randomUUID()) }),
+    // Đếm byte thực nhận của CẢ request (tư liệu + media + ảnh bìa): trần = tổng tệp + phần dư cho ảnh bìa video.
+    storage: cappedDiskStorage({ destination: config.storage.uploadDir, maxBytes: maxSourceBytes + 20 * 1048576, message: `Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB` }),
     limits: { fileSize: maxSourceBytes, files: config.limits.maxUploadFiles + config.limits.maxCreateMedia + config.limits.maxVideosPerDeck, fields: 20, fieldSize: config.limits.maxTextChars * 4 },
   }).fields([
     { name: 'files', maxCount: config.limits.maxUploadFiles },
@@ -45,7 +47,7 @@ export function presentationRoutes({ service, templates, sharing, config, limits
   const maxVideoBytes = config.limits.maxVideoMb * 1048576;
   const videoUpload = multer({
     ...UTF8_NAMES,
-    storage: multer.diskStorage({ destination: config.storage.uploadDir, filename: (_req, _file, cb) => cb(null, randomUUID()) }),
+    storage: cappedDiskStorage({ destination: config.storage.uploadDir, maxBytes: maxVideoBytes + 20 * 1048576, message: `Video tối đa ${config.limits.maxVideoMb} MB` }),
     limits: { fileSize: maxVideoBytes, files: 2, fields: 5 },
   }).fields([{ name: 'file', maxCount: 1 }, { name: 'poster', maxCount: 1 }]);
   const capVideoBody = (req, _res, next) => {

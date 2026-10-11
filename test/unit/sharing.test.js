@@ -2,7 +2,7 @@
 // SQL thật (khoá dòng khi handoff, bản gốc duy nhất) được kiểm ở smoke test trên MySQL.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSharingService, MAX_HANDOFFS } from '../../src/services/sharingService.js';
+import { createSharingService, MAX_HANDOFFS, MAX_SHARES_PER_DECK } from '../../src/services/sharingService.js';
 import { accessRole } from '../../src/repositories/presentationRepository.js';
 import { forbidden, notFound } from '../../src/lib/httpError.js';
 
@@ -42,11 +42,15 @@ function world() {
     shares: {
       listForPresentation: async () => shares.map(join),
       find: async (_p, uid) => (shares.find((s) => s.user_id === uid) ? join(shares.find((s) => s.user_id === uid)) : null),
-      count: async () => shares.length,
-      upsert: async (_p, uid, r) => {
+      add: async (_p, uid, r, _by, max) => {
         const s = shares.find((x) => x.user_id === uid);
-        if (s) s.role = r;
-        else shares.push({ user_id: uid, role: r, created_at: new Date(), updated_at: new Date() });
+        if (s) {
+          s.role = r;
+          return { created: false };
+        }
+        if (shares.length >= max) return { error: 'LIMIT' };
+        shares.push({ user_id: uid, role: r, created_at: new Date(), updated_at: new Date() });
+        return { created: true };
       },
       updateRole: async (_p, uid, r) => {
         const s = shares.find((x) => x.user_id === uid);
@@ -171,4 +175,29 @@ test('khôi phục: chỉ chủ bài; không chọn bản → về bản gốc; 
   assert.deepEqual(w.restored, [hid, 'base']);
   // Phiên bản cũ (có người vừa lưu) → 409, không ghi đè mù.
   await assert.rejects(w.svc.restore(OWNER, DECK, { specVersion: 4 }), { code: 'VERSION_CONFLICT' });
+});
+
+test('F13: bản gốc lỗi → không ai được cấp quyền (bản gốc chụp TRƯỚC khi mời)', async () => {
+  const granted = [];
+  const svc = createSharingService({
+    repos: {
+      users: { findActiveByEmail: async () => ({ id: EDITOR.id, email: EDITOR.email }) },
+      shares: { add: async () => { granted.push(EDITOR.id); return { created: true }; }, find: async () => null },
+      versions: { ensureBaseline: async () => { throw new Error('storage lỗi'); } },
+    },
+    decks: { owned: async () => ({ id: DECK, status: 'ready', access_role: 'owner', visibility: 'private' }) },
+    audit: { record: async () => {} },
+  });
+  await assert.rejects(svc.addShare(OWNER, DECK, { email: EDITOR.email, role: 'editor' }), /storage lỗi/);
+  assert.deepEqual(granted, [], 'chưa cấp quyền khi chưa có bản gốc');
+});
+
+test('F07: trần số người được mời do repository quyết định (cùng giao dịch) → TOO_MANY_SHARES', async () => {
+  const w = world();
+  for (let i = 0; i < MAX_SHARES_PER_DECK; i += 1) w.shares.push({ user_id: `x${i}`, role: 'viewer', created_at: new Date(), updated_at: new Date() });
+  await assert.rejects(w.svc.addShare(OWNER, DECK, { email: 'sua@misa.com.vn', role: 'editor' }), { code: 'TOO_MANY_SHARES' });
+  // Người đã được mời đổi quyền thì không bị trần chặn.
+  w.shares.push({ user_id: EDITOR.id, role: 'viewer', created_at: new Date(), updated_at: new Date() });
+  const r = await w.svc.addShare(OWNER, DECK, { email: 'sua@misa.com.vn', role: 'editor' });
+  assert.equal(r.created, false);
 });

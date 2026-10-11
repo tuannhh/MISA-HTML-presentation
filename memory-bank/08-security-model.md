@@ -5,6 +5,9 @@
 - Mật khẩu băm **bcrypt** (`BCRYPT_ROUNDS`, mặc định 12). Chính sách: 10–128 ký tự, có chữ và số; mật khẩu mới phải khác mật khẩu cũ.
 - Phiên express-session lưu MySQL (`sessions`), cookie `mp.sid` httpOnly + SameSite=Lax (+ Secure ở production). `regenerate()` khi đăng nhập/đăng ký/đổi mật khẩu (chống session fixation).
 - **Thu hồi phiên:** phiên lưu `sv = users.session_version`; `loadUser` so sánh mỗi request. Đổi mật khẩu, đặt lại mật khẩu, khoá tài khoản → tăng version → mọi phiên cũ mất hiệu lực ngay.
+- Mật khẩu mới ≤ 72 byte (bcrypt cắt lặng lẽ phần sau byte thứ 72; tiếng Việt có dấu 2–3 byte/ký tự).
+- Tài khoản đang phải đổi mật khẩu tạm không đọc được asset qua đường đăng nhập (`readAsset`) — giống `requireAuth`.
+- Công cụ ngoài xử lý tệp người dùng (LibreOffice, pdftoppm) chạy với **môi trường tối thiểu** (`toolEnv`), không kế thừa khoá/bí mật của tiến trình.
 - Đăng nhập sai: thông điệp chung (không lộ email có tồn tại hay không); rate-limit 10 lần/15 phút theo IP+email.
 - Mật khẩu tạm do admin cấp sinh bằng `crypto.randomBytes`, trả về **một lần**, không lưu dạng rõ, `must_change_password=1` → API chặn mọi thao tác khác (`MUST_CHANGE_PASSWORD`).
 
@@ -73,6 +76,8 @@
 - Lỗi 500 trả thông điệp chung; stack trace chỉ có trong log server.
 
 ## Rate limit
+
+**Hạn mức API chung tính theo người dùng** (2026-10-11, F04): MISA dùng chung IP (NAT/proxy) nên giới hạn theo IP làm cả văn phòng chặn nhau. Hai tầng: `apiIp` (chốt chặn lụt theo IP, trước phiên/DB, trần cao) + `api` (sau `loadUser`: đã đăng nhập → khoá `u:<userId>` 600/phút; chưa đăng nhập → khoá IP 1200/phút). Cấu hình `RATE_LIMIT_*` (xem `07`). Các hạn mức nghiệp vụ (tạo bài, ảnh AI, PDF, chia sẻ…) vốn đã theo người dùng.
 
 Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube; handoff dùng chung bucket này), mời người chia sẻ (`share` — chống dò email), xuất PDF (bảo vệ CPU Chromium). Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503. Ảnh AI: `aiImage` 40 lượt/10 phút/người + hàng đợi `AI_IMAGES_CONCURRENCY`, quá 12 chờ → 503; tìm ảnh: `imageSearch` 40/phút.
 

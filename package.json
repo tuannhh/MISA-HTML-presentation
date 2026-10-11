@@ -14,7 +14,7 @@
     "start": "node src/server.js",
     "create-admin": "node --env-file-if-exists=.env scripts/create-admin.js",
     "test": "node --test \"test/unit/**/*.test.js\"",
-    "test:integration": "node --env-file-if-exists=.env --test --test-concurrency=1 test/integration/",
+    "test:integration": "node --env-file-if-exists=.env --test --test-concurrency=1 \"test/integration/**/*.test.js\"",
     "render:sample": "node scripts/snap-sample.js"
   },
   "dependencies": {

@@ -3,7 +3,7 @@
 ## Tổng quan
 
 - Vue 3 SPA (`frontend/`), build bằng Vite ra `dist/`, Express phục vụ tĩnh + fallback `index.html`.
-- **MISA Design System 2.0** (nguồn `C:\MISA-project\misa-design-system-skill`): component copy vào `frontend/src/components/mds/`, token vào `frontend/src/styles/mds/`. Theme mặc định `blue`. Không tự vẽ lại component MDS đã có.
+- **MISA Design System 2.0** (nguồn `~/.claude/skills/misa-design-system`): component copy vào `frontend/src/components/mds/`, token vào `frontend/src/styles/mds/`. Theme mặc định `blue`. Không tự vẽ lại component MDS đã có.
 - Alias: `@` → `frontend/src`, `@shared` → `shared/` (dùng `SPEC_LIMITS`, `icons`, `palette`, `fonts`, `backgrounds` chung với server — xem trước thiết kế bằng **chính mã** của deck).
 - Mọi gọi API đi qua `lib/api.js` (gắn CSRF, chuẩn hoá `ApiError{status, code, message, details}`, phát sự kiện `mp:unauthorized` khi 401).
 

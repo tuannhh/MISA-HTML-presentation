@@ -15,6 +15,15 @@ import { logger } from '../lib/logger.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 
 const run = promisify(execFile);
+
+// Môi trường tối thiểu cho công cụ ngoài xử lý tệp người dùng (LibreOffice, pdftoppm): KHÔNG kế thừa process.env
+// (chứa GEMINI_API_KEY, SESSION_SECRET, mật khẩu DB…) — nếu tệp độc hại lừa được công cụ đọc biến môi trường thì cũng không có gì để lộ.
+const TOOL_ENV_KEYS = ['PATH', 'LANG', 'LC_ALL', 'TMPDIR', 'FONTCONFIG_PATH', 'FONTCONFIG_FILE', 'XDG_DATA_DIRS'];
+export function toolEnv(extra = {}) {
+  const env = {};
+  for (const k of TOOL_ENV_KEYS) if (process.env[k]) env[k] = process.env[k];
+  return { ...env, ...extra };
+}
 const RENDER_SIDE = 2000; // cạnh dài trang render (px) — đủ nét để cắt hình chiếm ~1/2 trang
 const PREVIEW_SIDE = 1024; // ảnh trang gửi AI khoanh vùng
 // Nới vùng cắt mỗi phía (tỷ lệ cạnh trang): AI hay khoanh sát quá, lẹm viền; sơ đồ hay có nhãn/mũi tên sát mép → nới rộng hơn,
@@ -82,7 +91,7 @@ async function trimEdges(buffer, margin) {
 
 async function renderPdfPages(pdfPath, dir, { bin, maxPages }) {
   const prefix = path.join(dir, 'p');
-  await run(bin, ['-jpeg', '-jpegopt', 'quality=90', '-scale-to', String(RENDER_SIDE), '-f', '1', '-l', String(maxPages), pdfPath, prefix], { timeout: 180000, maxBuffer: 1 << 20 });
+  await run(bin, ['-jpeg', '-jpegopt', 'quality=90', '-scale-to', String(RENDER_SIDE), '-f', '1', '-l', String(maxPages), pdfPath, prefix], { timeout: 180000, maxBuffer: 1 << 20, env: toolEnv() });
   const files = (await readdir(dir)).filter((f) => /^p-\d+\.jpg$/.test(f));
   return files.map((f) => ({ page: Number(/(\d+)/.exec(f)[1]), file: path.join(dir, f) })).sort((a, b) => a.page - b.page);
 }
@@ -132,7 +141,7 @@ function officeToPdf(src, dir, { soffice, timeoutMs }) {
       timeout: timeoutMs,
       maxBuffer: 1 << 20,
       // Proxy chết: nếu còn sót liên kết ngoài thì LibreOffice cũng không tải được gì (chốt chặn thứ hai sau sanitizeOffice).
-      env: { ...process.env, HOME: dir, http_proxy: 'http://127.0.0.1:9', https_proxy: 'http://127.0.0.1:9', HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9', no_proxy: '' },
+      env: toolEnv({ HOME: dir, http_proxy: 'http://127.0.0.1:9', https_proxy: 'http://127.0.0.1:9', HTTP_PROXY: 'http://127.0.0.1:9', HTTPS_PROXY: 'http://127.0.0.1:9', no_proxy: '' }),
     });
     const pdf = path.join(dir, `${path.basename(src, path.extname(src))}.pdf`);
     await access(pdf).catch(() => {
@@ -147,12 +156,18 @@ function officeToPdf(src, dir, { soffice, timeoutMs }) {
 /**
  * Sơ đồ đơn giản AI đã chép nhãn → dữ liệu vẽ lại (org / timeline / process); không đủ chuẩn "đơn giản" → null (giữ ảnh cắt).
  * org: 2–6 nhánh có tên, mỗi nhánh ≤ 8 mục con; timeline: 3–8 mốc, đa số có mốc thời gian (thiếu → coi là quy trình nếu ≤ 6 bước);
- * process: 3–6 bước. Chữ cắt theo giới hạn spec để không vỡ bố cục.
+ * process: 3–6 bước. Nhãn dài quá giới hạn spec (hoặc quá nhiều mục) → KHÔNG cắt chữ (cắt sẽ đổi nghĩa/mất ý) mà trả null: sơ đồ đó
+ * không còn "đơn giản", giữ nguyên ảnh cắt.
  */
 export const REDRAW_TYPES = Object.freeze(['org', 'timeline', 'process']);
 export function cleanRedraw(r) {
   if (!r || typeof r !== 'object' || !REDRAW_TYPES.includes(r.type)) return null;
-  const txt = (v, max) => String(v ?? '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim();
+  let tooLong = false;
+  const txt = (v, max) => {
+    const t = String(v ?? '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (t.length > max) tooLong = true;
+    return t.slice(0, max).trim();
+  };
   const nodes = (Array.isArray(r.nodes) ? r.nodes : [])
     .map((n) => ({
       title: txt(n?.title, SPEC_LIMITS.colTitle),
@@ -160,15 +175,17 @@ export function cleanRedraw(r) {
       items: (Array.isArray(n?.items) ? n.items : []).map((x) => txt(x, SPEC_LIMITS.point)).filter(Boolean),
     }))
     .filter((n) => n.title || n.value);
+  const root = r.type === 'org' ? txt(r.root, SPEC_LIMITS.root) : '';
+  if (tooLong || (r.type !== 'org' && nodes.some((n) => n.items.length > 4))) return null;
   if (r.type === 'org') {
     if (nodes.length < 2 || nodes.length > SPEC_LIMITS.orgBranches || nodes.some((n) => !n.title || n.items.length > SPEC_LIMITS.points)) return null;
-    return { type: 'org', root: txt(r.root, SPEC_LIMITS.root), nodes: nodes.map(({ title, items }) => ({ title, value: '', items })) };
+    return { type: 'org', root, nodes: nodes.map(({ title, items }) => ({ title, value: '', items })) };
   }
   let type = r.type;
   if (type === 'timeline' && nodes.filter((n) => n.value).length * 2 < nodes.length) type = 'process';
   const [lo, hi] = type === 'timeline' ? [3, 8] : [3, 6];
   if (nodes.length < lo || nodes.length > hi || nodes.some((n) => !n.title && !(type === 'timeline' && n.value))) return null;
-  return { type, root: '', nodes: nodes.map((n) => ({ title: n.title, value: type === 'timeline' ? n.value : '', items: n.items.slice(0, 4) })) };
+  return { type, root: '', nodes: nodes.map((n) => ({ title: n.title, value: type === 'timeline' ? n.value : '', items: n.items })) };
 }
 
 // Mô tả hình để AI dựng dàn ý nhận ra (prompt dàn ý: "ẢNH GIAO DIỆN PHẦN MỀM" → screenshot, "SƠ ĐỒ" → diagram).

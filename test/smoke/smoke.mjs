@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import sharp from 'sharp';
+import { createProvisioner } from './provision.mjs';
 
 const BASE = process.env.BASE || 'http://localhost:3000';
 const stamp = Date.now().toString(36);
@@ -34,15 +35,16 @@ function client() {
   return { req, init: () => req('GET', '/api/auth/csrf') };
 }
 
+const signUp = createProvisioner(client, stamp); // đăng ký tự do nếu mở, nếu đóng thì admin cấp tài khoản (xem provision.mjs)
 const a = client();
 const b = client();
 await a.init();
 await b.init();
 
-let r = await a.req('POST', '/api/auth/register', { email: `a-${stamp}@misa.com.vn`, password: 'Matkhau12345', displayName: 'Người Dùng Á' });
+let r = await signUp(a, `a-${stamp}@misa.com.vn`, 'Người Dùng Á');
 assert.equal(r.status, 201, JSON.stringify(r.json));
 assert.equal(r.json.data.user.displayName, 'Người Dùng Á');
-r = await b.req('POST', '/api/auth/register', { email: `b-${stamp}@misa.com.vn`, password: 'Matkhau12345', displayName: 'Người Dùng B' });
+r = await signUp(b, `b-${stamp}@misa.com.vn`, 'Người Dùng B');
 assert.equal(r.status, 201);
 console.log('✓ đăng ký 2 tenant, tiếng Việt giữ nguyên');
 
@@ -236,7 +238,7 @@ console.log('✓ chuyển lại private → B mất quyền xem');
 /* ---------------- Chia sẻ theo người + handoff + khôi phục ---------------- */
 const c = client();
 await c.init();
-r = await c.req('POST', '/api/auth/register', { email: `c-${stamp}@misa.com.vn`, password: 'Matkhau12345', displayName: 'Người Dùng C' });
+r = await signUp(c, `c-${stamp}@misa.com.vn`, 'Người Dùng C');
 assert.equal(r.status, 201);
 const shareUrl = `/api/presentations/${id}/shares`;
 r = await b.req('POST', shareUrl, { email: `c-${stamp}@misa.com.vn`, role: 'viewer' });

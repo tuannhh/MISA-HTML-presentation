@@ -62,16 +62,24 @@ async function splitPdf(buffer, pages) {
   return out;
 }
 
-async function pool(items, limit, fn) {
+// Chạy fn trên từng phần tử, tối đa `limit` lượt đồng thời. Có lỗi → không khởi động việc mới, CHỜ các lượt đang chạy kết thúc
+// rồi mới ném lỗi đầu tiên (để bước dọn dẹp của người gọi thấy đủ tài nguyên đã tạo, không bỏ sót).
+export async function pool(items, limit, fn) {
   const results = new Array(items.length);
   let next = 0;
+  let failure = null;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
+    while (!failure && next < items.length) {
       const i = next++;
-      results[i] = await fn(items[i], i);
+      try {
+        results[i] = await fn(items[i], i);
+      } catch (err) {
+        failure ||= { err };
+      }
     }
   });
   await Promise.all(workers);
+  if (failure) throw failure.err;
   return results;
 }
 
@@ -82,7 +90,8 @@ async function pool(items, limit, fn) {
 export async function prepareMedia(media, { gemini }) {
   const uploaded = [];
   const cleanup = async () => {
-    await Promise.all(uploaded.splice(0).map((name) => gemini.deleteFile(name)));
+    // Mỗi tệp xoá độc lập: 1 lần xoá lỗi không làm bỏ sót các tệp còn lại.
+    await Promise.allSettled(uploaded.splice(0).map((name) => gemini.deleteFile(name)));
   };
   if (!media.length) return { direct: [], pieces: [], cleanup };
 

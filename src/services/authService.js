@@ -16,6 +16,8 @@ export function normalizeEmail(email) {
 export function checkPasswordPolicy(pw) {
   const p = String(pw || '');
   if (p.length < 10 || p.length > 128) return 'Mật khẩu dài 10–128 ký tự';
+  // bcrypt chỉ xét 72 byte đầu: mật khẩu dài hơn sẽ bị cắt lặng lẽ (2 mật khẩu khác đuôi cùng được chấp nhận). Tiếng Việt có dấu tốn 2–3 byte/ký tự.
+  if (Buffer.byteLength(p, 'utf8') > 72) return 'Mật khẩu tối đa 72 byte (khoảng 70 ký tự không dấu, ít hơn nếu có dấu tiếng Việt)';
   if (!/[a-zA-Z]/.test(p) || !/\d/.test(p)) return 'Mật khẩu phải có cả chữ và số';
   return null;
 }
@@ -141,9 +143,10 @@ export function createAuthService({ config, repos, audit }) {
       if (role !== undefined && !['user', 'admin'].includes(role)) throw badRequest('Vai trò không hợp lệ', 'INVALID_ROLE');
       if (status !== undefined && !['active', 'disabled'].includes(status)) throw badRequest('Trạng thái không hợp lệ', 'INVALID_STATUS');
       if (id === actor.id && (status === 'disabled' || role === 'user')) throw badRequest('Không thể tự khoá hoặc tự hạ quyền chính mình', 'SELF_LOCKOUT');
-      const losingAdmin = target.role === 'admin' && target.status === 'active' && (role === 'user' || status === 'disabled');
-      if (losingAdmin && (await users.countActiveAdmins(id)) === 0) throw conflict('Hệ thống cần ít nhất 1 quản trị viên đang hoạt động', 'LAST_ADMIN');
-      await users.updateAdminFields(id, { role, status });
+      // Kiểm "còn ít nhất 1 quản trị viên" và ghi nằm chung 1 giao dịch có khoá (2 quản trị viên hạ quyền nhau cùng lúc không làm hết admin).
+      const res = await users.updateAdminFieldsGuarded(id, { role, status });
+      if (res.error === 'LAST_ADMIN') throw conflict('Hệ thống cần ít nhất 1 quản trị viên đang hoạt động', 'LAST_ADMIN');
+      if (res.error) throw notFound('Không tìm thấy người dùng');
       await audit.record({ actorId: actor.id, action: 'admin.user_update', targetType: 'user', targetId: id, ip, meta: { role, status } });
       return publicUser(await users.findById(id));
     },

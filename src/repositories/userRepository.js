@@ -1,4 +1,6 @@
 // Truy cập bảng users. Không bao giờ trả password_hash ra khỏi tầng service.
+import { withTransaction } from '../db/pool.js';
+
 const PUBLIC_COLS =
   'id, email, display_name, role, status, must_change_password, session_version, created_at, updated_at, last_login_at';
 
@@ -72,6 +74,32 @@ export function createUserRepository(pool) {
       if (!sets.length) return 0;
       const [res] = await pool.execute(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, [...params, id]);
       return res.affectedRows;
+    },
+
+    // Hạ quyền/khoá 1 tài khoản mà KHÔNG để hệ thống hết quản trị viên đang hoạt động, kể cả khi 2 quản trị viên hạ quyền nhau cùng lúc:
+    // khoá mọi dòng quản trị viên đang hoạt động (FOR UPDATE) → các lượt chạy tuần tự, lượt sau thấy số liệu đã cập nhật.
+    // Trả { ok: true } hoặc { error: 'NOT_FOUND' | 'LAST_ADMIN' }.
+    async updateAdminFieldsGuarded(id, { role, status }) {
+      return withTransaction(pool, async (conn) => {
+        const [admins] = await conn.execute("SELECT id FROM users WHERE role = 'admin' AND status = 'active' FOR UPDATE");
+        const [[target]] = await conn.execute('SELECT id, role, status FROM users WHERE id = ? FOR UPDATE', [id]);
+        if (!target) return { error: 'NOT_FOUND' };
+        const losing = target.role === 'admin' && target.status === 'active' && (role === 'user' || status === 'disabled');
+        if (losing && !admins.some((a) => a.id !== id)) return { error: 'LAST_ADMIN' };
+        const sets = [];
+        const params = [];
+        if (role) {
+          sets.push('role = ?');
+          params.push(role);
+        }
+        if (status) {
+          sets.push('status = ?');
+          params.push(status);
+          if (status === 'disabled') sets.push('session_version = session_version + 1');
+        }
+        if (sets.length) await conn.execute(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, [...params, id]);
+        return { ok: true };
+      });
     },
 
     async countActiveAdmins(excludeId = null) {

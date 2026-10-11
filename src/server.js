@@ -21,7 +21,7 @@ async function main() {
 
   const app = createApp({ config, pool, ...container });
   const server = app.listen(config.port, () => logger.info('server_listening', { port: config.port }));
-  server.requestTimeout = 10 * 60 * 1000; // xuất PDF bài dài có thể mất vài phút
+  server.requestTimeout = 10 * 60 * 1000; // thời gian tối đa NHẬN XONG 1 request (tải tư liệu tới 300 MB trên mạng chậm) — không phải hạn xử lý của PDF/AI
   server.headersTimeout = 65 * 1000;
 
   const tempTimer = setInterval(() => {

@@ -142,6 +142,7 @@ users 1 ──< design_templates 1 ──< template_assets
 ## Lịch sử thay đổi lược đồ đáng chú ý
 
 - 2026-10-05: baseline đầu tiên.
+- 2026-10-11 (làm chặt, không đổi lược đồ): changelog `20261005_170000` chỉ `MODIFY` ENUM khi cột còn dạng cũ (trước đây chạy lại 1 mình sẽ đặt `assets.kind` về dạng chưa có `brand`); `verifyTables` đòi thêm `design_templates`, `template_assets`; `schema.sql` ghi chú tên DB ghi cứng `misa_presentation` (DB_NAME khác → sửa 2 dòng CREATE/USE).
 - 2026-10-05 (`changelog_database_20261005_170000.sql`, idempotent): trạng thái `outlining`/`outline`, cột `outline` + `outline_version`, asset kind `video`/`logo`/`poster`. Baseline `schema.sql` đã gồm sẵn.
 - 2026-10-06 (`changelog_database_20261006_090000.sql`, idempotent): cột `presentations.short_code` + backfill mã ngẫu nhiên cho bài cũ + unique key `uq_presentations_code`. Có trong `REQUIRED_CHANGELOGS` (app từ chối khởi động nếu chưa chạy). Baseline đã gồm sẵn.
 - 2026-10-06 (`changelog_database_20261006_200000.sql`, idempotent — `MODIFY` ENUM chỉ khi chưa có `'brand'`, `CREATE TABLE IF NOT EXISTS`): asset kind `brand`, bảng `design_templates` + `template_assets`. Có trong `REQUIRED_CHANGELOGS`; baseline đã gồm sẵn. Đã chạy 2 lần trên MySQL Docker để kiểm idempotent.

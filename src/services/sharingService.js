@@ -39,15 +39,15 @@ export function createSharingService({ repos, decks, audit }) {
     if (email === String(user.email).toLowerCase()) throw badRequest('Bạn đã là chủ bài này', 'SELF_SHARE');
     const target = await users.findActiveByEmail(email);
     if (!target) throw notFound('Không tìm thấy người dùng đang hoạt động với email này', 'USER_NOT_FOUND');
-    const existing = await shares.find(deck.id, target.id);
-    if (!existing && (await shares.count(deck.id)) >= MAX_SHARES_PER_DECK) {
-      throw unprocessable(`Mỗi bài chia sẻ tối đa ${MAX_SHARES_PER_DECK} người`, 'TOO_MANY_SHARES');
-    }
-    await shares.upsert(deck.id, target.id, role, user.id);
-    // Lần đầu chia sẻ → bản gốc để khôi phục (gọi lại không ghi đè).
+    // Bản gốc TRƯỚC khi cấp quyền: người được mời không thể sửa trước khi có bản gốc để khôi phục, và chụp lỗi thì không ai được mời (gọi lại không ghi đè).
     await versions.ensureBaseline(deck.id, user.id);
+    // Trần số người + ghi quyền cùng 1 giao dịch (khoá dòng bài) — mời song song không vượt trần.
+    const res = await shares.add(deck.id, target.id, role, user.id, MAX_SHARES_PER_DECK);
+    if (res.error === 'LIMIT') throw unprocessable(`Mỗi bài chia sẻ tối đa ${MAX_SHARES_PER_DECK} người`, 'TOO_MANY_SHARES');
+    if (res.error) throw notFound('Không tìm thấy bài trình bày');
+    const existing = !res.created;
     await audit.record({ actorId: user.id, action: existing ? 'presentation.share_update' : 'presentation.share_add', targetType: 'presentation', targetId: deck.id, ip, meta: { user: target.id, role } });
-    return { share: shareDto(await shares.find(deck.id, target.id)), created: !existing };
+    return { share: shareDto(await shares.find(deck.id, target.id)), created: res.created };
   }
 
   async function updateShare(user, id, userId, body, ip) {

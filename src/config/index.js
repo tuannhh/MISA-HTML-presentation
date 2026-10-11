@@ -133,6 +133,12 @@ export function loadConfig() {
     chromePath: str('CHROME_PATH', ''),
     // Trong container chạy user không đặc quyền, sandbox của Chromium cần user namespace → tắt có kiểm soát (chỉ nạp HTML nội bộ, chặn mạng).
     chromeNoSandbox: bool('CHROME_NO_SANDBOX', false),
+    // Giới hạn tần suất API (mỗi phút). Nhân viên MISA chung IP (NAT/proxy) → hạn mức chính theo người dùng; IP chỉ là chốt chặn lụt.
+    rate: Object.freeze({
+      ipPerMin: int('RATE_LIMIT_IP_PER_MIN', 30000, { min: 100, max: 1000000 }),
+      userPerMin: int('RATE_LIMIT_USER_PER_MIN', 600, { min: 30, max: 100000 }),
+      anonPerMin: int('RATE_LIMIT_ANON_PER_MIN', 1200, { min: 30, max: 1000000 }),
+    }),
     ratios: RATIOS,
   });
 
@@ -149,6 +155,12 @@ function validate(config) {
   if (config.isProd && config.session.secret.length < 32) errors.push('SESSION_SECRET phải dài tối thiểu 32 ký tự');
   if (config.isProd && !config.db.password) errors.push('Thiếu DB_PASSWORD');
   if (!config.isTest && !config.gemini.apiKey) errors.push('Thiếu GEMINI_API_KEY');
+  // Production: địa chỉ truy cập và cờ cookie phải khớp — https mà cookie không secure thì phiên lộ qua HTTP; http mà cookie secure thì không đăng nhập được.
+  if (config.isProd) {
+    const https = /^https:/i.test(config.appBaseUrl);
+    if (https && !config.session.cookieSecure) errors.push('APP_BASE_URL là https nhưng SESSION_COOKIE_SECURE=false — đặt SESSION_COOKIE_SECURE=true');
+    if (!https && config.session.cookieSecure) errors.push('APP_BASE_URL là http nhưng SESSION_COOKIE_SECURE=true — trình duyệt sẽ không giữ phiên đăng nhập; dùng https hoặc đặt SESSION_COOKIE_SECURE=false');
+  }
   const badIps = parseIpAllowlist(config.ipAllowlist).errors;
   if (badIps.length) errors.push(`IP_ALLOWLIST có mục không hợp lệ: ${badIps.join(', ')}`);
   if (errors.length) {

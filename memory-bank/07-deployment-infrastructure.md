@@ -15,8 +15,11 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `TRUST_PROXY` | | 0 | Số proxy tin cậy (1 khi sau Nginx/Traefik) |
 | `IP_ALLOWLIST` | (DevOps điền khi lên server MISA) | rỗng = không giới hạn | IP/dải IP được truy cập (mạng MISA): IP đơn, CIDR, khoảng `a-b`, IPv4/IPv6; phân tách phẩy/khoảng trắng. Mục sai → không khởi động. Rỗng ở production → log cảnh báo `ip_allowlist_empty`. Xem 08 §Giới hạn IP |
 | `SESSION_SECRET` | ✅ | | ≥ 32 ký tự ngẫu nhiên; cũng là khoá HMAC ký URL ảnh |
-| `SESSION_COOKIE_SECURE` | | true khi production | `true` khi chạy HTTPS |
+| `SESSION_COOKIE_SECURE` | | true khi production | `true` khi chạy HTTPS. Production **không khởi động** nếu lệch `APP_BASE_URL`: https mà `false`, hoặc http mà `true` |
 | `SESSION_MAX_AGE_HOURS` | | 12 | |
+| `RATE_LIMIT_USER_PER_MIN` | | 600 | Hạn mức API/phút **theo người dùng** đã đăng nhập (nhân viên MISA chung IP nên không tính theo IP) |
+| `RATE_LIMIT_ANON_PER_MIN` | | 1200 | API/phút theo IP cho yêu cầu CHƯA đăng nhập (sáng đầu giờ nhiều người đăng nhập cùng IP) |
+| `RATE_LIMIT_IP_PER_MIN` | | 30000 | Chốt chặn lụt theo IP đặt trước phiên/DB; phải lớn hơn tổng lưu lượng hợp lệ của cả văn phòng |
 | `DB_HOST/PORT/NAME/USER/PASSWORD` | ✅ | | MySQL |
 | `MYSQL_ROOT_PASSWORD` | ✅ (compose) | | Root MySQL container |
 | `DB_POOL_SIZE` | | 10 | |

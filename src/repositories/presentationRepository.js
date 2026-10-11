@@ -174,9 +174,16 @@ export function createPresentationRepository(pool) {
       const t = tenantClause(tenantId);
       await pool.execute(
         `INSERT INTO presentations (id, tenant_id, short_code, title, ratio, visibility, status, source_kind, source_label, spec, spec_version, slide_count, outline, outline_version)
-         VALUES (?, ?, ?, ?, ?, 'private', 'ready', 'copy', ?, ?, 1, ?, ?, ?)`,
-        [p.id, t.params[0], p.code, p.title, p.ratio, p.sourceLabel || null, JSON.stringify(p.spec), p.spec.slides.length, p.outline ? JSON.stringify(p.outline) : null, p.outline ? 1 : 0],
+         VALUES (?, ?, ?, ?, ?, 'private', ?, 'copy', ?, ?, 1, ?, ?, ?)`,
+        [p.id, t.params[0], p.code, p.title, p.ratio, p.status || 'ready', p.sourceLabel || null, JSON.stringify(p.spec), p.spec.slides.length, p.outline ? JSON.stringify(p.outline) : null, p.outline ? 1 : 0],
       );
+    },
+
+    // Bản sao tạo ở trạng thái 'generating' (chưa hiện như bài hoàn chỉnh) → chỉ chuyển 'ready' khi media đã chép đủ.
+    async markReady(tenantId, id) {
+      const t = tenantClause(tenantId);
+      const [res] = await pool.execute(`UPDATE presentations SET status = 'ready' WHERE id = ? AND status = 'generating' AND source_kind = 'copy' AND ${t.sql}`, [id, ...t.params]);
+      return res.affectedRows;
     },
 
     async setGenerationResult(tenantId, id, { status, spec, title, errorMessage }) {

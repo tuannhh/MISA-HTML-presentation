@@ -50,6 +50,7 @@ const EXTRA_IMAGES = 240;
 // Bố cục được tự thêm ảnh minh hoạ AI khi dựng bài (ô media 1 ảnh).
 const AI_IMAGE_LAYOUTS = new Set(['cover', 'section', 'bullets', 'quote']);
 const MAX_AI_PENDING = 12;
+const MAX_EXPORT_PENDING = 10;
 
 // Mã ngắn 8 ký tự [a-z0-9] cho đường dẫn /tên-bài/<mã>/<tính năng> (≈ 2,8·10^12 tổ hợp; trùng → sinh lại).
 const CODE_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -110,6 +111,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   const cutoutQueue = new Semaphore(1);
   // Tạo ảnh AI: giới hạn số yêu cầu chạy song song (dùng chung cho ảnh tự động khi dựng bài và ảnh theo yêu cầu).
   const aiQueue = new Semaphore(config.aiImages.concurrency);
+  // Xuất HTML (nhúng base64) tốn RAM theo dung lượng media → giới hạn số lượt chạy đồng thời.
+  const exportQueue = new Semaphore(config.limits.renderConcurrency);
   const thumbTimers = new Map();
 
   /* ---------------- bước 1: tạo dàn ý bằng AI ---------------- */
@@ -163,7 +166,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   // Lưu media gửi kèm thành asset của bài (ảnh → WebP ≤1920px; video giữ nguyên tệp + ảnh bìa trình duyệt chụp) và chuẩn bị
   // hình xem trước cho AI (ảnh + ảnh bìa video được ưu tiên trong hạn mức xem trước vì là media bắt buộc).
   async function storeUserMedia(tenantId, id, userMedia) {
-    const owner = { id: tenantId };
+    const deck = { tenant_id: tenantId, id };
     const out = { images: [], videos: [], previewBytes: 0 };
     const preview = async (buffer) => {
       if (out.images.length + out.videos.length >= MODEL_IMAGE_PREVIEWS || out.previewBytes >= MODEL_PREVIEW_BYTES) return null;
@@ -173,7 +176,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     };
     for (const f of userMedia?.images || []) {
       const img = await normalizeImage(await readFile(f.path));
-      const a = await storeImage(owner, id, 'image', img, f.name);
+      const a = await storeImage(deck, 'image', img, f.name);
       out.images.push({ asset: a.id, name: f.name, width: img.width, height: img.height, preview: await preview(img.buffer), traits: await imageTraits(img.buffer).catch(() => null) });
     }
     for (const f of userMedia?.videos || []) {
@@ -181,7 +184,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       let posterImg = null;
       if (f.poster) {
         posterImg = await normalizeImage(await readFile(f.poster), { maxSide: 1280 }).catch(() => null);
-        if (posterImg) poster = await storeImage(owner, id, 'poster', posterImg, null);
+        if (posterImg) poster = await storeImage(deck, 'poster', posterImg, null);
       }
       const assetId = randomUUID();
       const key = assetKey(tenantId, id, assetId, f.type);
@@ -222,14 +225,22 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         .map((x, i) => ({ ref: `DR${i + 1}`, title: x.diagram?.title || '', where: x.name, ...x.redraw }))
         .map((r) => ({ ...r, points: redrawPoints(r) }));
       const images = await normalizeExtractedImages([...shots.filter((x) => !x.redraw), ...embedded], { max: config.limits.maxImagesPerDeck });
-      const assetIds = [];
-      for (const img of images) {
+      const saveExtracted = async (img) => {
         const assetId = randomUUID();
         const key = assetKey(tenantId, id, assetId);
         await storage.put(key, img.buffer);
         await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'image', mime: img.mime, bytes: img.bytes, width: img.width, height: img.height, storageKey: key, originalName: img.name });
-        assetIds.push(assetId);
-      }
+        return assetId;
+      };
+      const assetIds = [];
+      for (const img of images) assetIds.push(await saveExtracted(img));
+      // Ảnh gốc của sơ đồ đã vẽ lại: giữ trong thư viện ảnh của bài (KHÔNG đặt vào trang, không vào IMGn) — nếu AI chép sai nhãn,
+      // người dùng vẫn lấy lại ảnh gốc được thay vì mất hẳn.
+      const originals = await normalizeExtractedImages(
+        shots.filter((x) => x.redraw).map((x) => ({ buffer: x.buffer, name: `Ảnh gốc sơ đồ${x.diagram?.title ? ` - ${x.diagram.title}` : ''}`.slice(0, 200) })),
+        { max: Math.max(0, config.limits.maxImagesPerDeck - images.length) },
+      );
+      for (const img of originals) await saveExtracted(img);
       const modelImages = [];
       const traits = [];
       for (const [i, img] of images.entries()) {
@@ -443,7 +454,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
           try {
             const out = await gemini.generateImage({ prompt: `${w.p}\nStyle: professional presentation visual, ${look}, high detail, uncluttered composition.`, aspectRatio: '4:3' });
             const img = await normalizeImage(out.buffer);
-            const a = await storeImage({ id: tenantId }, id, 'image', img, `ai-minh-hoa-trang-${w.i + 1}`);
+            const a = await storeImage({ tenant_id: tenantId, id }, 'image', img, `ai-minh-hoa-trang-${w.i + 1}`);
             sl.image = { asset: a.id, alt: sl.title.slice(0, SPEC_LIMITS.alt), caption: '', fit: 'cover' };
             added += 1;
           } catch (err) {
@@ -616,12 +627,20 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const map = new Map(srcAssets.map((a) => [a.id, randomUUID()]));
     const spec = remapAssetIds(structuredClone(src.spec), map);
     const outline = own?.outline ? remapAssetIds(structuredClone(own.outline), map) : null;
-    await withCode((code) => presentations.createCopy(user.id, { id: newId, code, title: `${src.title} (bản sao)`.slice(0, 200), ratio: src.ratio, sourceLabel: src.title, spec, outline }));
-    for (const a of srcAssets) {
-      const nid = map.get(a.id);
-      const key = assetKey(user.id, newId, nid, a.storage_key.split('.').pop());
-      await storage.copy(a.storage_key, key);
-      await assets.create(user.id, { id: nid, presentationId: newId, kind: a.kind, mime: a.mime, bytes: a.bytes, width: a.width, height: a.height, storageKey: key, originalName: a.original_name });
+    // Bản sao ở trạng thái 'generating' tới khi chép đủ media rồi mới 'ready' → lỗi giữa chừng không để lại bài hoàn chỉnh mà thiếu ảnh/video.
+    await withCode((code) => presentations.createCopy(user.id, { id: newId, code, title: `${src.title} (bản sao)`.slice(0, 200), ratio: src.ratio, sourceLabel: src.title, spec, outline, status: 'generating' }));
+    try {
+      for (const a of srcAssets) {
+        const nid = map.get(a.id);
+        const key = assetKey(user.id, newId, nid, a.storage_key.split('.').pop());
+        await storage.copy(a.storage_key, key);
+        await assets.create(user.id, { id: nid, presentationId: newId, kind: a.kind, mime: a.mime, bytes: a.bytes, width: a.width, height: a.height, storageKey: key, originalName: a.original_name });
+      }
+      await presentations.markReady(user.id, newId);
+    } catch (err) {
+      await presentations.deleteOwned(user.id, newId).catch(() => {});
+      await storage.removePrefix(presentationPrefix(user.id, newId)).catch(() => {});
+      throw err;
     }
     await audit.record({ actorId: user.id, action: 'presentation.duplicate', targetType: 'presentation', targetId: newId, ip, meta: { from: id } });
     scheduleThumbnail(user.id, newId, 0);
@@ -775,7 +794,11 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   async function readAsset(user, assetId, { exp, sig }) {
     let row = null;
     if (sig && signer.verify(assetId, exp, sig)) row = await assets.findById(assetId);
-    else if (user) row = await assets.findReadable(user.id, assetId);
+    else if (user) {
+      // Giống requireAuth: tài khoản đang phải đổi mật khẩu tạm chưa được đọc dữ liệu (đường URL ký là capability riêng, không qua đây).
+      if (user.must_change_password) throw forbidden('Bạn cần đổi mật khẩu tạm trước khi tiếp tục', 'MUST_CHANGE_PASSWORD');
+      row = await assets.findReadable(user.id, assetId);
+    }
     if (!row) throw notFound('Không tìm thấy tệp');
     if (row.kind === 'video') return { path: storage.pathOf(row.storage_key), mime: row.mime };
     return { buffer: await storage.get(row.storage_key), mime: row.mime };
@@ -783,7 +806,9 @@ export function createPresentationService({ config, repos, storage, gemini, brow
 
   /* ---------------- render / xuất ---------------- */
   // Nạp media của bài: preview dùng URL ký; xuất/PDF/thumbnail nhúng ảnh (data URI); xuất HTML nhúng cả video (nếu vừa trần).
-  async function resolvers(presentationId, { inline = false, embedVideos = false } = {}) {
+  // spec: chỉ nạp (base64) các tệp mà spec thực sự tham chiếu — ảnh/video thừa trong thư viện của bài không tốn RAM/băng thông.
+  async function resolvers(presentationId, { inline = false, embedVideos = false, spec = null } = {}) {
+    const used = spec ? collectAssetIds(spec) : null;
     const rows = await assets.listMediaForPresentation(presentationId);
     const meta = new Map(rows.map((a) => [a.id, a]));
     const urls = new Map();
@@ -792,6 +817,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     let videoBytes = 0;
     const videoCap = config.limits.exportVideoMb * 1048576;
     for (const a of rows) {
+      if (used && !used.has(a.id)) continue;
       if (a.kind === 'video') {
         if (embedVideos && videoBytes + Number(a.bytes) <= videoCap) {
           videoBytes += Number(a.bytes);
@@ -834,7 +860,9 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   async function exportHtml(user, id, ip) {
     const row = await readable(user, id);
     if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
-    const html = renderDeck(row.spec, { ratio: row.ratio, mode: 'present', embedFont: true, ...(await resolvers(id, { inline: true, embedVideos: true })) });
+    // Nhúng ảnh/video base64 có thể chiếm hàng trăm MB RAM → xuất HTML chạy lần lượt (vài lượt song song), hàng chờ có trần.
+    if (exportQueue.pending >= MAX_EXPORT_PENDING) throw unavailable('Hệ thống đang xuất nhiều bài, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
+    const html = await exportQueue.run(async () => renderDeck(row.spec, { ratio: row.ratio, mode: 'present', embedFont: true, ...(await resolvers(id, { inline: true, embedVideos: true, spec: row.spec })) }));
     await audit.record({ actorId: user.id, action: 'presentation.export_html', targetType: 'presentation', targetId: id, ip });
     return { html, title: row.title };
   }
@@ -842,7 +870,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   async function exportPdf(user, id, ip) {
     const row = await readable(user, id);
     if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
-    const html = renderDeck(row.spec, { ratio: row.ratio, mode: 'print', embedFont: true, ...(await resolvers(id, { inline: true })) });
+    const html = renderDeck(row.spec, { ratio: row.ratio, mode: 'print', embedFont: true, ...(await resolvers(id, { inline: true, spec: row.spec })) });
     const pdf = await browser.pdf(html, deckSize(row.ratio));
     await audit.record({ actorId: user.id, action: 'presentation.export_pdf', targetType: 'presentation', targetId: id, ip });
     return { pdf, title: row.title };
@@ -863,7 +891,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const row = await presentations.findOwned(tenantId, id);
     if (!row || row.status !== 'ready' || !row.spec?.slides?.length) return;
     const one = { ...row.spec, slides: [row.spec.slides[0]] };
-    const html = renderDeck(one, { ratio: row.ratio, mode: 'present', embedFont: true, ...(await resolvers(id, { inline: true })) });
+    const html = renderDeck(one, { ratio: row.ratio, mode: 'present', embedFont: true, ...(await resolvers(id, { inline: true, spec: one })) });
     const { width, height } = deckSize(row.ratio);
     const [png] = await browser.screenshotSlides(html, { width, height, indices: [0] });
     const webp = await sharp(png).resize({ width: 960 }).webp({ quality: 78 }).toBuffer({ resolveWithObject: true });
@@ -889,6 +917,6 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     create, list, get, update, remove, duplicate, saveOutline, build, idByCode, owned, editable, restoreSnapshot, previewVersion,
     addAsset, addLogo, addBrand, cutoutLogo, addVideo, addYouTube, readAsset,
     generateImage, searchImages, importStockImage, editImage,
-    preview, exportHtml, exportPdf, recoverStale, queueStats: () => ({ pending: genQueue.pending }),
+    preview, exportHtml, exportPdf, makeThumbnail, recoverStale, queueStats: () => ({ pending: genQueue.pending }),
   };
 }

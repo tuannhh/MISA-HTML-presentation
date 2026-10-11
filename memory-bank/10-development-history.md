@@ -1,5 +1,39 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-11 — Chặng A sau audit Codex (sửa lỗi vận hành)
+
+### Bối cảnh
+Codex audit độc lập (hồ sơ `~/Documents/Codex/2026-10-11/y-l-d-n-misa-html/outputs/`, 21 finding F01–F21). Claude kiểm từng điểm trên code
+(phản hồi: `08-phan-hoi-claude.md`), hai bên đồng thuận mức ưu tiên; chủ dự án chốt: **1 máy chủ**, cao điểm ước ~500 người dùng cùng lúc,
+chuẩn = MISA Backend Standard. Mỗi lỗi sửa theo **đỏ → xanh** (viết test tái hiện trước, xác nhận đỏ, sửa, xác nhận xanh).
+
+### Đã sửa
+| Finding | Sửa | Test |
+|---|---|---|
+| **F01** (P0 thực tế) | `storeImage` gọi sai chữ ký từ commit chia sẻ 07/10 → tạo bài kèm ảnh/video luôn `failed`, ảnh minh hoạ AI thiếu lặng lẽ. Sửa 3 chỗ gọi (`presentationService`) | `service-media.test.js` (tạo bài kèm ảnh; dựng bài có ảnh AI) |
+| **F02** | `useEditor`: theo dõi `draftVersion` (phiên bản bản nháp xuất phát) — `save()` gửi phiên bản này, `updateMeta` không "nhận" phiên bản mới cho nháp cũ (→ 409 thay vì ghi đè người khác); chữ gõ trong lúc lưu được giữ lại | `editor-sync.test.js` (chạy `useEditor` thật qua `test/helpers/alias-loader.mjs`) |
+| **F04** | Giới hạn API theo người dùng (`rateLimits(config.rate)`: `apiIp` chốt chặn lụt + `api` sau `loadUser`), cấu hình `RATE_LIMIT_*` | `rate-limit.test.js` |
+| F05 | `resolvers(…, {spec})` chỉ nạp asset spec tham chiếu; thumbnail chỉ trang 1; xuất HTML qua hàng đợi `renderConcurrency` + trần chờ 10 | `service-media.test.js` |
+| F06 | `lib/cappedDiskStorage.js` đếm byte thực nhận cả request (kể cả chunked), xoá tệp tạm khi vượt | `upload-cap.test.js` |
+| F07 | Admin cuối + trần số người mời nằm trong giao dịch có khoá (`updateAdminFieldsGuarded`, `shares.add`) | `test/integration/concurrency.test.js` (MySQL thật; bỏ khoá → đỏ) |
+| F08 | `mediaService.pool` chờ mọi lượt đang chạy rồi mới ném lỗi; dọn tệp Gemini bằng `allSettled` | `media-pool.test.js` |
+| F09 | Nhân bản: bản sao ở `generating` → chép media → `markReady`; lỗi → xoá bản dở | `service-media.test.js` |
+| F10 | `toolEnv()`: LibreOffice/pdftoppm không kế thừa `process.env` (khoá/bí mật) | `visuals.test.js` |
+| F11 / F12 | Mật khẩu mới ≤ 72 byte; `readAsset` từ chối tài khoản `must_change_password` | `security.test.js`, `service-media.test.js` |
+| F13 | `addShare`: bản gốc TRƯỚC khi cấp quyền | `sharing.test.js` |
+| F14 / F15 | `verifyTables` thêm 2 bảng mẫu; changelog `20261005` không hạ cấp ENUM khi chạy lại; ghi chú tên DB ở `schema.sql` | `db-verify.test.js`, integration (chạy lại từng changelog) |
+| F17 / F18 | Production fail-fast khi `APP_BASE_URL` lệch `SESSION_COOKIE_SECURE`; chú thích `requestTimeout` đúng nghĩa; `stop_grace_period: 30s` | `ip-allowlist.test.js` |
+| F20 | Smoke cấp tài khoản không cần bật đăng ký (`test/smoke/provision.mjs`: admin tạm qua `create-admin.js` hoặc `SMOKE_ADMIN_*`) | smoke |
+| F21 | `CLAUDE.md`/`AGENTS.md`/`11`/`06` trỏ đúng chuẩn MISA (macOS), quy tắc lược đồ DB theo chuẩn MISA §05 | — |
+| Redraw | `cleanRedraw` không cắt nhãn (quá dài → null, giữ ảnh gốc); ảnh gốc của sơ đồ vẽ lại lưu làm asset trong thư viện ảnh (không đặt vào trang) | `org-redraw.test.js`, `service-media.test.js` |
+
+### Chưa làm (có chủ đích — chặng B/C)
+F03 (job bền vững — chỉ 1 máy chủ), hàng đợi theo trọng số RAM, cô lập mạng LibreOffice, metrics/alert/restore drill. Nút thắt khi ~500 người
+là **hàng đợi tạo bài** (`GENERATION_CONCURRENCY=2`, tối đa 20 chờ) + hạn mức Gemini — cần đo bằng load test trước khi chỉnh.
+
+### Kiểm chứng
+`npm test` 169 test xanh; `npm run test:integration` (DB tạm trên MySQL Docker, cổng 3307 qua `docker-compose.dev.yml`, cần cấp quyền `GRANT ALL ON \`%\_it\`.*`); Docker `up -d --build --no-deps app` + smoke **TẤT CẢ ĐẠT** (tài khoản cấp bởi admin, đăng ký tự do đóng; dựng bài có 2 ảnh minh hoạ AI thật — trước đây 0 do F01); tạo bài kèm ảnh trên Docker thật → ảnh nằm trong dàn ý; LibreOffice vẫn chuyển PPTX 6 trang với môi trường tối thiểu; header `RateLimit` 1200/phút cho yêu cầu chưa đăng nhập.
+
 ## 2026-10-11 — Vẽ lại sơ đồ tổ chức / lộ trình đơn giản (layout `org`)
 
 ### Yêu cầu (chủ dự án)
@@ -347,4 +381,4 @@ Người dùng muốn **xem trước nội dung từng trang** thay vì để AI
 - Kiểm chứng trong host MISA AMIS thật, safe-area và cử chỉ trên thiết bị thật.
 - Adapter storage S3/MinIO; hàng đợi ngoài nếu cần scale nhiều instance.
 - Sao lưu tự động DB + volume.
-- Test integration (`npm run test:integration`) — thư mục `test/integration/` chưa có test.
+- Test integration (`npm run test:integration`) — nay đã có `test/integration/concurrency.test.js` (xem mục 2026-10-11 — Chặng A).

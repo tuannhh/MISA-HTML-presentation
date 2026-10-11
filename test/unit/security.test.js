@@ -52,3 +52,13 @@ test('URL ảnh có chữ ký: đúng id + còn hạn mới hợp lệ', () => {
   assert.equal(s.verify(id, '1000', sig), false, 'hết hạn');
   assert.equal(createUrlSigner('khoa-khac-hoan-toan-cung-du-dai-32-ky-tu').verify(id, exp, sig), false);
 });
+
+test('F11: mật khẩu mới > 72 byte bị từ chối (bcrypt cắt lặng lẽ); tiếng Việt có dấu tính theo byte', async () => {
+  const { checkPasswordPolicy } = await import('../../src/services/authService.js');
+  assert.equal(checkPasswordPolicy('Matkhau12345'), null);
+  assert.equal(checkPasswordPolicy('a1'.repeat(36)), null, '72 byte đúng trần vẫn hợp lệ');
+  assert.match(checkPasswordPolicy('a1'.repeat(36) + 'b'), /72 byte/);
+  // 30 ký tự có dấu ≈ 60–90 byte: 'ệ' = 3 byte → 30 ký tự = 90 byte > 72 dù < 128 ký tự.
+  assert.match(checkPasswordPolicy('ệ'.repeat(30) + '1a'), /72 byte/);
+  assert.match(checkPasswordPolicy('ngan1'), /10–128/);
+});

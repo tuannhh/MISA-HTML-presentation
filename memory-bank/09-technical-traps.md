@@ -238,3 +238,25 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - `MDrawer` z-index 1001 > `MDialog` 1000 → dialog xác nhận mở từ drawer bị che. `VersionsPanel` xác nhận khôi phục/xoá **ngay trong panel** (không mở dialog chồng), dùng chung được cho drawer (desktop) và `FullScreenSheet` (mobile).
 - Browser pane chặn iframe sandbox (`ERR_BLOCKED_BY_CLIENT`) → khung xem lại phiên bản trông trống khi kiểm bằng pane; kiểm nội dung bằng `fetch` URL `/versions/:id/preview` (200, CSP sandbox, `data-mode="present"`).
 - Nhãn bottom nav mobile 5 mục ở 375px chỉ ~70px → "Được chia sẻ" bị cắt; giữ nhãn ngắn, đặt nghĩa đầy đủ ở `ariaLabel`.
+
+## Sau audit Codex (2026-10-11)
+
+### Đổi chữ ký hàm nội bộ → test đơn vị thuần không bắt được
+- `storeImage(deck, kind, img, name)` đổi chữ ký ở commit chia sẻ nhưng 3 chỗ gọi trong `storeUserMedia`/`illustrate` không đổi theo; unit test hàm thuần xanh trong khi **luồng tạo bài có media hỏng 4 ngày**. Luôn có ít nhất 1 test chạy service thật với repository/storage/AI giả (`test/unit/service-media.test.js`) cho mỗi luồng chính.
+
+### Bản nháp sửa vs phiên bản máy chủ (frontend)
+- `deck.specVersion` (mới nhất máy chủ trả) **không** phải phiên bản mà bản nháp xuất phát. `useEditor` giữ `draftVersion` riêng; mọi chỗ lưu/giữ nháp tạm dùng `draftVersion`. Đừng gửi `deck.value.specVersion` khi lưu.
+- Sau khi lưu mà người dùng đã gõ thêm: giữ bản nháp mới (nền = bản vừa lưu) — đừng `adopt()` ghi đè.
+
+### Test composable giao diện trong Node
+- `test/helpers/alias-loader.mjs` (`module.register`) ánh xạ `@/`, `@shared/`, và thay `@/lib/api.js` bằng `fake-api.mjs`. Đặt `globalThis.window` **sau** khi nạp module (một số module shared rẽ nhánh theo `window`).
+
+### Test race trên MySQL thật
+- `test/integration/concurrency.test.js` tự dựng DB tạm `<DB_NAME>_it` từ `schema.sql` (cần quyền; xem README test/integration) và bỏ qua khi không kết nối được. Khi sửa chỗ khoá, **bỏ khoá thử** để chắc test thật sự đỏ.
+- Cổng MySQL 3307 chỉ có khi chạy kèm `docker-compose.dev.yml`; `docker compose up -d --build app` KHÔNG kèm override có thể tạo lại mysql mất cổng → dùng `--no-deps app`.
+
+### Công cụ ngoài (LibreOffice/pdftoppm)
+- Chạy với `toolEnv()` (PATH, LANG, fontconfig, TMPDIR + HOME riêng + proxy chết). Thiếu biến cần cho phông chữ → render sai chữ; thêm tên biến vào `TOOL_ENV_KEYS` thay vì kế thừa toàn bộ.
+
+### Giới hạn API khi dùng chung IP
+- Không dùng IP làm khoá hạn mức chính (cả văn phòng chung 1 IP). `api` đặt SAU `loadUser`; thao tác chưa đăng nhập vẫn theo IP nhưng trần cao (sáng đầu giờ). Thêm route ghi tốn tài nguyên → thêm limiter theo `req.user.id` như `share`/`media`.

@@ -79,10 +79,21 @@ export function deckCsp(nonce, origin) {
 
 const limitHandler = (message, code) => (_req, _res, next) => next(new HttpError(429, code, message));
 
-export function rateLimits() {
+// rate: { ipPerMin, userPerMin, anonPerMin } (config.rate). Nhân viên MISA dùng chung IP (NAT/proxy) nên hạn mức chính tính THEO NGƯỜI DÙNG:
+//  - apiIp   : chốt chặn lụt theo IP, đặt TRƯỚC phiên/DB (trần cao hơn nhiều so với tổng lưu lượng hợp lệ của cả văn phòng);
+//  - api     : đặt SAU loadUser — đã đăng nhập tính theo user.id (userPerMin), chưa đăng nhập tính theo IP (anonPerMin).
+export function rateLimits(rate = { ipPerMin: 30000, userPerMin: 600, anonPerMin: 1200 }) {
   const base = { standardHeaders: 'draft-7', legacyHeaders: false };
+  const tooFast = limitHandler('Bạn thao tác quá nhanh, vui lòng thử lại sau', 'RATE_LIMITED');
   return {
-    api: rateLimit({ ...base, windowMs: 60_000, limit: 600, handler: limitHandler('Bạn thao tác quá nhanh, vui lòng thử lại sau', 'RATE_LIMITED') }),
+    apiIp: rateLimit({ ...base, windowMs: 60_000, limit: rate.ipPerMin, handler: tooFast }),
+    api: rateLimit({
+      ...base,
+      windowMs: 60_000,
+      limit: (req) => (req.user ? rate.userPerMin : rate.anonPerMin),
+      keyGenerator: (req) => (req.user ? `u:${req.user.id}` : `ip:${ipKeyGenerator(req.ip)}`),
+      handler: tooFast,
+    }),
     login: rateLimit({
       ...base,
       windowMs: 15 * 60_000,

@@ -88,3 +88,23 @@ test('middleware: sau 1 proxy (TRUST_PROXY=1) dùng IP do proxy ghi, chèn thêm
     await open.close();
   }
 });
+
+test('F17: production — APP_BASE_URL và SESSION_COOKIE_SECURE phải khớp nhau (fail-fast)', () => {
+  const KEYS = ['NODE_ENV', 'APP_BASE_URL', 'SESSION_COOKIE_SECURE', 'SESSION_SECRET', 'DB_PASSWORD', 'GEMINI_API_KEY'];
+  const keep = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+  const load = (env) => {
+    Object.assign(process.env, { NODE_ENV: 'production', SESSION_SECRET: 'x'.repeat(40), DB_PASSWORD: 'pw', GEMINI_API_KEY: 'k', ...env });
+    return loadConfig();
+  };
+  try {
+    assert.throws(() => load({ APP_BASE_URL: 'https://slides.misa.vn', SESSION_COOKIE_SECURE: 'false' }), /SESSION_COOKIE_SECURE=false/);
+    assert.throws(() => load({ APP_BASE_URL: 'http://10.1.2.3:8088', SESSION_COOKIE_SECURE: 'true' }), /không giữ phiên/);
+    assert.ok(load({ APP_BASE_URL: 'https://slides.misa.vn', SESSION_COOKIE_SECURE: 'true' }));
+    assert.ok(load({ APP_BASE_URL: 'http://10.1.2.3:8088', SESSION_COOKIE_SECURE: 'false' }), 'triển khai nội bộ qua http vẫn được phép khi cờ khớp');
+  } finally {
+    for (const k of KEYS) {
+      if (keep[k] === undefined) delete process.env[k];
+      else process.env[k] = keep[k];
+    }
+  }
+});

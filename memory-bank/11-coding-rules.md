@@ -1,6 +1,6 @@
 # 11 — Quy tắc code (bắt buộc)
 
-Áp dụng cùng bộ chuẩn `C:\MISA-project\xoan-backend-standard` và MDS 2.0 (`C:\MISA-project\misa-design-system-skill`). Phần dưới là quy tắc **riêng** của dự án — đọc trước khi sửa bất cứ thứ gì.
+Áp dụng cùng bộ chuẩn MISA Backend Standard (`~/.claude/skills/misa-backend-standard`, nguồn `/Users/tuanbui/BackEnd.SKILL`) và MDS 2.0 (`~/.claude/skills/misa-design-system`). Ứng dụng chạy độc lập trên máy chủ MISA, không nằm trong AMIS Platform → bỏ các nút chức năng chờ tích hợp (9 chấm, AVA, chat, thông báo); bản rút gọn tương đương `~/.claude/skills/xoan-design-system`. Phần dưới là quy tắc **riêng** của dự án — đọc trước khi sửa bất cứ thứ gì.
 
 ## Backend
 
@@ -15,7 +15,7 @@
 7. **Cấu hình:** chỉ đọc `process.env` trong `src/config/index.js`; nơi khác nhận `config` qua `container.js`.
 8. **Bí mật:** không log/không trả về API key, mật khẩu, token, chữ ký URL. Không commit `.env`.
 9. **Tệp:** chỉ ghi qua `storageService` với key từ `assetKey()`; không dùng tên tệp client làm đường dẫn.
-10. **Lược đồ DB:** không sửa `schema.sql` baseline đã áp; thêm changelog mới trong `startup/database/changelogs/` + cập nhật `03`.
+10. **Lược đồ DB (theo chuẩn MISA Backend §05):** mỗi thay đổi = 1 changelog mới trong `startup/database/changelogs/` (idempotent, KHÔNG hạ cấp lược đồ mới hơn khi chạy lại) **đồng thời** cập nhật `schema.sql` để baseline luôn là bản đầy đủ mới nhất (cài mới không phải chạy lại từng changelog) + `03`. Không đổi/xoá changelog đã chạy trừ khi chỉ làm chặt tính idempotent.
 11. **Gọi mạng ra ngoài** theo URL người dùng: bắt buộc qua `safeFetch`.
 
 ## Frontend

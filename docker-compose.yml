@@ -29,6 +29,8 @@ services:
     image: misa-presentation:latest
     restart: unless-stopped
     env_file: .env
+    # Ứng dụng tự dừng sau tối đa 20 giây (server.js) → cho Docker chờ lâu hơn trước khi SIGKILL.
+    stop_grace_period: 30s
     environment:
       DB_HOST: mysql
       STORAGE_DIR: /data/storage

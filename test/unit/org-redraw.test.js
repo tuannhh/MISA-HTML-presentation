@@ -52,7 +52,7 @@ test('biến thể org: ô khối chỉ khi chữ con đủ ngắn so với số
   assert.equal(pickVariant(s(6, 30)), 'tree');
 });
 
-test('cleanRedraw: chỉ nhận sơ đồ đơn giản (org 2–6 nhánh ≤ 8 mục, timeline 3–8 mốc, process 3–6 bước), cắt chữ theo giới hạn', () => {
+test('cleanRedraw: chỉ nhận sơ đồ đơn giản (org 2–6 nhánh ≤ 8 mục, timeline 3–8 mốc, process 3–6 bước), nhãn quá dài → bỏ (không cắt chữ)', () => {
   const org = cleanRedraw({ type: 'org', root: '  Giám   đốc ', nodes: [{ title: 'A', value: 'x', items: ['a1', ''] }, { title: 'B', items: [] }] });
   assert.deepEqual(org, { type: 'org', root: 'Giám đốc', nodes: [{ title: 'A', value: '', items: ['a1'] }, { title: 'B', value: '', items: [] }] });
   assert.equal(cleanRedraw({ type: 'org', root: 'G', nodes: [{ title: 'A', items: [] }] }), null, '1 nhánh');
@@ -62,7 +62,12 @@ test('cleanRedraw: chỉ nhận sơ đồ đơn giản (org 2–6 nhánh ≤ 8 m
   // Lộ trình thiếu mốc thời gian → coi là quy trình.
   const tl = cleanRedraw({ type: 'timeline', nodes: [{ title: 'a', value: '' }, { title: 'b', value: '' }, { title: 'c', value: 'Q3' }] });
   assert.equal(tl.type, 'process');
-  assert.equal(cleanRedraw({ type: 'org', root: 'x'.repeat(500), nodes: [{ title: 'A' }, { title: 'B' }] }).root.length, SPEC_LIMITS.root);
+  // Nhãn dài quá giới hạn → không cắt (đổi nghĩa), bỏ vẽ lại để giữ ảnh gốc.
+  assert.equal(cleanRedraw({ type: 'org', root: 'x'.repeat(SPEC_LIMITS.root + 1), nodes: [{ title: 'A' }, { title: 'B' }] }), null, 'gốc quá dài');
+  assert.equal(cleanRedraw({ type: 'org', root: 'G', nodes: [{ title: 'A'.repeat(SPEC_LIMITS.colTitle + 1) }, { title: 'B' }] }), null, 'tên nhánh quá dài');
+  assert.equal(cleanRedraw({ type: 'org', root: 'G', nodes: [{ title: 'A', items: ['m'.repeat(SPEC_LIMITS.point + 1)] }, { title: 'B' }] }), null, 'mục quá dài');
+  assert.equal(cleanRedraw({ type: 'process', nodes: [{ title: 'a', items: ['1', '2', '3', '4', '5'] }, { title: 'b' }, { title: 'c' }] }), null, 'quá 4 mục');
+  assert.equal(cleanRedraw({ type: 'org', root: 'x'.repeat(SPEC_LIMITS.root), nodes: [{ title: 'A' }, { title: 'B' }] }).root.length, SPEC_LIMITS.root, 'đúng giới hạn thì giữ');
 });
 
 test('dàn ý org: redrawPoints ↔ parseOrgPoints khứ hồi; outlineSlideToSpec dựng root + nhánh', () => {
