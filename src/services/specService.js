@@ -297,6 +297,7 @@ function fallbackLayout(s) {
     timeline: s.steps.length > 0,
     process: s.steps.length > 0,
     comparison: s.columns.length >= 2,
+    org: s.columns.length >= 2 || (s.columns.length === 1 && !!s.root),
     quote: !!s.quote.text,
     image: !!s.image?.asset || !!s.video,
     gallery: s.images.some((im) => im.asset),
@@ -328,22 +329,27 @@ function cleanSlide(c, v, i, seen) {
     highlight: c.str(o.highlight, SPEC_LIMITS.highlight, `${p}.highlight`),
     subtitle: c.str(o.subtitle, SPEC_LIMITS.subtitle, `${p}.subtitle`),
     caption: c.str(o.caption, SPEC_LIMITS.caption, `${p}.caption`),
+    // Ô đứng đầu của sơ đồ tổ chức (layout org) — giữ cả khi đổi bố cục để đổi qua lại không mất chữ.
+    root: c.str(o.root, SPEC_LIMITS.root, `${p}.root`),
     icon: ICON_SET.has(o.icon) ? o.icon : 'sparkles',
     notes: c.str(o.notes, SPEC_LIMITS.notes, `${p}.notes`),
     tags: c.arr(o.tags, SPEC_LIMITS.tags, `${p}.tags`).map((t, k) => c.str(t, SPEC_LIMITS.tag, `${p}.tags[${k}]`)).filter(Boolean),
     items: c.arr(o.items, SPEC_LIMITS.items, `${p}.items`).map((it, k) => cleanItem(c, it, `${p}.items[${k}]`, true)).filter((it) => it.title || it.text || it.image),
     stats: c.arr(o.stats, SPEC_LIMITS.stats, `${p}.stats`).map((it, k) => cleanStat(c, it, `${p}.stats[${k}]`)).filter((it) => it.value !== '' || it.label),
     steps: c.arr(o.steps, SPEC_LIMITS.steps, `${p}.steps`).map((it, k) => cleanItem(c, it, `${p}.steps[${k}]`)).filter((it) => it.title || it.text),
+    // Cột so sánh (≤ 3) · nhánh sơ đồ tổ chức (layout org, ≤ 6, có icon riêng từng nhánh).
     columns: c
-      .arr(o.columns, SPEC_LIMITS.columns, `${p}.columns`)
+      .arr(o.columns, layout === 'org' ? SPEC_LIMITS.orgBranches : SPEC_LIMITS.columns, `${p}.columns`)
       .map((col, k) => {
         const co = c.obj(col);
-        return {
+        const out = {
           title: c.str(co.title, SPEC_LIMITS.colTitle, `${p}.columns[${k}].title`),
           subtitle: c.str(co.subtitle, SPEC_LIMITS.colSubtitle, `${p}.columns[${k}].subtitle`),
           tone: TONES.has(co.tone) ? co.tone : 'neutral',
           points: c.arr(co.points, SPEC_LIMITS.points, `${p}.columns[${k}].points`).map((pt, m) => c.str(pt, SPEC_LIMITS.point, `${p}.columns[${k}].points[${m}]`)).filter(Boolean),
         };
+        if (ICON_SET.has(co.icon)) out.icon = co.icon;
+        return out;
       })
       .filter((col) => col.title || col.points.length),
     quote: { text: c.str(q.text, SPEC_LIMITS.quoteText, `${p}.quote.text`), author: c.str(q.author, SPEC_LIMITS.quoteAuthor, `${p}.quote.author`), role: c.str(q.role, SPEC_LIMITS.quoteAuthor, `${p}.quote.role`) },

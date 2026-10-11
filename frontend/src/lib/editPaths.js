@@ -41,7 +41,7 @@ export function applyFrameEdit(spec, index, path, value) {
     obj[key] = v;
     return true;
   };
-  if (p.length === 1 && ['kicker', 'title', 'subtitle', 'caption'].includes(p[0])) return set(s, p[0], L[p[0]]);
+  if (p.length === 1 && ['kicker', 'title', 'subtitle', 'caption', 'root'].includes(p[0])) return set(s, p[0], L[p[0]]);
   if (p[0] === 'quote' && ['text', 'author', 'role'].includes(p[1])) {
     s.quote = s.quote || { text: '', author: '', role: '' };
     return set(s.quote, p[1], p[1] === 'text' ? L.quoteText : L.quoteAuthor);

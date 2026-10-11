@@ -8,13 +8,13 @@ import { renderDeckHtml, RATIO_SIZES, esc } from '../../shared/deck/render.js';
 const sample = JSON.parse(readFileSync(new URL('../fixtures/sample-spec.json', import.meta.url), 'utf8'));
 const XSS = '<img src=x onerror=alert(1)><script>alert(2)</script>"\'&';
 
-test('normalizeSpec strict (người dùng lưu): bỏ trường lạ, giữ đủ 13 layout của bộ mẫu', () => {
+test('normalizeSpec strict (người dùng lưu): bỏ trường lạ, giữ đủ 14 layout của bộ mẫu', () => {
   const { spec, errors } = normalizeSpec({ ...sample, evil: 'x', slides: sample.slides.map((s) => ({ ...s, onclick: 'x' })) }, { strict: true });
   assert.deepEqual(errors, []);
   assert.equal(spec.evil, undefined);
   assert.equal(spec.slides.length, sample.slides.length);
   assert.ok(spec.slides.every((s) => s.onclick === undefined));
-  assert.equal(new Set(spec.slides.map((s) => s.layout)).size, 13);
+  assert.equal(new Set(spec.slides.map((s) => s.layout)).size, 14);
 });
 
 test('normalizeSpec strict: báo lỗi khi vượt giới hạn; lenient: cắt ngắn', () => {

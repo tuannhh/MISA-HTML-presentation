@@ -117,9 +117,9 @@
 
   /* ---------- trình chiếu từng ý (data-build trên slide) + phóng to khi bấm ---------- */
   // Đơn vị nội dung theo bố cục (khối ngoài cùng, không tính tiêu đề/trang tự do). Thứ tự = thứ tự trong trang.
-  var UNIT = '.ag-i,.tile,.path-i,.bi,.card,.crow,.stat,.st-hero,.st-row,.st-bar,.st-ring,.pola,.gal>.media,.tl-step,.tz-i,.ps,.tlv-i,.chev-i,.stair,.col';
+  var UNIT = '.ag-i,.tile,.path-i,.bi,.card,.crow,.stat,.st-hero,.st-row,.st-bar,.st-ring,.pola,.gal>.media,.tl-step,.tz-i,.ps,.tlv-i,.chev-i,.stair,.col,.org-br';
   // Phần tử phóng to được khi bấm (video không — bấm video để phát).
-  var ZOOM = '.card,.stat,.st-hero,.st-row,.st-ring,.st-bar,.col,.ps,.stair,.tl-step,.tz-i,.chev-i,.tile,.crow,.panel.bi,.pola,figure.media:not(.vid),.fe-image,.fe-table';
+  var ZOOM = '.card,.stat,.st-hero,.st-row,.st-ring,.st-bar,.col,.ps,.stair,.tl-step,.tz-i,.chev-i,.tile,.crow,.panel.bi,.pola,figure.media:not(.vid),.fe-image,.fe-table,.org-br';
   var BUILDS = { step: 1, dim: 1, tour: 1 };
   var STEPS = [], SF = []; // STEPS[i] = { mode, units[], max } · SF[i][k] = khung bắt đầu của ý k (null = theo nhịp gốc)
   function outer(list, sl) { return list.filter(function (el) { var p = el.parentElement && el.parentElement.closest(UNIT); return !p || !sl.contains(p); }); }

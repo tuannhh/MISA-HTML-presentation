@@ -17,6 +17,7 @@ export const VARIANTS = Object.freeze({
   gallery: Object.freeze(['grid', 'mosaic', 'polaroid']),
   timeline: Object.freeze(['line', 'vertical', 'zigzag', 'cards']),
   process: Object.freeze(['cards', 'chevrons', 'stairs', 'vertical']),
+  org: Object.freeze(['tree', 'boxes']),
   quote: Object.freeze(['classic', 'center', 'band']),
   comparison: Object.freeze(['columns', 'split']),
   closing: Object.freeze(['center', 'split', 'minimal']),
@@ -33,6 +34,7 @@ const photos = (s) => (Array.isArray(s.images) ? s.images.filter((im) => im && i
 // Ảnh đồ hoạ (infographic, sơ đồ…) hiển thị trọn khung (fit contain) → không dùng kiểu cắt ảnh tràn trang / xoay / ghép mảng.
 const contain = (s) => s.image?.fit === 'contain' || (Array.isArray(s.images) && s.images.some((im) => im?.fit === 'contain'));
 const unit = (st) => String(st.suffix || '').trim().toLowerCase();
+const longestPoints = (s) => Math.max(0, ...(s.columns || []).flatMap((c) => (c?.points || []).map((p) => plainText(p).length)));
 const longest = (list, key) => Math.max(0, ...(list || []).map((x) => plainText(x?.[key] || '').length));
 
 // Điều kiện để biến thể hiển thị đẹp với nội dung hiện có (r = rộng/cao của khung). Biến thể mặc định luôn hợp.
@@ -76,6 +78,9 @@ const FITS = {
     stairs: (s) => n(s.steps) >= 3 && n(s.steps) <= 5,
     vertical: (s) => n(s.steps) >= 2 && n(s.steps) <= 5,
   },
+  // Ô viền cho mục con: chỉ khi mục con ngắn (ô 1 dòng).
+  // Ô khối hẹp dần theo số nhánh → giới hạn độ dài chữ con tương ứng (quá dài thì lùi về cây nhánh).
+  org: { boxes: (s) => longestPoints(s) <= ((s.columns || []).length <= 3 ? 48 : (s.columns || []).length <= 4 ? 34 : 22) },
   quote: { center: (s) => !hasMedia(s), band: (s) => !hasMedia(s) },
   comparison: { split: (s) => n(s.columns) === 2 },
   closing: { split: (s) => n(s.tags) > 0 || !!s.caption, minimal: () => true },
@@ -114,7 +119,7 @@ function contentWeight(layout, v, s) {
 const AFFINITY = {
   neon: { cards: 1.3, rings: 1.3, line: 1.2, chevrons: 1.2 },
   editorial: { numbered: 1.8, plain: 1.8, split: 1.5, vertical: 1.5, minimal: 1.6, rows: 1.5, ghost: 1.5, list: 1.3, center: 1.2 },
-  solid: { tiles: 1.6, panels: 1.6, bento: 1.8, band: 1.6, hero: 1.5, chevrons: 1.4, stairs: 1.4, split: 1.2 },
+  solid: { boxes: 1.4, tiles: 1.6, panels: 1.6, bento: 1.8, band: 1.6, hero: 1.5, chevrons: 1.4, stairs: 1.4, split: 1.2 },
   outline: { rows: 1.5, checks: 1.5, zigzag: 1.4, path: 1.5, bars: 1.3, numbered: 1.3, cards: 1.2 },
   soft: { tiles: 1.4, rings: 1.4, polaroid: 1.8, bento: 1.4, center: 1.4, panels: 1.3, mirror: 1.2 },
 };

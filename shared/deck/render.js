@@ -22,7 +22,7 @@ export const RATIO_SIZES = Object.freeze({
 });
 // Bố cục AI được chọn khi dựng bài; 'free' (trang tự do — người dùng tự đặt phần tử) chỉ tạo từ trình soạn thảo.
 export const AI_LAYOUTS = Object.freeze([
-  'cover', 'section', 'agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'quote', 'comparison', 'closing',
+  'cover', 'section', 'agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'org', 'quote', 'comparison', 'closing',
 ]);
 export const LAYOUTS = Object.freeze([...AI_LAYOUTS, 'free']);
 // Tông màu: các bảng màu dựng sẵn (palette.js) + 'custom' (người dùng nhập 2 màu, xem spec.palette).
@@ -231,6 +231,9 @@ function railList(steps, label, ctx, editValue) {
     .join('')}</div>`;
 }
 
+// Sơ đồ tổ chức: hệ số cỡ chữ theo số nhánh (nhiều nhánh → cột hẹp).
+const ORG_SCALE = [1, 1, 1, 1, 0.92, 0.84, 0.76];
+
 const L = {
   cover(s, ctx, v) {
     const m = hasMedia(s);
@@ -426,6 +429,34 @@ ${st.value ? `<span class="label" data-a="up" data-d="${18 + i * 7}" data-dist="
         return `<div class="panel ps" style="${accent(i)}" data-a="up" data-d="${18 + i * 7}"><span class="ps-n">${pad2(i + 1)}</span>${st.value ? `<span class="label"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${itemText(st, ctx, `steps.${i}`)}${rowEnd ? '' : `<span class="arr">${icon('arrow')}</span>`}</div>`;
       })
       .join('')}</div></div>`;
+  },
+
+  // (cỡ chữ/khoảng cách co theo số nhánh — xem ORG_SCALE)
+  // Sơ đồ tổ chức / phân cấp 2 tầng: ô đứng đầu (root) → các nhánh (columns: tiêu đề + icon) → mục con (columns[].points).
+  // Đường nối vẽ bằng khối CSS mọc dần (grow/bar của engine): thân dọc từ ô gốc → thanh ngang → nhánh rẽ xuống từng nhánh
+  // → nhánh con nối hình chữ L của từng mục (hiện cùng mục). tree = nhãn nhánh dạng viên thuốc màu + mục con có chấm; boxes = mục con trong ô viền.
+  org(s, ctx, v) {
+    const cols = list(s.columns).slice(0, LIM.orgBranches);
+    const n = Math.max(1, cols.length);
+    const most = Math.max(0, ...cols.map((c) => list(c.points).length));
+    // Không có ô đứng đầu → chỉ hàng nhánh (không vẽ đường nối lên trên).
+    const rootHtml = s.root ? `<div class="org-top"><div class="org-root" data-a="zoom" data-d="6"><span class="org-ri">${icon(s.icon && s.icon !== 'sparkles' ? s.icon : 'user')}</span><b${E(ctx, 'root', LIM.root, true)}>${rt(s.root)}</b></div></div>` : '';
+    const wire = !s.root ? '' : n > 1
+      ? `<div class="org-wire" aria-hidden="true"><i class="org-stem" data-a="grow" data-to="100" data-d="16"></i><div class="org-bus"><i class="l" data-a="bar" data-to="50" data-d="22"></i><i class="r" data-a="bar" data-to="50" data-d="22"></i></div></div>`
+      : '<div class="org-wire one" aria-hidden="true"><i class="org-stem" data-a="grow" data-to="100" data-d="16"></i></div>';
+    const branch = (c, i) => {
+      const d = 30 + i * 6;
+      const kids = list(c.points);
+      return `<div class="org-br" style="${accent(i)}">${s.root ? `<div class="org-dw" aria-hidden="true"><i class="org-drop" data-a="grow" data-to="100" data-d="${d - 4}"></i></div>` : ''}
+<div class="org-h" data-a="pop" data-d="${d}"><span class="org-hi">${icon(c.icon || 'layers')}</span><h4${E(ctx, `columns.${i}.title`, LIM.colTitle, true)}>${rt(c.title)}</h4></div>${
+        kids.length
+          ? `<div class="org-kids" role="list">${kids
+              .map((k, j) => `<div class="org-k" role="listitem" data-a="left" data-d="${d + 10 + j * 4}" data-dist="24"><i class="org-dot" aria-hidden="true"></i><span${E(ctx, `columns.${i}.points.${j}`, LIM.point, true)}>${rt(k)}</span></div>`)
+              .join('')}</div>`
+          : ''
+      }</div>`;
+    };
+    return `${head(s, ctx)}<div class="body"><div class="org${v === 'boxes' ? ' boxes' : ''}${s.root ? '' : ' noroot'}" style="--n:${n};--ok:${ORG_SCALE[Math.min(n, 6)] * (most > 5 ? 0.9 : 1)}">${rootHtml}${wire}<div class="org-row">${cols.map(branch).join('')}</div></div></div>`;
   },
 
   quote(s, ctx) {

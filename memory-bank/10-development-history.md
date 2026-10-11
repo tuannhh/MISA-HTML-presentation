@@ -1,5 +1,27 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-11 — Vẽ lại sơ đồ tổ chức / lộ trình đơn giản (layout `org`)
+
+### Yêu cầu (chủ dự án)
+Sơ đồ tổ chức hoặc timeline dạng đơn giản (ảnh "SƠ ĐỒ CƠ CẤU TỔ CHỨC DN NHỎ") thì vẽ lại cũng được, cần ấn tượng như bộ slide tự làm trực tiếp bằng Claude Code
+(tệp `Slide AMIS.zip` → bản sao tham khảo `tmp/ref-amis/`).
+
+### Thay đổi (chi tiết `05` §16, `06`)
+- Layout mới `org` (AI chọn được): `root` + nhánh (`columns` ≤ 6, `icon` từng nhánh), biến thể `tree` | `boxes`, CSS + chuyển động nối dây; `limits` `orgBranches`, `root`;
+  `layers` (ô `root` dời được, hoạ tiết icons); engine `UNIT`/`ZOOM` thêm `.org-br`.
+- `specService` (root, icon nhánh, giới hạn nhánh theo bố cục, fallback), `geminiService` (schema dựng bài root + icon nhánh; prompt dàn ý/dựng bài mô tả org;
+  `locateVisuals` trả `redraw`; dàn ý nhận khối DRn + trường `diagram`), `visualService` (`cleanRedraw`, ảnh tải lên riêng lẻ thành trang, `item.source`),
+  `outlineService` (`redrawPoints`, `parseOrgPoints`, `applyRedraws`, org trong `outlineSlideToSpec` + `composeDeckFromOutline`), `presentationService` (nối luồng), `ingestService` (`standalone`).
+- Frontend: `slideModel` (LAYOUTS, LAYOUT_FIELDS, VARIANT_LABELS, ensureLayoutContent, BUILD_LAYOUTS), `SlideFields` (Ô đứng đầu, Nhánh + icon), `editPaths` (`root`), `useOutline` (bố cục + gợi ý).
+- Fixture `sample-spec.json` thêm trang org (14 layout).
+
+### Kiểm chứng
+- `npm test` 143/143 (mới `org-redraw.test.js` 9 ca). `npm run build` OK. Docker 8088 + smoke **TẤT CẢ ĐẠT** (bật tạm `SELF_REGISTRATION` qua tệp override ngoài repo rồi trả về).
+- AI thật: ảnh PNG sơ đồ + ảnh lộ trình + ghi chú → `visual_shots {kind:images, redraws:2}`, trang `org:boxes` + `timeline` đúng nguyên văn, không trang ảnh thừa;
+  PDF 2 trang → `org` đúng. Ảnh chụp (Chrome 1600×900, tối + sáng) so với mẫu `g5-04.png`; hiệu ứng nối dây chạy đúng trình tự; trình chiếu từng ý → từng nhánh; 0 lỗi trang.
+- Editor desktop 1600 + mobile 375: trang org hiện Ô đứng đầu, Nhánh (3/6), icon, mục con; 0 lỗi console.
+- Chưa kiểm chứng: tư liệu thật của MISA có sơ đồ phức tạp vừa phải (ranh giới "đơn giản" do AI xét); PPTX có SmartArt tổ chức.
+
 ## 2026-10-11 — Bỏ đăng ký trên màn đăng nhập
 
 Chủ dự án: bản chạy trên server MISA sẽ dùng đăng nhập bảo mật của MISA (DevOps cài) → bỏ tính năng đăng ký. Đã gỡ trang `/register` (desktop + mobile), liên kết "Đăng ký", câu phụ đề; logo "MISA Presentation" chuyển vào trong thẻ đăng nhập (desktop). `SELF_REGISTRATION` mặc định `false` (API `/register` chỉ để smoke test, phải bật tạm khi chạy smoke). Đã kiểm bằng Chrome desktop 1440px + mobile; chưa commit.

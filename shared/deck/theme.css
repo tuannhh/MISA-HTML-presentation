@@ -881,3 +881,74 @@ body.edit [data-mv] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%
   #mvg .mv-fz { font-size: 15px; }
   #dcm button { min-height: 44px; font-size: 15px; }
 }
+
+/* ---------- sơ đồ tổ chức (org) ----------
+   Ô đứng đầu → thân dọc (grow) → thanh ngang 2 nửa mọc từ giữa ra (bar) → nhánh rẽ xuống từng cột (grow) → nhãn nhánh → mục con nối chữ L.
+   --ok: hệ số co theo số nhánh (renderer); --cg: khoảng cách cột (thanh ngang chạy từ tâm cột đầu tới tâm cột cuối). */
+.org { --ok: 1; --lw: calc(4px * var(--k)); --cg: calc(52px * var(--k) * var(--ok)); --kg: calc(22px * var(--k) * var(--ok)); --ind: calc(60px * var(--k)); display: flex; flex-direction: column; min-height: 0; }
+.org-top { display: flex; justify-content: center; }
+.org-root {
+  position: relative; display: flex; align-items: center; gap: calc(30px * var(--k)); max-width: 72%;
+  padding: calc(20px * var(--k)) calc(60px * var(--k)) calc(20px * var(--k)) calc(20px * var(--k)); border-radius: 999px;
+  background: linear-gradient(180deg, var(--panel-a), var(--panel-b)); border: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 calc(10px * var(--k)) color-mix(in srgb, var(--accent) 8%, transparent), 0 0 90px color-mix(in srgb, var(--accent) 26%, transparent), var(--shadow);
+}
+.org-ri {
+  width: calc(112px * var(--k)); height: calc(112px * var(--k)); flex: none; border-radius: 50%; display: grid; place-items: center; color: var(--on-accent);
+  background: radial-gradient(circle at 34% 28%, color-mix(in srgb, var(--accent) 55%, #FFFFFF), var(--accent) 58%, color-mix(in srgb, var(--accent) 60%, var(--accent-2)));
+  box-shadow: 0 0 0 calc(8px * var(--k)) color-mix(in srgb, var(--accent) 16%, transparent), 0 12px 30px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.org-ri .ic { width: 52%; height: 52%; }
+.org-root b { font: 800 calc(var(--t-h3) * var(--ok))/1.15 var(--f-head, var(--f-sans)); letter-spacing: .01em; text-transform: uppercase; color: var(--text); text-wrap: balance; }
+.org-wire { position: relative; flex: none; height: calc(70px * var(--k) * var(--ok)); }
+.org-stem { position: absolute; left: 50%; top: 0; width: var(--lw); height: 0; margin-left: calc(var(--lw) / -2); border-radius: var(--lw); background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 55%, var(--line-2))); }
+.org-wire.one { height: calc(56px * var(--k)); }
+.org-bus { position: absolute; bottom: 0; height: var(--lw); left: calc((100% - (var(--n) - 1) * var(--cg)) / var(--n) / 2); right: calc((100% - (var(--n) - 1) * var(--cg)) / var(--n) / 2); }
+.org-bus i { position: absolute; top: 0; height: 100%; width: 0; border-radius: var(--lw); }
+.org-bus .l { right: 50%; background: linear-gradient(270deg, var(--accent), color-mix(in srgb, var(--accent) 45%, var(--line-2))); }
+.org-bus .r { left: 50%; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 45%, var(--line-2))); }
+.org-row { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); column-gap: var(--cg); align-items: start; min-height: 0; }
+.org-br { --c: var(--accent); display: flex; flex-direction: column; min-width: 0; }
+.org-dw { position: relative; height: calc(34px * var(--k) * var(--ok)); }
+.org-drop { position: absolute; left: 50%; top: 0; width: var(--lw); height: 0; margin-left: calc(var(--lw) / -2); border-radius: var(--lw); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 55%, var(--c)), var(--c)); }
+.org-h {
+  display: flex; align-items: center; gap: calc(22px * var(--k) * var(--ok)); min-height: calc(120px * var(--k) * var(--ok));
+  padding: calc(14px * var(--k)) calc(30px * var(--k)) calc(14px * var(--k)) calc(14px * var(--k)); border-radius: calc(28px * var(--k));
+  color: var(--on-accent); background: linear-gradient(120deg, var(--c), color-mix(in srgb, var(--c) 68%, var(--accent-2)));
+  box-shadow: 0 18px 50px color-mix(in srgb, var(--c) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, .25);
+}
+.org-hi {
+  width: calc(88px * var(--k) * var(--ok)); height: calc(88px * var(--k) * var(--ok)); flex: none; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(255, 255, 255, .94); color: color-mix(in srgb, var(--c) 78%, #000000); box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+}
+.org-hi .ic { width: 54%; height: 54%; }
+.org-hi .ic svg { stroke-width: 2; }
+.org-h h4 { margin: 0; min-width: 0; font: 800 calc(var(--t-md) * var(--ok))/1.16 var(--f-head, var(--f-sans)); letter-spacing: .01em; text-transform: uppercase; overflow-wrap: anywhere; text-wrap: balance; }
+.org-kids { display: flex; flex-direction: column; gap: var(--kg); margin-top: var(--kg); padding-left: var(--ind); }
+.org-k { position: relative; display: flex; align-items: center; gap: calc(18px * var(--k)); min-width: 0; font: 600 calc(var(--t-sm) * var(--ok))/1.3 var(--f-sans); color: var(--soft); }
+.org-k > span { min-width: 0; overflow-wrap: anywhere; }
+/* Nhánh con chữ L: đoạn dọc từ mục trên xuống giữa mục + gạch ngang tới chấm; mục chưa phải cuối nối tiếp xuống dưới. */
+.org-k::before, .org-k:not(:last-child)::after {
+  content: ""; position: absolute; left: calc(var(--ind) * -1 + 26px * var(--k)); border-left: calc(3px * var(--k)) solid color-mix(in srgb, var(--c) 72%, transparent);
+}
+.org-k::before { top: calc(var(--kg) * -1); bottom: 50%; width: calc(var(--ind) - 26px * var(--k) - 6px * var(--k)); border-bottom: calc(3px * var(--k)) solid color-mix(in srgb, var(--c) 72%, transparent); }
+.org-k:last-child::before { border-bottom-left-radius: calc(16px * var(--k)); }
+.org-k:not(:last-child)::after { top: 50%; bottom: 0; }
+.org-dot { width: calc(18px * var(--k)); height: calc(18px * var(--k)); flex: none; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 calc(6px * var(--k)) color-mix(in srgb, var(--c) 22%, transparent), 0 0 18px color-mix(in srgb, var(--c) 60%, transparent); }
+.org.noroot .org-row { align-self: stretch; }
+/* boxes: mục con trong ô viền (kiểu sơ đồ khối), nhãn nhánh hình chữ nhật căn giữa. */
+.org.boxes .org-h { justify-content: center; text-align: center; border-radius: calc(18px * var(--k)); }
+.org.boxes .org-k {
+  justify-content: center; text-align: center; padding: calc(16px * var(--k)) calc(22px * var(--k)); border-radius: calc(16px * var(--k));
+  background: color-mix(in srgb, var(--c) 9%, var(--panel-b)); border: 2px solid color-mix(in srgb, var(--c) 42%, transparent); color: var(--text);
+}
+.org.boxes .org-dot { display: none; }
+.org.boxes .org-k::before { width: calc(var(--ind) - 26px * var(--k)); }
+/* Phong cách bài: tạp chí / viền nét → nhãn nhánh không tô nền. */
+:is([data-style="editorial"], [data-style="outline"]) .org-h { background: none; color: var(--c); border: 2px solid var(--c); box-shadow: none; }
+:is([data-style="editorial"], [data-style="outline"]) .org-hi { background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--c); box-shadow: none; }
+[data-style="editorial"] .org-root { border-radius: calc(18px * var(--k)); box-shadow: none; }
+[data-style="soft"] .org-h { border-radius: 999px; }
+.x-icons .org-hi, .x-icons .org-ri { display: none; }
+.x-icons .org-root { padding-left: calc(60px * var(--k)); }
+.x-icons .org-h { padding-left: calc(30px * var(--k)); }

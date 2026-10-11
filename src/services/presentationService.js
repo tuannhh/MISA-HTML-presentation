@@ -15,7 +15,7 @@ import { Semaphore } from '../lib/semaphore.js';
 import { badRequest, conflict, forbidden, notFound, tooLarge, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
 import { sniffVideo, VIDEO_MIME } from '../lib/fileType.js';
 import { normalizeSpec, collectAssetIds, dropForeignAssets, remapAssetIds, themeForTone, cleanImageEdit, SPEC_LIMITS } from './specService.js';
-import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia, placeDiagrams } from './outlineService.js';
+import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia, placeDiagrams, applyRedraws, redrawPoints } from './outlineService.js';
 import { precheckSource, precheckMedia, ingestSource, fitPieces } from './ingestService.js';
 import { prepareMedia } from './mediaService.js';
 import { extractVisuals, mergeEmbedded } from './visualService.js';
@@ -204,12 +204,24 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       // Tư liệu có trang (PDF, slide/văn bản Office): render trang → AI nhận diện + cắt ảnh giao diện phần mềm và sơ đồ (ưu tiên đưa
       // vào bài) — đứng đầu danh sách ảnh để AI dựng dàn ý luôn được xem. Ảnh nhúng trùng hình đã cắt → gộp làm 1.
       const V = config.visuals;
-      const pages = [...source.media.filter((m) => m.kind === 'pdf').map((m) => ({ ...m, kind: 'pdf' })), ...(source.docs || []).map((d) => ({ ...d, kind: 'office' }))];
+      // Ảnh tải lên riêng lẻ (ảnh chụp sơ đồ, màn hình…) cũng được xem như trang — gom 1 lượt gọi AI.
+      const loose = source.images.filter((im) => im.standalone);
+      const pages = [
+        ...source.media.filter((m) => m.kind === 'pdf').map((m) => ({ ...m, kind: 'pdf' })),
+        ...(source.docs || []).map((d) => ({ ...d, kind: 'office' })),
+        ...(loose.length ? [{ name: 'ảnh tải lên', kind: 'images', images: loose }] : []),
+      ];
       const shots = V.enabled && pages.length && V.maxShots
         ? await extractVisuals(pages, { gemini, bin: V.bin, soffice: V.soffice, office: V.office, officeTimeoutMs: V.officeTimeoutMs, tempDir: config.storage.tempDir, maxPages: V.maxPages, maxShots: V.maxShots })
         : [];
-      const { images: embedded, merged } = await mergeEmbedded(shots, source.images);
-      const images = await normalizeExtractedImages([...shots, ...embedded], { max: config.limits.maxImagesPerDeck });
+      // Sơ đồ đơn giản (tổ chức, lộ trình, quy trình) → VẼ LẠI bằng bố cục động thay cho ảnh cắt; vẫn dùng để bỏ ảnh nhúng trùng.
+      const replaced = new Set(shots.map((x) => x.source).filter(Boolean));
+      const { images: embedded, merged } = await mergeEmbedded(shots, source.images.filter((im) => !replaced.has(im)));
+      const redraws = shots
+        .filter((x) => x.redraw)
+        .map((x, i) => ({ ref: `DR${i + 1}`, title: x.diagram?.title || '', where: x.name, ...x.redraw }))
+        .map((r) => ({ ...r, points: redrawPoints(r) }));
+      const images = await normalizeExtractedImages([...shots.filter((x) => !x.redraw), ...embedded], { max: config.limits.maxImagesPerDeck });
       const assetIds = [];
       for (const img of images) {
         const assetId = randomUUID();
@@ -235,7 +247,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       try {
         const text = fitPieces([...source.pieces, ...media.pieces], config.limits.maxSourceChars);
         raw = await gemini.generateOutline({
-          text, media: media.direct, images: modelImages, userImages: user.images, userVideos: user.videos,
+          text, media: media.direct, images: modelImages, userImages: user.images, userVideos: user.videos, redraws,
           slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: AUTO_MAX_SLIDES,
           tone: input.tone, instructions: input.instructions, ratio: input.ratio, sourceLabel: input.sourceLabel,
         });
@@ -307,9 +319,17 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid) || ui.has(aid) || diagrams.has(aid) || userImageIds.has(aid));
       const { outline } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: input.autoSlides, slideCount: input.slideCount, aiImages: !!input.aiImages } });
       if (!outline.slides.length) throw unprocessable('AI không lập được dàn ý từ tài liệu này', 'AI_EMPTY');
+      // Mã DRn AI ghi ở từng trang (ghép theo chỉ số TRƯỚC capOutline — sau đó bám theo đối tượng trang).
+      const drRefs = new Map();
+      outline.slides.forEach((sl, i) => {
+        const ref = raw?.slides?.[i]?.diagram;
+        if (typeof ref === 'string' && ref.trim()) drRefs.set(sl, ref);
+      });
       const maxSlides = input.autoSlides ? AUTO_MAX_SLIDES : input.slideCount;
       capOutline(outline, maxSlides);
       const placed = placeUserMedia(outline.slides, { images: required, videos: user.videos.map((v) => v.video) }, { room: Math.max(0, maxSlides - outline.slides.length) });
+      // Sơ đồ vẽ lại: sau media bắt buộc (không đè trang có ảnh/video), trước sơ đồ ảnh cắt + ảnh giao diện (không bắt buộc).
+      const rd = applyRedraws(outline.slides, redraws, { room: Math.max(0, maxSlides - outline.slides.length), refs: drRefs });
       // Sơ đồ: mỗi sơ đồ 1 trang ảnh lớn; sơ đồ AI chưa dùng → trang riêng cạnh nội dung liên quan khi còn hạn mức (không bắt buộc).
       const dgPlaced = placeDiagrams(outline.slides, [...diagrams.values()], { room: Math.max(0, maxSlides - outline.slides.length) });
       // Ảnh giao diện đã cắt mà AI chưa dùng: chèn vào trang chữ còn trống / gom thành trang ảnh khi còn hạn mức trang (không bắt buộc).
@@ -318,7 +338,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       await presentations.setOutlineResult(tenantId, id, { outline, title: input.title ? null : outline.title });
       const kinds = {};
       for (const k of kindOf.values()) if (k) kinds[k] = (kinds[k] || 0) + 1;
-      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, visualShots: shots.length, embeddedMerged: merged, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, diagrams: diagrams.size, diagramsPlaced: dgPlaced.placed, diagramsAdded: dgPlaced.added, droppedImages, kinds, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
+      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, visualShots: shots.length, embeddedMerged: merged, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, diagrams: diagrams.size, diagramsPlaced: dgPlaced.placed, diagramsAdded: dgPlaced.added, redraws: redraws.length, redrawApplied: rd.applied, redrawAdded: rd.added, redrawConverted: rd.converted, droppedImages, kinds, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi lập dàn ý. Vui lòng thử lại.';
       if (!(err instanceof HttpError)) logger.error('outline_failed', { id, err });

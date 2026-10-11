@@ -22,6 +22,9 @@ export const SPEC_LIMITS = Object.freeze({
   statLabel: 160,
   steps: 10,
   columns: 3,
+  // Sơ đồ tổ chức (layout org): ô đứng đầu + tối đa 6 nhánh (columns), mỗi nhánh tối đa `points` mục con.
+  orgBranches: 6,
+  root: 120,
   colTitle: 100,
   colSubtitle: 60,
   points: 8,

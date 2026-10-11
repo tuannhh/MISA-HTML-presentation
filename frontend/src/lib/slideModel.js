@@ -19,6 +19,7 @@ export const LAYOUTS = [
   { value: 'process', label: 'Quy trình', icon: 'arrow-right' },
   { value: 'quote', label: 'Trích dẫn', icon: 'message' },
   { value: 'comparison', label: 'So sánh', icon: 'copy' },
+  { value: 'org', label: 'Sơ đồ tổ chức', icon: 'users' },
   { value: 'closing', label: 'Trang kết', icon: 'circle-check' },
   { value: 'free', label: 'Trang tự do', icon: 'layout-board' },
 ];
@@ -39,6 +40,8 @@ export const LAYOUT_FIELDS = {
   process: [...HEAD, 'steps'],
   quote: ['kicker', 'title', 'highlight', 'quote', 'image'],
   comparison: [...HEAD, 'columns'],
+  // Sơ đồ tổ chức: ô đứng đầu (root + icon) + các nhánh (columns: tên, icon, mục con).
+  org: [...HEAD, 'root', 'icon', 'columns'],
   closing: ['kicker', 'title', 'subtitle', 'tags', 'caption'],
   // Trang tự do: nội dung là các phần tử (xem FreeElementsPanel) — tiêu đề chỉ dùng cho danh sách trang/ghi chú.
   free: ['title'],
@@ -60,6 +63,7 @@ export const VARIANT_LABELS = {
   process: { cards: 'Thẻ bước', chevrons: 'Mũi tên', stairs: 'Bậc thang', vertical: 'Dọc' },
   quote: { classic: 'Cổ điển', center: 'Căn giữa', band: 'Dải màu' },
   comparison: { columns: 'Cột song song', split: 'Chia đôi đối lập' },
+  org: { tree: 'Cây nhánh', boxes: 'Ô khối' },
   closing: { center: 'Căn giữa', split: 'Chia đôi', minimal: 'Tối giản' },
 };
 // Phong cách toàn bài (hình khối, viền, bóng) — khớp STYLES.
@@ -96,7 +100,7 @@ export const emptyColumn = () => ({ title: '', subtitle: '', tone: 'neutral', po
 // template: mẫu bố cục trang tự do (shared/deck/free.js) — chỉ dùng khi layout = 'free'.
 export function newSlide(layout = 'bullets', template = 'blank') {
   const s = {
-    id: newId(), layout, kicker: '', title: layout === 'free' ? 'Trang tự do' : 'Tiêu đề mới', highlight: '', subtitle: '', caption: '', icon: 'sparkles', notes: '',
+    id: newId(), layout, kicker: '', title: layout === 'free' ? 'Trang tự do' : 'Tiêu đề mới', highlight: '', subtitle: '', caption: '', root: '', icon: layout === 'org' ? 'user' : 'sparkles', notes: '',
     tags: [], items: [], stats: [], steps: [], columns: [], quote: { text: '', author: '', role: '' }, image: null, images: [], video: null,
   };
   if (layout === 'free') s.elements = elementsFromTemplate(template);
@@ -109,6 +113,7 @@ export function ensureLayoutContent(s) {
   if (s.layout === 'stats' && !s.stats.length) s.stats = [emptyStat(), emptyStat(), emptyStat()];
   if (['timeline', 'process'].includes(s.layout) && !s.steps.length) s.steps = [emptyItem(), emptyItem(), emptyItem()];
   if (s.layout === 'comparison' && s.columns.length < 2) s.columns = [emptyColumn(), emptyColumn()];
+  if (s.layout === 'org' && s.columns.length < 2) s.columns = [...s.columns, emptyColumn(), emptyColumn(), emptyColumn()].slice(0, 3);
   if (s.layout === 'quote' && !s.quote) s.quote = { text: '', author: '', role: '' };
   if (s.layout === 'free' && !Array.isArray(s.elements)) s.elements = [];
   return s;
@@ -147,4 +152,4 @@ export const BUILD_OPTIONS = [
   { value: 'tour', label: 'Phóng to lần lượt từng ý' },
 ]
 // Bố cục có các "ý" để trình chiếu lần lượt (trang tự do: phần tử bật "Hiện khi bấm").
-export const BUILD_LAYOUTS = ['agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'comparison', 'free']
+export const BUILD_LAYOUTS = ['agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'comparison', 'org', 'free']

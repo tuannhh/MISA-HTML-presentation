@@ -86,6 +86,7 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 
 ## Trình soạn thảo (`useEditor` + `SlideFields`)
 
+- Layout `org` (Sơ đồ tổ chức): `SlideFields` có ô **Ô đứng đầu** (`root`), icon ô đứng đầu, mục **Nhánh (n/6)** — mỗi nhánh: tên, `IconPicker`, mục con (mỗi dòng 1 mục), nút sang trái/phải; dàn ý có gợi ý cách viết (`POINT_HINT.org`). `editPaths` cho sửa `root` trên khung.
 - `SlideFields.vue` sinh form theo layout: **chip "Kiểu trình bày"** (`VARIANT_LABELS`, mờ khi không hợp nội dung), kicker, tiêu đề, highlight (phải nằm trong tiêu đề), subtitle, caption, tags (phân tách dấu phẩy), icon (`IconPicker`, lưới có tìm kiếm), quote, danh sách stats/items/steps/columns (thêm/xoá/di chuyển; mục ở `ITEM_IMAGE_LAYOUTS` có nút "Ảnh/logo" thay biểu tượng), ImagePicker (tải ảnh mới hoặc chọn ảnh đã có trong bài), gallery, ghi chú. Lỗi độ dài tính từ `SPEC_LIMITS` theo **chữ hiển thị** ngay khi gõ.
 - Chữ định dạng (`05` §13): ô nhập hiện `plainText`, ghi lại bằng `repaintRich` (giữ định dạng theo vị trí) qua helper `rx(obj, key)`; tiêu đề trong danh sách trang/aria dùng `plainText`. Định dạng (màu, đậm, VIẾT HOA, giữ liền) chỉ làm trên khung (thanh `#rtb` của engine) → `deck:edit` với chuỗi có thẻ → `editPaths` (`cutR` kiểm/cắt).
 - `DecorPanel.vue` ("Hoạ tiết, vị trí & cỡ chữ", trong `SlideFields`, cả desktop + mobile): MSwitch từng hoạ tiết của bố cục, *Hiện lại tất cả*, *Áp cho mọi trang* (emit `decor-all` → trang cha `ed.setDecorAll` + toast), số ô chữ đã chỉnh + *Đặt lại vị trí & cỡ chữ*. Thông báo từ khung (vd. đầy 30 phần tử) qua `useLiveDeck({ onNotice })` → `toast.info`.
@@ -99,7 +100,7 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 
 ## Trình bày (deck renderer — `shared/deck/`)
 
-- `render.js`: spec → HTML (escape mọi chuỗi), 13 layout × biến thể (`variants.js`, lớp `V-<biến thể>`), `data-style` phong cách bài, 20 mẫu màu + tuỳ chỉnh, `data-bg`/`data-tone` trên trang, khung video 16:9, logo, `mode: present|print`; chữ định dạng (`rich.js` → `span.rt`), ảnh mục `.ib-img`, lớp chèn đè `.free.over`, bộ nhận diện (`brandFor`: `.bimg`/`.bhd`/`.bft`, lớp `has-bimg`/`bspec`/`no-ftt`/`ink-light`/`ink-dark`, biến `--bt`/`--bb`).
+- `render.js`: spec → HTML (escape mọi chuỗi), 14 layout × biến thể (`variants.js`, lớp `V-<biến thể>`), `data-style` phong cách bài, 20 mẫu màu + tuỳ chỉnh, `data-bg`/`data-tone` trên trang, khung video 16:9, logo, `mode: present|print`; chữ định dạng (`rich.js` → `span.rt`), ảnh mục `.ib-img`, lớp chèn đè `.free.over`, bộ nhận diện (`brandFor`: `.bimg`/`.bhd`/`.bft`, lớp `has-bimg`/`bspec`/`no-ftt`/`ink-light`/`ink-dark`, biến `--bt`/`--bb`).
 - `rich.js`: cú pháp `⟦…⟧…⟦/⟧` (parse/serialize/plainText/cutRich/repaintRich/formatRange/richHtml) — dùng chung server, renderer, giao diện.
 - `variants.js`: danh sách biến thể/phong cách, điều kiện hợp nội dung, `artDirect` (server) + `resolveVariant` (renderer) — xem `05` §9.
 - `engine.js`: điều khiển trang (phím mũi tên/Space/PageUp/Down, chạm, HUD), hiệu ứng spring, đếm số, vẽ đường, nền động (`window.DeckBg` từ `backgrounds.js` ghép trước engine), lớp phát video; mode print tắt chuyển động.

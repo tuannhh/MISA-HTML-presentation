@@ -298,6 +298,100 @@ export function placeDiagrams(slides, diagrams, { room = 0 } = {}) {
   return { added, moved, placed: used.size };
 }
 
+/* ---------------- sơ đồ vẽ lại (org / timeline / process) ---------------- */
+// Dòng dàn ý của sơ đồ tổ chức: "Đứng đầu: X" (tuỳ chọn, dòng đầu) + mỗi nhánh 1 dòng "Tên nhánh: mục; mục".
+const ORG_ROOT_RE = /^\s*(?:đứng đầu|cấp cao nhất|gốc)\s*:\s*(.+)$/iu;
+
+/**
+ * Sơ đồ đơn giản AI đọc từ tư liệu (visualService.cleanRedraw) → các dòng dàn ý theo cách viết points của bố cục tương ứng:
+ * org: "Đứng đầu: X" + "Nhánh: mục; mục"; timeline: "Mốc — nội dung: chi tiết"; process: "Bước: chi tiết".
+ */
+export function redrawPoints(r) {
+  const tail = (items) => (items.length ? `: ${items.join('; ')}` : '');
+  if (r.type === 'org') return [...(r.root ? [`Đứng đầu: ${r.root}`] : []), ...r.nodes.map((n) => `${n.title}${tail(n.items)}`)];
+  if (r.type === 'timeline') {
+    return r.nodes.map((n) => {
+      const [head = '', ...rest] = n.title ? [n.title, ...n.items] : n.items;
+      return `${n.value || '•'} — ${head}${tail(rest)}`;
+    });
+  }
+  return r.nodes.map((n) => `${n.title}${tail(n.items)}`);
+}
+
+/** Dòng dàn ý org → { root, columns } của spec (xác định — chữ giữ nguyên, không qua AI). */
+export function parseOrgPoints(points) {
+  let root = '';
+  const columns = [];
+  for (const pt of points || []) {
+    const r = ORG_ROOT_RE.exec(pt);
+    if (r && !root && !columns.length) {
+      root = r[1].trim();
+      continue;
+    }
+    const m = /^(.{1,100}?)\s*:\s*(.*)$/s.exec(pt);
+    const title = (m ? m[1] : pt).trim().slice(0, SPEC_LIMITS.colTitle);
+    const kids = m ? m[2].split(/\s*;\s*/).map((x) => x.trim()).filter(Boolean) : [];
+    if (title) columns.push({ title, subtitle: '', tone: 'neutral', points: kids.slice(0, SPEC_LIMITS.points).map((k) => k.slice(0, SPEC_LIMITS.point)) });
+  }
+  return { root: root.slice(0, SPEC_LIMITS.root), columns: columns.slice(0, SPEC_LIMITS.orgBranches) };
+}
+
+/**
+ * Sơ đồ đơn giản vẽ lại (DRn) — mỗi sơ đồ đúng 1 trang, nội dung chép đúng từ sơ đồ gốc:
+ * - Trang AI ghi mã DRn (refs: slide → mã) và chưa có media: đổi sang bố cục của sơ đồ, points = redrawPoints (giữ tiêu đề/mô tả AI).
+ * - Sơ đồ AI bỏ sót: thêm trang ngay sau trang cùng chủ đề (khi còn hạn mức); hết hạn mức → chuyển trang chữ chưa có media cùng
+ *   chủ đề nhất (chung ≥ 3 từ) thành sơ đồ; không có thì bỏ (nội dung vẫn còn trong dàn ý dưới dạng chữ).
+ * Trang bìa/kết và trang có media (ảnh/video người dùng bắt buộc) không bị đổi.
+ * @param {Array} slides  trang dàn ý đã chuẩn hoá
+ * @param {Array<{ref:string, type:string, title?:string, root?:string, nodes:Array}>} redraws
+ * @param {{ room?: number, refs?: Map<object,string> }} o
+ * @returns {{ applied: number, added: number, converted: number }}
+ */
+export function applyRedraws(slides, redraws, { room = 0, refs = new Map() } = {}) {
+  const out = { applied: 0, added: 0, converted: 0 };
+  if (!redraws.length) return out;
+  const byRef = new Map(redraws.map((r) => [r.ref.toUpperCase(), r]));
+  const used = new Set();
+  const closingAt = () => (slides.length > 1 && slides[slides.length - 1].layout === 'closing' ? slides.length - 1 : slides.length);
+  const free = (s, i) => i > 0 && i < closingAt() && !['cover', 'closing'].includes(s.layout) && !s.video && !(s.images || []).length;
+  const fill = (s, r) => {
+    s.layout = r.type;
+    s.points = redrawPoints(r).map((p) => p.slice(0, SPEC_LIMITS.outlinePoint));
+    if (!s.title) s.title = (r.title || '').slice(0, SPEC_LIMITS.title);
+    used.add(r.ref.toUpperCase());
+  };
+  slides.forEach((s, i) => {
+    const r = byRef.get(String(refs.get(s) || '').trim().toUpperCase());
+    if (!r || used.has(r.ref.toUpperCase()) || !free(s, i)) return;
+    fill(s, r);
+    out.applied += 1;
+  });
+  for (const r of redraws) {
+    if (used.has(r.ref.toUpperCase())) continue;
+    const w = words(`${r.title || ''} ${r.root || ''} ${r.nodes.map((n) => n.title).join(' ')}`);
+    const scored = slides
+      .map((s, i) => ({ s, i, n: overlap(w, words(`${s.title} ${(s.points || []).join(' ')}`)) }))
+      .filter(({ s, i }) => i > 0 && i < closingAt() && s.layout !== 'cover')
+      .sort((a, b) => b.n - a.n || a.i - b.i);
+    if (room > 0) {
+      const near = scored[0]?.n >= 2 ? scored[0] : null;
+      const at = Math.min(near ? near.i + 1 : closingAt(), closingAt());
+      const s = { id: `s-${randomUUID().slice(0, 8)}`, layout: r.type, title: '', subtitle: '', points: [], notes: '', images: [], video: null };
+      fill(s, r);
+      if (!s.title) s.title = r.type === 'org' ? 'Sơ đồ tổ chức' : r.type === 'timeline' ? 'Lộ trình' : 'Quy trình';
+      slides.splice(at, 0, s);
+      out.added += 1;
+      room -= 1;
+      continue;
+    }
+    const spot = scored.find((x) => x.n >= 3 && free(x.s, x.i) && x.s.layout !== 'org');
+    if (!spot) continue;
+    fill(spot.s, r);
+    out.converted += 1;
+  }
+  return out;
+}
+
 /* ---------------- dàn ý → slide ---------------- */
 // "Tiêu đề: mô tả" / "Mốc — nội dung" → { title, text }. Dòng ngắn không có dấu tách = chỉ tiêu đề.
 export function splitPoint(pt) {
@@ -326,7 +420,7 @@ const ITEM = (x) => ({ icon: 'sparkles', title: x.title, text: x.text, value: ''
 // Khi AI thiếu trang (hoặc lỗi định dạng) → dựng slide xác định từ dàn ý, không bỏ trang người dùng đã duyệt.
 export function outlineSlideToSpec(os, index, total) {
   const layout = os.layout !== 'auto' ? os.layout : index === 0 ? 'cover' : index === total - 1 && total > 2 ? 'closing' : os.points.length ? 'bullets' : 'section';
-  const s = { id: os.id, layout, kicker: '', title: os.title, highlight: '', subtitle: os.subtitle, caption: '', icon: 'sparkles', notes: os.notes, tags: [], items: [], stats: [], steps: [], columns: [], quote: {}, image: null, images: [] };
+  const s = { id: os.id, layout, kicker: '', title: os.title, highlight: '', subtitle: os.subtitle, caption: '', root: '', icon: 'sparkles', notes: os.notes, tags: [], items: [], stats: [], steps: [], columns: [], quote: {}, image: null, images: [] };
   const pts = os.points;
   if (layout === 'stats') {
     s.stats = pts.map(parseStat).filter(Boolean).slice(0, SPEC_LIMITS.stats);
@@ -346,6 +440,10 @@ export function outlineSlideToSpec(os, index, total) {
     }
     s.columns = [...cols.entries()].slice(0, SPEC_LIMITS.columns).map(([title, points]) => ({ title, subtitle: '', tone: 'neutral', points: points.slice(0, SPEC_LIMITS.points) }));
     if (s.columns.length < 2) s.layout = 'bullets';
+  }
+  if (layout === 'org') {
+    Object.assign(s, parseOrgPoints(pts), { icon: 'user' });
+    if (!s.columns.length) s.layout = 'bullets';
   }
   if (layout === 'quote') {
     s.quote = { text: pts[0] || os.subtitle || os.title, author: pts[1] ? splitPoint(pts[1]).title : '', role: pts[1] ? splitPoint(pts[1]).text : '' };
@@ -434,6 +532,15 @@ export function composeDeckFromOutline(outline, modelSlides = []) {
     }
     const s = m ? { ...m, id: os.id } : outlineSlideToSpec(os, i, n);
     delete s.ref;
+    // Sơ đồ tổ chức người dùng đã duyệt: ô đứng đầu + nhánh + mục con lấy đúng từ dàn ý (AI chỉ góp icon theo thứ tự nhánh).
+    if (os.layout === 'org' && s.layout === 'org') {
+      const org = parseOrgPoints(os.points);
+      if (org.columns.length) {
+        const icons = (Array.isArray(m?.columns) ? m.columns : []).map((c) => c?.icon);
+        s.root = org.root;
+        s.columns = org.columns.map((c, k) => (icons[k] ? { ...c, icon: icons[k] } : c));
+      }
+    }
     if (os.title) s.title = os.title;
     if (os.subtitle) s.subtitle = os.subtitle;
     s.notes = os.notes || s.notes || '';

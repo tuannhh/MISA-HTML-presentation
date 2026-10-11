@@ -9,7 +9,7 @@
 import { SPEC_LIMITS } from './limits.js';
 
 // Trường chữ được phép dời (khớp đường dẫn data-e của renderer, trừ phần tử tự do/chân trang — phần tử tự do đã có toạ độ riêng).
-const MOVE_PATH_RE = /^(?:kicker|title|subtitle|caption|quote\.(?:text|author|role)|(?:items|steps)\.\d{1,2}\.(?:title|text|value)|stats\.\d{1,2}\.(?:value|label|prefix|suffix)|columns\.\d\.(?:title|subtitle|points\.\d{1,2})|tags\.\d{1,2}|images\.\d{1,2}\.caption|(?:image|video)\.caption)$/;
+const MOVE_PATH_RE = /^(?:kicker|title|subtitle|caption|root|quote\.(?:text|author|role)|(?:items|steps)\.\d{1,2}\.(?:title|text|value)|stats\.\d{1,2}\.(?:value|label|prefix|suffix)|columns\.\d\.(?:title|subtitle|points\.\d{1,2})|tags\.\d{1,2}|images\.\d{1,2}\.caption|(?:image|video)\.caption)$/;
 export const MOVE_LIMIT = SPEC_LIMITS.moves; // số ô chữ dời được mỗi trang
 export const MOVE_RANGE = 100; // ±% khung
 export const SIZE_MIN = 0.5; // cỡ chữ tối thiểu / tối đa so với cỡ bố cục
@@ -69,7 +69,7 @@ export const DECORS = Object.freeze({
   secno: { label: 'Số thứ tự phần cỡ lớn', layouts: ['section'], pick: true },
   qmark: { label: 'Dấu ngoặc kép lớn', layouts: ['quote'], pick: true },
   vs: { label: 'Biểu tượng VS / mũi tên giữa hai cột', layouts: ['comparison'], pick: true },
-  icons: { label: 'Biểu tượng ở các ý, thẻ', layouts: ['bullets', 'cards', 'stats', 'image', 'comparison', 'closing'] },
+  icons: { label: 'Biểu tượng ở các ý, thẻ', layouts: ['bullets', 'cards', 'stats', 'image', 'org', 'comparison', 'closing'] },
   nums: { label: 'Số thứ tự (01, 02…)', layouts: ['agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'quote', 'comparison'] },
   arrows: { label: 'Mũi tên nối các bước', layouts: ['process', 'timeline'] },
 });

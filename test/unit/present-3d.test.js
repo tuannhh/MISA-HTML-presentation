@@ -46,7 +46,7 @@ test('engine: bộ chọn "ý" phủ đơn vị nội dung của mọi bố cụ
   const { spec } = normalizeSpec(sample, { strict: true });
   const byLayout = {};
   for (const s of spec.slides) byLayout[s.layout] = render({ ...spec, slides: [s] });
-  for (const layout of ['agenda', 'bullets', 'cards', 'stats', 'timeline', 'process', 'comparison', 'image']) {
+  for (const layout of ['agenda', 'bullets', 'cards', 'stats', 'timeline', 'process', 'comparison', 'org', 'image']) {
     assert.ok(byLayout[layout], `mẫu có bố cục ${layout}`);
     assert.ok(cls.some((c) => new RegExp(`class="[^"]*\\b${c}\\b`).test(byLayout[layout])), `${layout}: có đơn vị khớp UNIT`);
   }

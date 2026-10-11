@@ -7,7 +7,7 @@
 Tính năng chính:
 - Nhập nguồn theo 3 cách: **tải tệp** (.pptx, .docx, .pdf, .txt, .md, ảnh), **dán link** (Google Slides/Docs/Sheets/Drive công khai hoặc trang web công khai), **nhập nội dung** trực tiếp.
 - **Hai bước**: AI lập **dàn ý** (nội dung sẽ hiển thị trên từng trang) → người dùng duyệt/sửa, gắn **ảnh, video tải lên, link YouTube** cho từng trang, chọn thiết kế → AI **dựng bài** theo đúng dàn ý.
-- AI chọn bố cục cho từng trang trong 13 layout (bìa, mở đầu phần, mục lục, ý chính, thẻ, con số, ảnh/video lớn, bộ sưu tập ảnh, dòng thời gian, quy trình, trích dẫn, so sánh, trang kết). Ảnh trong tài liệu nguồn được giữ lại và gắn vào trang phù hợp.
+- AI chọn bố cục cho từng trang trong 14 layout (bìa, mở đầu phần, mục lục, ý chính, thẻ, con số, ảnh/video lớn, bộ sưu tập ảnh, dòng thời gian, quy trình, trích dẫn, so sánh, sơ đồ tổ chức, trang kết); sơ đồ tổ chức / lộ trình / quy trình đơn giản trong tư liệu được vẽ lại bằng bố cục động. Ảnh trong tài liệu nguồn được giữ lại và gắn vào trang phù hợp.
 - **Thiết kế**: tông màu Tự động / 14 mẫu theo nền sáng-tối / tự nhập 2 màu; 10 nền động chủ đề công nghệ; 5 phông đóng gói sẵn (Inter, Montserrat, Barlow, Roboto, Google Sans); logo (vị trí, kích thước, tách nền). Video trong slide: khung 16:9, bấm → tự phát toàn màn hình.
 - 4 tỷ lệ khung: **16:9, 4:3, 2:1, 3:1** (3:1 cho màn LED/sân khấu).
 - **Trình soạn thảo**: sửa chữ, đổi/tải ảnh, đổi bố cục, thêm/xoá/sắp xếp/nhân bản trang, đổi giao diện & chân trang → bấm **Lưu** → server chuẩn hoá và render lại, khung xem trước tải lại.

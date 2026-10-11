@@ -120,7 +120,7 @@ Tệp nguồn nằm tạm ở `STORAGE_DIR/uploads` (volume) — khởi động 
 |---|---|
 | `npm test` | Unit (node:test): SSRF, magic bytes, tenantScope, URL ký, chuẩn hoá spec, chống XSS renderer (13 test) |
 | `BASE=http://localhost:8088 node test/smoke/smoke.mjs` | Smoke end-to-end trên server đang chạy: đăng ký, CSRF, tạo bài (Gemini thật), cách ly tenant, public/duplicate, lưu + 409, xuất HTML/PDF, admin. In "TẤT CẢ ĐẠT" |
-| `npm run render:sample` | Render `test/fixtures/sample-spec.json` (13 layout) ra ảnh để soát giao diện |
+| `npm run render:sample` | Render `test/fixtures/sample-spec.json` (14 layout) ra ảnh để soát giao diện |
 
 ## Sao lưu (khuyến nghị — chưa tự động hoá)
 

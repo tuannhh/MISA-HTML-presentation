@@ -24,6 +24,7 @@ export const OUTLINE_LAYOUTS = [
   { value: 'process', label: 'Quy trình' },
   { value: 'quote', label: 'Trích dẫn' },
   { value: 'comparison', label: 'So sánh' },
+  { value: 'org', label: 'Sơ đồ tổ chức' },
   { value: 'closing', label: 'Trang kết' },
 ];
 export const OUTLINE_LAYOUT_LABEL = Object.fromEntries(OUTLINE_LAYOUTS.map((l) => [l.value, l.label]));
@@ -34,6 +35,7 @@ export const POINT_HINT = {
   timeline: 'Mỗi dòng: “Mốc thời gian: nội dung”, ví dụ “Q3/2026: Triển khai giai đoạn 1”',
   process: 'Mỗi dòng là 1 bước: “Tên bước: mô tả ngắn”',
   comparison: 'Mỗi dòng: “Tên cột: ý”, ví dụ “Trước: Báo cáo thủ công” · “Sau: Tự động hoá”',
+  org: 'Dòng đầu “Đứng đầu: Giám đốc” · mỗi nhánh 1 dòng “Tên nhánh: mục 1; mục 2”, ví dụ “Kinh doanh: Tìm khách; Chốt đơn”',
   quote: 'Dòng 1: câu trích dẫn · Dòng 2: “Người nói: chức danh”',
   agenda: 'Mỗi dòng: “Tên phần: mô tả ngắn”',
   cards: 'Mỗi dòng: “Tiêu đề thẻ: diễn giải”',

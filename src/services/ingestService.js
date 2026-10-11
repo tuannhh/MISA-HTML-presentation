@@ -293,7 +293,8 @@ export async function readBuffer(buffer, name, limits, kind = sniff(buffer)) {
     // Slide/văn bản: giữ tệp gốc để render trang → cắt sơ đồ vẽ bằng hình khối/SmartArt + ảnh giao diện (ảnh nhúng không thấy được).
     return { pieces: doc.text ? [{ label, text: doc.text }] : [], images: doc.images.map((im) => ({ ...im, hint: `${im.hint} (${label})` })), media: [], docs: ext ? [{ name: label, ext, buffer }] : [] };
   }
-  if (IMAGE_TYPES.has(kind)) return { pieces: [], media: [], images: [{ name: label, hint: `ảnh tải lên "${label}"`, buffer }] };
+  // standalone: ảnh tải lên riêng lẻ (không nằm trong tài liệu) — visualService xem cả ảnh để cắt/vẽ lại sơ đồ, giao diện.
+  if (IMAGE_TYPES.has(kind)) return { pieces: [], media: [], images: [{ name: label, hint: `ảnh tải lên "${label}"`, buffer, standalone: true }] };
   if (kind === 'text') {
     const raw = decodeText(buffer);
     const text = /^\s*<(!doctype html|html)/i.test(raw) ? htmlToText(raw).text : raw;

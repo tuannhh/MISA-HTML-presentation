@@ -235,7 +235,7 @@ Người dùng không chọn gì thêm — mọi thứ dưới đây tự độn
 - `outlineService.keepPhotoImages`: bỏ ảnh không phải photo; trang `image`/`gallery` hết ảnh (không video) → `auto`; gallery còn 1 ảnh → `image`. Log `outline_ready` ghi `kinds`, `photos`, `droppedImages`, `sourceType`.
 
 ### Biến thể bố cục + phong cách bài (`shared/deck/variants.js`)
-- `VARIANTS`: 13 layout × 2–5 biến thể (57 kiểu), phần tử đầu = giao diện gốc. Ví dụ stats: `cards|hero|bars|rings|plain`; timeline: `line|vertical|zigzag|cards`; process: `cards|chevrons|stairs|vertical`; gallery: `grid|mosaic|polaroid`; image: `side|right|full`.
+- `VARIANTS`: 14 layout × 2–5 biến thể (59 kiểu; org: `tree|boxes`), phần tử đầu = giao diện gốc. Ví dụ stats: `cards|hero|bars|rings|plain`; timeline: `line|vertical|zigzag|cards`; process: `cards|chevrons|stairs|vertical`; gallery: `grid|mosaic|polaroid`; image: `side|right|full`.
 - `STYLES`: `neon` (gốc) · `editorial` (đường kẻ, số lớn) · `solid` (khối màu đặc) · `outline` (viền, không nền) · `soft` (bo tròn, đổ bóng mềm) — CSS `[data-style]` trên `<html>`, kết hợp với mẫu màu/nền/phông người dùng chọn.
 - `FITS` — biến thể chỉ được chọn khi hợp nội dung: `rings` chỉ khi mọi số là % 0–100 (1–4 số); `bars` khi cùng đơn vị, số ≥ 0, 2–8 số; `hero` cho 1–4 số (1 số → ưu tiên ×6); `mosaic` 3 hoặc 5 ảnh; `polaroid` 2–4 ảnh; `chevrons` tên bước ngắn, ≤ 5 bước (khung hẹp ≤ 3); `zigzag` 4–7 bước (hẹp 4–5); `image:full` có ảnh, không video, ≤ 3 ý…
 - `artDirect(spec, {seed, ratio, style})`: chọn phong cách ngẫu nhiên đều; mỗi trang bốc thăm có trọng số = hợp dữ liệu × hợp phong cách (`AFFINITY`) × `0.2^(số lần đã dùng trong bài)`; trang liền kề trùng `layout:variant` ×0.05. Hạt giống = UUID mới mỗi lần dựng → dựng lại = bài khác; cùng hạt giống → cùng kết quả (test).
@@ -386,4 +386,35 @@ Tinh thần: **tự động là chính** (AI nhận diện và đặt hình đú
   chưa có media (≤ 4 ý), không có chỗ thì bỏ.
 - Log `outline_ready`: `visualShots`, `embeddedMerged`, `diagrams`, `diagramsPlaced`, `diagramsAdded`; lỗi `visual_shots_failed {step}` (`soffice_missing`, `pdftoppm_missing`…).
 - Đã kiểm với AI thật (Docker): PPTX mẫu → 2 sơ đồ (quy trình, kiến trúc) + 1 giao diện, trang thẻ bị bỏ đúng; PDF OneAI → 3 sơ đồ + 7 giao diện cắt chính xác.
+
+## 16. Sơ đồ tổ chức (layout `org`) + VẼ LẠI sơ đồ đơn giản từ tư liệu (2026-10-11)
+
+Chủ dự án: sơ đồ tổ chức / lộ trình dạng đơn giản thì **vẽ lại** cho ấn tượng (như bộ slide tự làm bằng Claude Code — tham khảo
+`tmp/ref-amis/g5-04.png`), không dán ảnh chụp.
+
+### Layout `org` (AI chọn được, `AI_LAYOUTS`)
+- Dữ liệu: `slide.root` (ô đứng đầu, ≤ `SPEC_LIMITS.root` 120, rỗng = chỉ có các nhánh), `slide.icon` = icon ô đứng đầu,
+  `slide.columns` = **nhánh** (≤ `orgBranches` 6 khi layout org; cột so sánh vẫn ≤ 3), mỗi nhánh `title`, `icon` (tuỳ chọn, theo `ICON_NAMES`), `points` = mục con (≤ 8).
+  `root` được giữ cả khi đổi bố cục (đổi qua lại không mất chữ). `fallbackLayout`: org cần ≥ 2 nhánh (hoặc 1 nhánh + root).
+- Renderer `L.org` + CSS `.org*` (theme.css): ô gốc dạng viên thuốc có vòng icon gradient → thân dọc (`grow`) → thanh ngang lan từ giữa ra 2 bên (2 nửa `bar`)
+  → nhánh (đầu nhánh gradient `--c` theo `accent(i)`, `pop`) → mục con trượt vào lần lượt (`left`). Biến thể `tree` (chấm + đường chữ L) | `boxes` (ô khối, hợp khi
+  chữ con ≤ 48 ký tự với ≤ 3 nhánh, ≤ 34 với 4, ≤ 22 với 5–6). Co chữ theo số nhánh (`ORG_SCALE`). Phong cách editorial/outline/soft có bản riêng; hoạ tiết `icons` tắt được.
+- Trình chiếu từng ý: đơn vị = `.org-br` (mỗi nhánh), phóng to khi bấm cũng theo nhánh.
+- Dàn ý: dòng đầu `Đứng đầu: X` (tuỳ chọn) + mỗi nhánh 1 dòng `Tên nhánh: mục; mục`. Bước dựng bài **không tin AI** cho cấu trúc: `composeDeckFromOutline`
+  dựng lại `root` + nhánh + mục con đúng từ dàn ý (`parseOrgPoints`), AI chỉ góp icon nhánh theo thứ tự.
+
+### Vẽ lại sơ đồ đơn giản (`redraw`)
+- `gemini.locateVisuals` trả thêm `redraw {type: org|timeline|process|none, root, nodes[{value,title,items}]}` cho mỗi hình — chỉ khi sơ đồ ĐƠN GIẢN và chữ đọc rõ:
+  org đúng 2 tầng dưới ô gốc (2–6 nhánh, ≤ 8 ô con), timeline 3–8 mốc, process 3–6 bước một chiều. Kiến trúc, mô hình vòng/ma trận, mindmap, rẽ nhánh, > 2 tầng → `none`
+  (giữ ảnh cắt như §15). Nhãn chép nguyên văn, IN HOA → kiểu câu.
+- `visualService.cleanRedraw` kiểm lại ngưỡng (timeline thiếu mốc → process; vượt ngưỡng → null) và cắt chữ theo `SPEC_LIMITS`.
+- **Ảnh tải lên riêng lẻ** (`ingestService` gắn `standalone: true`) cũng được xem như trang (doc `kind:'images'`, 1 lượt AI cho mọi ảnh, cho phép vùng phủ cả ảnh);
+  hình chiếm ≥ 60% phần có nội dung của ảnh → ảnh gốc bị thay (`item.source`, presentationService bỏ khỏi danh sách ảnh tư liệu).
+- `presentationService.generateOutline`: hình có `redraw` **không** lưu thành asset ảnh; thành khối `DRn` (chữ theo `redrawPoints`) gửi AI dàn ý; schema dàn ý có trường
+  `diagram` (mã DRn) khi có sơ đồ vẽ lại. Sau `placeUserMedia`: `outlineService.applyRedraws` — trang AI ghi mã → đổi bố cục + points chép đúng (giữ tiêu đề AI);
+  sơ đồ bị bỏ sót → còn hạn mức thì thêm trang ngay sau trang cùng chủ đề (≥ 2 từ chung), hết thì đổi trang chữ chưa có media cùng chủ đề (≥ 3 từ chung), không có thì bỏ.
+  Không đổi bìa/kết và trang có media. Log `outline_ready`: `redraws`, `redrawApplied`, `redrawAdded`, `redrawConverted`; `visual_shots` có `redraws`.
+- Prompt dựng bài: dòng chỉ có tiêu đề thì `text` rỗng (không tự viết mô tả — tránh AI "bịa" chi tiết cho mốc lộ trình vẽ lại).
+- Đã kiểm AI thật (Docker): ảnh PNG sơ đồ tổ chức + ảnh lộ trình + ghi chú → trang `org` (3 nhánh, 10 mục đúng nguyên văn) + trang `timeline` (5 mốc), không trang ảnh thừa;
+  PDF có sơ đồ tổ chức ở trang 2 → trang `org` đúng nguyên văn.
 

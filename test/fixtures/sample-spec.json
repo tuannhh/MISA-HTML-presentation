@@ -313,6 +313,57 @@
       ]
     },
     {
+      "id": "s-org",
+      "layout": "org",
+      "kicker": "Doanh nghiệp nhỏ",
+      "title": "Sơ đồ cơ cấu tổ chức",
+      "highlight": "cơ cấu",
+      "subtitle": "",
+      "root": "Chủ doanh nghiệp / Giám đốc",
+      "icon": "user",
+      "notes": "",
+      "tags": [],
+      "items": [],
+      "stats": [],
+      "steps": [],
+      "columns": [
+        {
+          "title": "Kinh doanh / Bán hàng",
+          "icon": "cart",
+          "tone": "neutral",
+          "points": [
+            "Tìm khách hàng",
+            "Tư vấn / chốt đơn",
+            "Chăm sóc khách hàng"
+          ]
+        },
+        {
+          "title": "Vận hành / Sản xuất",
+          "icon": "settings",
+          "tone": "neutral",
+          "points": [
+            "Thực hiện đơn hàng",
+            "Giao hàng / triển khai",
+            "Theo dõi tiến độ"
+          ]
+        },
+        {
+          "title": "Kế toán / HCNS",
+          "icon": "coins",
+          "tone": "neutral",
+          "points": [
+            "Thu chi",
+            "Hóa đơn / chứng từ",
+            "Hồ sơ hành chính",
+            "Quản lý nhân sự / chấm công / tính lương"
+          ]
+        }
+      ],
+      "quote": {},
+      "image": null,
+      "images": []
+    },
+    {
       "id": "s13",
       "layout": "closing",
       "kicker": "Cảm ơn",

@@ -91,6 +91,10 @@ function clearItemImage(it) {
 
 const itemLabel = computed(() => ({ agenda: 'Mục', bullets: 'Ý', cards: 'Thẻ', stats: 'Ý bổ sung', image: 'Ý bên cạnh ảnh' }[s.value.layout] || 'Mục'))
 const stepLabel = computed(() => (s.value.layout === 'timeline' ? 'Mốc' : 'Bước'))
+// Sơ đồ tổ chức dùng lại `columns` làm các nhánh (≤ 6, có icon riêng), cột so sánh ≤ 3.
+const isOrg = computed(() => s.value.layout === 'org')
+const colMax = computed(() => (isOrg.value ? L.orgBranches : L.columns))
+const colLabel = computed(() => (isOrg.value ? { group: 'Nhánh', one: 'Nhánh' } : { group: 'Cột so sánh', one: 'Cột' }))
 
 const tagsText = computed({
   get: () => (s.value.tags || []).map((t) => plainText(t)).join(', '),
@@ -182,8 +186,11 @@ function setGalleryImage(i, v) {
     <FormField v-if="has('tags')" label="Nhãn (phân tách bằng dấu phẩy)" :hint="`Tối đa ${L.tags} nhãn`">
       <MInput v-model="tagsText" placeholder="AI First, ERP, Dữ liệu" />
     </FormField>
-    <FormField v-if="has('icon') && !s.image?.asset && !s.video" label="Biểu tượng trung tâm" group>
-      <IconPicker v-model="s.icon" :allow-image="false" label="Biểu tượng trung tâm" />
+    <FormField v-if="has('root')" label="Ô đứng đầu" hint="Ví dụ: Giám đốc — bỏ trống nếu sơ đồ chỉ có các nhánh">
+      <MInput v-bind="rx(s, 'root')" :error="tooLong(s.root, L.root)" placeholder="Chủ doanh nghiệp / Giám đốc" />
+    </FormField>
+    <FormField v-if="has('icon') && !s.image?.asset && !s.video" :label="isOrg ? 'Biểu tượng ô đứng đầu' : 'Biểu tượng trung tâm'" group>
+      <IconPicker v-model="s.icon" :allow-image="false" :label="isOrg ? 'Biểu tượng ô đứng đầu' : 'Biểu tượng trung tâm'" />
     </FormField>
 
     <!-- Trích dẫn -->
@@ -268,22 +275,29 @@ function setGalleryImage(i, v) {
       <MButton v-if="s.steps.length < L.steps" variant="outline" @click="s.steps.push(emptyItem())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm {{ stepLabel.toLowerCase() }}</MButton>
     </section>
 
-    <!-- Cột so sánh -->
+    <!-- Cột so sánh · nhánh sơ đồ tổ chức -->
     <section v-if="has('columns')" class="flex flex-col gap-2">
-      <h3 class="text-[14px] font-semibold">Cột so sánh ({{ s.columns.length }}/{{ L.columns }})</h3>
+      <h3 class="text-[14px] font-semibold">{{ colLabel.group }} ({{ s.columns.length }}/{{ colMax }})</h3>
       <div v-for="(col, i) in s.columns" :key="i" class="flex flex-col gap-2 rounded-lg border border-[var(--mds-border)] p-3">
         <div class="flex items-center justify-between">
-          <span class="text-[12px] font-semibold text-[var(--mds-text-secondary)]">Cột {{ i + 1 }}</span>
-          <MButton variant="icon" aria-label="Xoá cột" :disabled="s.columns.length <= 2" @click="removeAt('columns', i)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
+          <span class="text-[12px] font-semibold text-[var(--mds-text-secondary)]">{{ colLabel.one }} {{ i + 1 }}</span>
+          <div class="flex">
+            <template v-if="isOrg">
+              <MButton variant="icon" aria-label="Sang trái" :disabled="i === 0" @click="move('columns', i, -1)"><template #icon><MIcon name="chevron-left" :size="16" /></template></MButton>
+              <MButton variant="icon" aria-label="Sang phải" :disabled="i === s.columns.length - 1" @click="move('columns', i, 1)"><template #icon><MIcon name="chevron-right" :size="16" /></template></MButton>
+            </template>
+            <MButton variant="icon" :aria-label="`Xoá ${colLabel.one.toLowerCase()}`" :disabled="s.columns.length <= (isOrg ? 1 : 2)" @click="removeAt('columns', i)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
+          </div>
         </div>
-        <MInput v-bind="rx(col, 'title')" placeholder="Tiêu đề cột" :error="tooLong(col.title, L.colTitle)" />
-        <div class="grid grid-cols-2 gap-2">
+        <MInput v-bind="rx(col, 'title')" :placeholder="isOrg ? 'Tên nhánh / bộ phận' : 'Tiêu đề cột'" :error="tooLong(col.title, L.colTitle)" />
+        <IconPicker v-if="isOrg" :model-value="col.icon || 'layers'" :allow-image="false" :label="`Biểu tượng nhánh ${i + 1}`" @update:model-value="(v) => (col.icon = v)" />
+        <div v-else class="grid grid-cols-2 gap-2">
           <MInput v-bind="rx(col, 'subtitle')" placeholder="Nhãn nhỏ" :error="tooLong(col.subtitle, L.colSubtitle)" />
           <MSelect v-model="col.tone" :options="TONE_OPTIONS" />
         </div>
-        <MTextarea :model-value="pointsText(col)" :rows="4" placeholder="Mỗi dòng một ý" @update:model-value="(v) => setPoints(col, v)" />
+        <MTextarea :model-value="pointsText(col)" :rows="4" :placeholder="isOrg ? 'Mỗi dòng một mục con (tối đa 8)' : 'Mỗi dòng một ý'" @update:model-value="(v) => setPoints(col, v)" />
       </div>
-      <MButton v-if="s.columns.length < L.columns" variant="outline" @click="s.columns.push(emptyColumn())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm cột</MButton>
+      <MButton v-if="s.columns.length < colMax" variant="outline" @click="s.columns.push(emptyColumn())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm {{ colLabel.one.toLowerCase() }}</MButton>
     </section>
 
     <!-- Ảnh hoặc video (1 ô media) -->
