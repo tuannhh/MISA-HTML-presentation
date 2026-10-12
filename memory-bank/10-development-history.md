@@ -1,5 +1,11 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-12 — Triển khai code mới lên Docker local (cổng 8088)
+
+- Người dùng báo bài `li6b4q68` "AI chưa lập được dàn ý". Log `outline_failed`: `TypeError … "data" … Received undefined` tại `storeImage ← storeUserMedia` — đúng lỗi F01 (gọi `storeImage` sai chữ ký khi tạo bài kèm ảnh). Code đã sửa từ `233d348`, nhưng container 8088 vẫn chạy image build 07/10.
+- Đã sao lưu DB (`mysqldump`, ngoài repo), chạy changelog `20261012_100000` (chỉ thêm bảng `publications`), `docker compose up -d --build --no-deps app` → healthy. 2 bài lỗi (`li6b4q68`, `lx1nn18f`) giữ trạng thái `failed`: người dùng tạo lại (nút "Tạo lại" → trang tạo bài).
+- Phát hiện kèm: bài cũ 05/10 "Kế hoạch Chuyển đổi số Phòng Kinh doanh 2027" mất cả thư mục tệp trên volume (asset còn trong DB) → `GET /api/assets/:id` trả 500 ENOENT thay vì 404. Chưa sửa.
+
 ## 2026-10-12 — Chặng A bổ sung (A01–A06) + Xuất bản ra web (domain công khai)
 
 **A01–A06** (review Codex `docs/audits/2026-10-12-codex/09-review-chang-a-codex.md` §5), mỗi mục đỏ → xanh:
