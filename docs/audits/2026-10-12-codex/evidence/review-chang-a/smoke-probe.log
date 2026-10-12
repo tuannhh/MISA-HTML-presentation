@@ -1,0 +1,63 @@
+{
+  "case": "closed registration smoke bootstrap",
+  "actual": "new admin changed to fixed source-code password; no cleanup operation in provisioner",
+  "calls": [
+    {
+      "kind": "http",
+      "role": "user",
+      "method": "POST",
+      "path": "/api/auth/register",
+      "fixedPassword": false
+    },
+    {
+      "kind": "process",
+      "file": "docker",
+      "args": [
+        "compose",
+        "exec",
+        "-T",
+        "app",
+        "node",
+        "scripts/create-admin.js",
+        "smoke-admin-fixture-run@misa.com.vn",
+        "Smoke Admin"
+      ]
+    },
+    {
+      "kind": "http",
+      "role": "admin",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "fixedPassword": false
+    },
+    {
+      "kind": "http",
+      "role": "admin",
+      "method": "POST",
+      "path": "/api/auth/change-password",
+      "fixedPassword": true
+    },
+    {
+      "kind": "http",
+      "role": "admin",
+      "method": "POST",
+      "path": "/api/admin/users",
+      "fixedPassword": false
+    },
+    {
+      "kind": "http",
+      "role": "user",
+      "method": "POST",
+      "path": "/api/auth/login",
+      "fixedPassword": false
+    },
+    {
+      "kind": "http",
+      "role": "user",
+      "method": "POST",
+      "path": "/api/auth/change-password",
+      "fixedPassword": true
+    }
+  ],
+  "defectReproduced": true
+}

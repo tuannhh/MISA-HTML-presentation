@@ -1,0 +1,2 @@
+# Log bằng chứng đã được chọn để bàn giao; không bị rule *.log của repo bỏ qua.
+!*.log

@@ -1,5 +1,12 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-12 — Lưu audit Codex và bằng chứng để chuyển máy
+
+- Theo yêu cầu chủ dự án, đưa hồ sơ audit vào `docs/audits/2026-10-12-codex/`, gồm audit gốc, phản hồi Claude, review chặng A, log kiểm thử và probe tái hiện. Đọc README trong thư mục trước khi đóng gói hoặc tiếp tục ở máy mới.
+- Review trên commit `233d348`: 169 unit pass, 5 integration MySQL pass, build đạt; còn A01–A06 trong `09-review-chang-a-codex.md`. Các probe tái hiện lỗi không đồng nghĩa tính năng đạt nghiệm thu.
+- Script bằng chứng dùng đường dẫn tương đối; có manifest SHA-256 và hướng dẫn giữ tài liệu untracked/log khi đóng gói. MySQL review đã dọn, chưa chạy tải 500 người hay smoke HTTP/AI thật độc lập.
+- Chỉ thêm tài liệu/bằng chứng và cập nhật chỉ mục tri thức; không sửa mã ứng dụng, schema, cấu hình runtime hoặc dữ liệu. Chưa commit/push hồ sơ. Giữ phạm vi một máy chủ/một instance đã chốt.
+
 ## 2026-10-11 — Chặng A sau audit Codex (sửa lỗi vận hành)
 
 ### Bối cảnh

@@ -1,0 +1,11 @@
+{
+  "case": "public visibility update, baseline write fails",
+  "expected": "remain private or roll back publication",
+  "actual": "public",
+  "calls": [
+    "updateOwned",
+    "audit",
+    "ensureBaseline"
+  ],
+  "defectReproduced": true
+}

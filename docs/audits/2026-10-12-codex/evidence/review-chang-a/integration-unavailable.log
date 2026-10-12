@@ -1,0 +1,13 @@
+﹣ F07: 2 quản trị viên hạ quyền nhau cùng lúc → đúng 1 thành công, luôn còn ≥ 1 admin hoạt động (3.448958ms) # không dựng được database tạm (ECONNREFUSED)
+﹣ F07: khoá tài khoản (disabled) cũng được bảo vệ như hạ quyền; admin khác vẫn hạ được khi còn người (0.105291ms) # không dựng được database tạm (ECONNREFUSED)
+﹣ F07: mời song song khi còn 1 chỗ → đúng 1 người được mời, tổng không vượt trần (0.111375ms) # không dựng được database tạm (ECONNREFUSED)
+﹣ F15: chạy lại TOÀN BỘ changelog lên database đã ở baseline mới nhất → lược đồ không đổi (không "hạ cấp" ENUM) (0.114792ms) # không dựng được database tạm (ECONNREFUSED)
+﹣ F15: changelog 20261005 vẫn NÂNG CẤP được DB cũ (ENUM chưa có giá trị mới) (0.10025ms) # không dựng được database tạm (ECONNREFUSED)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 5
+ℹ todo 0
+ℹ duration_ms 147.014166

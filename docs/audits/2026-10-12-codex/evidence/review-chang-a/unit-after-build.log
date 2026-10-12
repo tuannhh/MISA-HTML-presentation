@@ -1,0 +1,1034 @@
+TAP version 13
+# Subtest: NAMES: 10 tên duy nhất, đúng thứ tự, khớp khoá LABELS
+ok 1 - NAMES: 10 tên duy nhất, đúng thứ tự, khớp khoá LABELS
+  ---
+  duration_ms: 1.025458
+  type: 'test'
+  ...
+# Subtest: mọi nền vẽ được ở nhiều t, mọi tỷ lệ canvas, tông sáng/tối mà không ném lỗi
+ok 2 - mọi nền vẽ được ở nhiều t, mọi tỷ lệ canvas, tông sáng/tối mà không ném lỗi
+  ---
+  duration_ms: 856.459916
+  type: 'test'
+  ...
+# Subtest: xác định: cùng t → cùng chuỗi lệnh vẽ trên hai instance mới; t khác → hình khác (có chuyển động)
+ok 3 - xác định: cùng t → cùng chuỗi lệnh vẽ trên hai instance mới; t khác → hình khác (có chuyển động)
+  ---
+  duration_ms: 97.13325
+  type: 'test'
+  ...
+# Subtest: không tích luỹ trạng thái: vẽ t=7 sau một loạt khung khác cho kết quả y hệt vẽ t=7 ngay từ đầu
+ok 4 - không tích luỹ trạng thái: vẽ t=7 sau một loạt khung khác cho kết quả y hệt vẽ t=7 ngay từ đầu
+  ---
+  duration_ms: 49.566584
+  type: 'test'
+  ...
+# Subtest: khung t = 0 của mọi nền đã có nội dung (dùng cho thumbnail/PDF)
+ok 5 - khung t = 0 của mọi nền đã có nội dung (dùng cho thumbnail/PDF)
+  ---
+  duration_ms: 9.404167
+  type: 'test'
+  ...
+# Subtest: tên lạ / thiếu → network; màu sai định dạng → màu mặc định
+ok 6 - tên lạ / thiếu → network; màu sai định dạng → màu mặc định
+  ---
+  duration_ms: 1.11525
+  type: 'test'
+  ...
+# Subtest: 'network' trùng khớp từng lệnh với thuật toán cũ trong engine.js (deck đã có không đổi diện mạo)
+ok 7 - 'network' trùng khớp từng lệnh với thuật toán cũ trong engine.js (deck đã có không đổi diện mạo)
+  ---
+  duration_ms: 12.899208
+  type: 'test'
+  ...
+# Subtest: tệp chèn inline được: không có </script, không import/export, không nguồn ngẫu nhiên/thời gian
+ok 8 - tệp chèn inline được: không có </script, không import/export, không nguồn ngẫu nhiên/thời gian
+  ---
+  duration_ms: 0.376833
+  type: 'test'
+  ...
+# Subtest: rich: tách/ghép đoạn, chữ thuần, thẻ sai cú pháp thành chữ thường, gộp đoạn cùng định dạng
+ok 9 - rich: tách/ghép đoạn, chữ thuần, thẻ sai cú pháp thành chữ thường, gộp đoạn cùng định dạng
+  ---
+  duration_ms: 1.406417
+  type: 'test'
+  ...
+# Subtest: rich: cắt theo chữ hiển thị, sửa chữ thuần giữ định dạng, định dạng theo khoảng + viết hoa
+ok 10 - rich: cắt theo chữ hiển thị, sửa chữ thuần giữ định dạng, định dạng theo khoảng + viết hoa
+  ---
+  duration_ms: 0.541959
+  type: 'test'
+  ...
+# Subtest: rich: HTML an toàn (escape chữ, style chỉ từ giá trị kiểm), xuống dòng → <br>, cụm nhấn mạnh trên chữ thuần
+ok 11 - rich: HTML an toàn (escape chữ, style chỉ từ giá trị kiểm), xuống dòng → <br>, cụm nhấn mạnh trên chữ thuần
+  ---
+  duration_ms: 0.162083
+  type: 'test'
+  ...
+# Subtest: normalizeSpec: chữ có định dạng tính độ dài theo chữ hiển thị; quá dài → cắt giữ định dạng (strict báo lỗi)
+ok 12 - normalizeSpec: chữ có định dạng tính độ dài theo chữ hiển thị; quá dài → cắt giữ định dạng (strict báo lỗi)
+  ---
+  duration_ms: 1.059666
+  type: 'test'
+  ...
+# Subtest: renderer: chữ định dạng thành span.rt; ô nhiều dòng có data-ml; ô số liệu là chữ thường (data-pl)
+ok 13 - renderer: chữ định dạng thành span.rt; ô nhiều dòng có data-ml; ô số liệu là chữ thường (data-pl)
+  ---
+  duration_ms: 62.957334
+  type: 'test'
+  ...
+# Subtest: ảnh/logo thay biểu tượng của mục: normalize giữ ảnh, renderer dựng .ib-img, chặn ảnh ngoài bài
+ok 14 - ảnh/logo thay biểu tượng của mục: normalize giữ ảnh, renderer dựng .ib-img, chặn ảnh ngoài bài
+  ---
+  duration_ms: 0.789958
+  type: 'test'
+  ...
+# Subtest: lớp chèn đè trên trang có bố cục: giữ phần tử, dựng .free.over phía trên nội dung
+ok 15 - lớp chèn đè trên trang có bố cục: giữ phần tử, dựng .free.over phía trên nội dung
+  ---
+  duration_ms: 0.842958
+  type: 'test'
+  ...
+# Subtest: bộ nhận diện: chuẩn hoá (chỉ UUID, rỗng → null), asset được kiểm soát, đổi mã khi sao chép
+ok 16 - bộ nhận diện: chuẩn hoá (chỉ UUID, rỗng → null), asset được kiểm soát, đổi mã khi sao chép
+  ---
+  duration_ms: 0.374917
+  type: 'test'
+  ...
+# Subtest: renderer bộ nhận diện: bìa có ảnh riêng (bspec, không dải); trang nội dung = nền + dải đầu/chân đúng chiều cao ảnh
+ok 17 - renderer bộ nhận diện: bìa có ảnh riêng (bspec, không dải); trang nội dung = nền + dải đầu/chân đúng chiều cao ảnh
+  ---
+  duration_ms: 1.261209
+  type: 'test'
+  ...
+# Subtest: màu chữ theo độ sáng ảnh nhận diện: tones chỉ nhận light/dark cho ô có ảnh; trang khác tông bài → ink-light/ink-dark
+ok 18 - màu chữ theo độ sáng ảnh nhận diện: tones chỉ nhận light/dark cho ô có ảnh; trang khác tông bài → ink-light/ink-dark
+  ---
+  duration_ms: 6.956917
+  type: 'test'
+  ...
+# Subtest: tông sáng be/trắng mới: thuộc tông sáng, màu nhấn đủ tương phản với nền, chữ trên màu nhấn đọc được
+ok 19 - tông sáng be/trắng mới: thuộc tông sáng, màu nhấn đủ tương phản với nền, chữ trên màu nhấn đọc được
+  ---
+  duration_ms: 0.471208
+  type: 'test'
+  ...
+# Subtest: editPaths: chữ định dạng cắt theo chữ hiển thị, ô số liệu chữ thường; ảnh mục đặt lần đầu = trọn khung, xoá = về biểu tượng
+ok 20 - editPaths: chữ định dạng cắt theo chữ hiển thị, ô số liệu chữ thường; ảnh mục đặt lần đầu = trọn khung, xoá = về biểu tượng
+  ---
+  duration_ms: 0.602042
+  type: 'test'
+  ...
+# Subtest: kiểu trình bày: kiểm tra độ dài tên bước theo chữ hiển thị (thẻ định dạng không làm mất kiểu mũi tên)
+ok 21 - kiểu trình bày: kiểm tra độ dài tên bước theo chữ hiển thị (thẻ định dạng không làm mất kiểu mũi tên)
+  ---
+  duration_ms: 0.099333
+  type: 'test'
+  ...
+# Subtest: mẫu thương hiệu: lưu sao chép ảnh sang kho mẫu; chặn ảnh không thuộc bài / không phải ảnh
+ok 22 - mẫu thương hiệu: lưu sao chép ảnh sang kho mẫu; chặn ảnh không thuộc bài / không phải ảnh
+  ---
+  duration_ms: 1.0615
+  type: 'test'
+  ...
+# Subtest: mẫu thương hiệu: mẫu riêng tư người khác không áp được; công khai áp được, ảnh sao chép vào bài của người áp
+ok 23 - mẫu thương hiệu: mẫu riêng tư người khác không áp được; công khai áp được, ảnh sao chép vào bài của người áp
+  ---
+  duration_ms: 0.687417
+  type: 'test'
+  ...
+# Subtest: mẫu thương hiệu: người được mời SỬA áp mẫu → ảnh vào kho của CHỦ BÀI; người chỉ xem bị chặn (403)
+ok 24 - mẫu thương hiệu: người được mời SỬA áp mẫu → ảnh vào kho của CHỦ BÀI; người chỉ xem bị chặn (403)
+  ---
+  duration_ms: 0.337417
+  type: 'test'
+  ...
+# Subtest: color: nền trắng → góc trong suốt, vật thể đặc giữ nguyên, lòng chữ bị khoét (inner auto)
+ok 25 - color: nền trắng → góc trong suốt, vật thể đặc giữ nguyên, lòng chữ bị khoét (inner auto)
+  ---
+  duration_ms: 1254.424666
+  type: 'test'
+  ...
+# Subtest: color: biên không bị quầng trắng (đã khử màu nền ở pixel bán trong suốt)
+ok 26 - color: biên không bị quầng trắng (đã khử màu nền ở pixel bán trong suốt)
+  ---
+  duration_ms: 27.908917
+  type: 'test'
+  ...
+# Subtest: color: chữ trắng đục lỗ trong khối màu đặc được GIỮ (inner auto), inner remove thì xoá
+ok 27 - color: chữ trắng đục lỗ trong khối màu đặc được GIỮ (inner auto), inner remove thì xoá
+  ---
+  duration_ms: 93.126166
+  type: 'test'
+  ...
+# Subtest: color: inner keep giữ nguyên lòng chữ
+ok 28 - color: inner keep giữ nguyên lòng chữ
+  ---
+  duration_ms: 41.203375
+  type: 'test'
+  ...
+# Subtest: color: ảnh JPEG có nhiễu — vẫn sạch nền, không sót hạt, lòng chữ vẫn khoét
+ok 29 - color: ảnh JPEG có nhiễu — vẫn sạch nền, không sót hạt, lòng chữ vẫn khoét
+  ---
+  duration_ms: 197.327834
+  type: 'test'
+  ...
+# Subtest: none: PNG đã trong suốt → chỉ cắt lề
+ok 30 - none: PNG đã trong suốt → chỉ cắt lề
+  ---
+  duration_ms: 4.850625
+  type: 'test'
+  ...
+# Subtest: auto: logo cắt sát mép (chữ chạm viền) vẫn chọn tách theo màu
+ok 31 - auto: logo cắt sát mép (chữ chạm viền) vẫn chọn tách theo màu
+  ---
+  duration_ms: 33.062458
+  type: 'test'
+  ...
+# Subtest: ai không có mô hình → lùi về tách theo màu kèm ghi chú
+ok 32 - ai không có mô hình → lùi về tách theo màu kèm ghi chú
+  ---
+  duration_ms: 402.573959
+  type: 'test'
+  ...
+# Subtest: ảnh hỏng → Error rõ ràng
+ok 33 - ảnh hỏng → Error rõ ràng
+  ---
+  duration_ms: 1.072542
+  type: 'test'
+  ...
+# Subtest: hiệu năng: logo 1000×400 tách theo màu đủ nhanh
+ok 34 - hiệu năng: logo 1000×400 tách theo màu đủ nhanh
+  ---
+  duration_ms: 71.367125
+  type: 'test'
+  ...
+# Subtest: ai: nền gradient → U²-Net tách chủ thể, tâm đục, góc trong suốt
+ok 35 - ai: nền gradient → U²-Net tách chủ thể, tâm đục, góc trong suốt
+  ---
+  duration_ms: 1047.688792
+  type: 'test'
+  ...
+# Subtest: F14: thiếu bảng mẫu thiết kế → không khởi động, nêu đúng tên bảng
+ok 36 - F14: thiếu bảng mẫu thiết kế → không khởi động, nêu đúng tên bảng
+  ---
+  duration_ms: 3.434583
+  type: 'test'
+  ...
+# Subtest: F14: đủ bảng + changelog → qua; thiếu changelog → báo tên tệp
+ok 37 - F14: đủ bảng + changelog → qua; thiếu changelog → báo tên tệp
+  ---
+  duration_ms: 0.173084
+  type: 'test'
+  ...
+# Subtest: normalizeSpec strict (người dùng lưu): bỏ trường lạ, giữ đủ 14 layout của bộ mẫu
+ok 38 - normalizeSpec strict (người dùng lưu): bỏ trường lạ, giữ đủ 14 layout của bộ mẫu
+  ---
+  duration_ms: 6.63275
+  type: 'test'
+  ...
+# Subtest: normalizeSpec strict: báo lỗi khi vượt giới hạn; lenient: cắt ngắn
+ok 39 - normalizeSpec strict: báo lỗi khi vượt giới hạn; lenient: cắt ngắn
+  ---
+  duration_ms: 0.393625
+  type: 'test'
+  ...
+# Subtest: normalizeSpec lenient (AI): ảnh/bộ sưu tập không có ảnh thật được hạ bố cục
+ok 40 - normalizeSpec lenient (AI): ảnh/bộ sưu tập không có ảnh thật được hạ bố cục
+  ---
+  duration_ms: 0.404791
+  type: 'test'
+  ...
+# Subtest: normalizeSpec: layout thiếu dữ liệu được hạ về bố cục an toàn (chế độ AI)
+ok 41 - normalizeSpec: layout thiếu dữ liệu được hạ về bố cục an toàn (chế độ AI)
+  ---
+  duration_ms: 0.104792
+  type: 'test'
+  ...
+# Subtest: normalizeSpec: theme lạ → mặc định, không có trang → báo lỗi
+ok 42 - normalizeSpec: theme lạ → mặc định, không có trang → báo lỗi
+  ---
+  duration_ms: 0.0825
+  type: 'test'
+  ...
+# Subtest: dropForeignAssets: bỏ tham chiếu ảnh không thuộc bài
+ok 43 - dropForeignAssets: bỏ tham chiếu ảnh không thuộc bài
+  ---
+  duration_ms: 0.405541
+  type: 'test'
+  ...
+# Subtest: renderer: mọi chuỗi người dùng đều được escape (chống XSS)
+ok 44 - renderer: mọi chuỗi người dùng đều được escape (chống XSS)
+  ---
+  duration_ms: 1.230667
+  type: 'test'
+  ...
+# Subtest: renderer: kích thước canvas theo tỷ lệ
+ok 45 - renderer: kích thước canvas theo tỷ lệ
+  ---
+  duration_ms: 0.076792
+  type: 'test'
+  ...
+# [Vue warn]: onBeforeUnmount is called when there is no active component instance to be associated with. Lifecycle injection APIs can only be used during execution of setup(). If you are using async setup(), make sure to register lifecycle hooks before the first await statement.
+# [Vue warn]: onBeforeUnmount is called when there is no active component instance to be associated with. Lifecycle injection APIs can only be used during execution of setup(). If you are using async setup(), make sure to register lifecycle hooks before the first await statement.
+# [Vue warn]: onBeforeUnmount is called when there is no active component instance to be associated with. Lifecycle injection APIs can only be used during execution of setup(). If you are using async setup(), make sure to register lifecycle hooks before the first await statement.
+# Subtest: F02: updateMeta khi nháp đang sửa và người khác đã lưu → lần lưu sau 409, không ghi đè bản của họ
+ok 46 - F02: updateMeta khi nháp đang sửa và người khác đã lưu → lần lưu sau 409, không ghi đè bản của họ
+  ---
+  duration_ms: 9.92775
+  type: 'test'
+  ...
+# Subtest: F02: updateMeta khi nháp sạch → nhận bản mới nhất, lưu sau đó thành công
+ok 47 - F02: updateMeta khi nháp sạch → nhận bản mới nhất, lưu sau đó thành công
+  ---
+  duration_ms: 8.183834
+  type: 'test'
+  ...
+# [Vue warn]: onBeforeUnmount is called when there is no active component instance to be associated with. Lifecycle injection APIs can only be used during execution of setup(). If you are using async setup(), make sure to register lifecycle hooks before the first await statement.
+# Subtest: F02: gõ thêm trong lúc đang lưu → không mất chữ; lưu tiếp theo mang đúng nội dung
+ok 48 - F02: gõ thêm trong lúc đang lưu → không mất chữ; lưu tiếp theo mang đúng nội dung
+  ---
+  duration_ms: 87.967125
+  type: 'test'
+  ...
+# Subtest: F02: không gõ gì trong lúc lưu → nhận bản máy chủ như cũ
+ok 49 - F02: không gõ gì trong lúc lưu → nhận bản máy chủ như cũ
+  ---
+  duration_ms: 1.035583
+  type: 'test'
+  ...
+# Subtest: sniff: nhận diện ghi âm bằng magic bytes (không tin phần mở rộng)
+ok 50 - sniff: nhận diện ghi âm bằng magic bytes (không tin phần mở rộng)
+  ---
+  duration_ms: 4.967
+  type: 'test'
+  ...
+# Subtest: fitPieces: không vượt giới hạn, chia công bằng, tư liệu ngắn giữ nguyên
+ok 51 - fitPieces: không vượt giới hạn, chia công bằng, tư liệu ngắn giữ nguyên
+  ---
+  duration_ms: 1.060875
+  type: 'test'
+  ...
+# Subtest: capSlides: cắt về trần, giữ trang kết; không đụng khi đủ
+ok 52 - capSlides: cắt về trần, giữ trang kết; không đụng khi đủ
+  ---
+  duration_ms: 0.646083
+  type: 'test'
+  ...
+# Subtest: tông nền: AI chọn lệch tông → về theme mặc định của tông; theme viết tay có CSS, theme sinh tự động có bảng màu
+ok 53 - tông nền: AI chọn lệch tông → về theme mặc định của tông; theme viết tay có CSS, theme sinh tự động có bảng màu
+  ---
+  duration_ms: 9.883333
+  type: 'test'
+  ...
+# Subtest: schema gửi Gemini: theme theo tông, KHÔNG có minItems/maxItems trên slides (Gemini trả 400)
+ok 54 - schema gửi Gemini: theme theo tông, KHÔNG có minItems/maxItems trên slides (Gemini trả 400)
+  ---
+  duration_ms: 0.806
+  type: 'test'
+  ...
+# Subtest: so khớp: IP đơn, CIDR, khoảng, IPv6, IPv4-mapped; rỗng = không giới hạn
+ok 55 - so khớp: IP đơn, CIDR, khoảng, IPv6, IPv4-mapped; rỗng = không giới hạn
+  ---
+  duration_ms: 4.913
+  type: 'test'
+  ...
+# Subtest: mục sai bị báo lỗi (không lặng lẽ bỏ qua)
+ok 56 - mục sai bị báo lỗi (không lặng lẽ bỏ qua)
+  ---
+  duration_ms: 1.84825
+  type: 'test'
+  ...
+# Subtest: cấu hình: IP_ALLOWLIST tách theo phẩy/khoảng trắng, mục sai → không khởi động
+ok 57 - cấu hình: IP_ALLOWLIST tách theo phẩy/khoảng trắng, mục sai → không khởi động
+  ---
+  duration_ms: 0.790958
+  type: 'test'
+  ...
+# {"t":"2026-10-11T23:48:32.788Z","level":"warn","msg":"ip_blocked","ip":"127.0.0.1","m":"GET","p":"/api/x"}
+# Subtest: middleware: chặn IP ngoài danh sách (API → JSON, giao diện → trang 403), healthcheck luôn qua
+ok 58 - middleware: chặn IP ngoài danh sách (API → JSON, giao diện → trang 403), healthcheck luôn qua
+  ---
+  duration_ms: 52.411542
+  type: 'test'
+  ...
+# {"t":"2026-10-11T23:48:32.816Z","level":"warn","msg":"ip_blocked","ip":"203.0.113.1","m":"GET","p":"/api/x"}
+# Subtest: middleware: sau 1 proxy (TRUST_PROXY=1) dùng IP do proxy ghi, chèn thêm IP giả phía trước vô hiệu
+ok 59 - middleware: sau 1 proxy (TRUST_PROXY=1) dùng IP do proxy ghi, chèn thêm IP giả phía trước vô hiệu
+  ---
+  duration_ms: 15.351875
+  type: 'test'
+  ...
+# Subtest: F17: production — APP_BASE_URL và SESSION_COOKIE_SECURE phải khớp nhau (fail-fast)
+ok 60 - F17: production — APP_BASE_URL và SESSION_COOKIE_SECURE phải khớp nhau (fail-fast)
+  ---
+  duration_ms: 1.082333
+  type: 'test'
+  ...
+# Subtest: cleanMoves: chỉ nhận đường dẫn ô chữ của bố cục, kẹp ±100%, bỏ mục ≈0, tối đa MOVE_LIMIT
+ok 61 - cleanMoves: chỉ nhận đường dẫn ô chữ của bố cục, kẹp ±100%, bỏ mục ≈0, tối đa MOVE_LIMIT
+  ---
+  duration_ms: 1.992625
+  type: 'test'
+  ...
+# Subtest: cleanHide + decorsFor: khoá hợp lệ theo thứ tự chuẩn; trang tự do chỉ có hoạ tiết nền
+ok 62 - cleanHide + decorsFor: khoá hợp lệ theo thứ tự chuẩn; trang tự do chỉ có hoạ tiết nền
+  ---
+  duration_ms: 0.630583
+  type: 'test'
+  ...
+# Subtest: normalizeSpec: giữ moves/hide hợp lệ; trang tự do bỏ moves; mục sai bị bỏ không báo lỗi
+ok 63 - normalizeSpec: giữ moves/hide hợp lệ; trang tự do bỏ moves; mục sai bị bỏ không báo lỗi
+  ---
+  duration_ms: 1.126583
+  type: 'test'
+  ...
+# Subtest: renderer: ô chữ đã dời có translate ở MỌI chế độ (px theo khung), hoạ tiết tắt → lớp x-*, chế độ sửa gắn data-dc
+ok 64 - renderer: ô chữ đã dời có translate ở MỌI chế độ (px theo khung), hoạ tiết tắt → lớp x-*, chế độ sửa gắn data-dc
+  ---
+  duration_ms: 1.852334
+  type: 'test'
+  ...
+# Subtest: cỡ chữ: cleanMoves kẹp 0,5–3, mục chỉ đổi cỡ vẫn giữ; applyFrameMove giữ cỡ khi chỉ dời, xoá khi về gốc
+ok 65 - cỡ chữ: cleanMoves kẹp 0,5–3, mục chỉ đổi cỡ vẫn giữ; applyFrameMove giữ cỡ khi chỉ dời, xoá khi về gốc
+  ---
+  duration_ms: 0.480792
+  type: 'test'
+  ...
+# Subtest: applyFrameMove: chỉ đường dẫn cho phép, kẹp số, ≈0 = xoá; không quá giới hạn; trang tự do bỏ qua
+ok 66 - applyFrameMove: chỉ đường dẫn cho phép, kẹp số, ≈0 = xoá; không quá giới hạn; trang tự do bỏ qua
+  ---
+  duration_ms: 0.188209
+  type: 'test'
+  ...
+# Subtest: shiftMoves: đổi chỗ / xoá mục → vị trí chữ đi theo mục
+ok 67 - shiftMoves: đổi chỗ / xoá mục → vị trí chữ đi theo mục
+  ---
+  duration_ms: 0.223084
+  type: 'test'
+  ...
+# Subtest: applyDeco: xoá / thay bằng hình khối / thay bằng ảnh đúng hộp hoạ tiết; bìa thay ảnh = ô media; dữ liệu lạ bị bỏ
+ok 68 - applyDeco: xoá / thay bằng hình khối / thay bằng ảnh đúng hộp hoạ tiết; bìa thay ảnh = ô media; dữ liệu lạ bị bỏ
+  ---
+  duration_ms: 0.584917
+  type: 'test'
+  ...
+# Subtest: convertElement: ảnh ↔ hình khối giữ id, vị trí, kích thước, hiện khi bấm; loại khác không đổi
+ok 69 - convertElement: ảnh ↔ hình khối giữ id, vị trí, kích thước, hiện khi bấm; loại khác không đổi
+  ---
+  duration_ms: 0.18275
+  type: 'test'
+  ...
+# Subtest: fixture mẫu: moves/hide đi suốt normalizeSpec → HTML (trang mục ẩn số, trang thẻ dời + phóng tiêu đề)
+ok 70 - fixture mẫu: moves/hide đi suốt normalizeSpec → HTML (trang mục ẩn số, trang thẻ dời + phóng tiêu đề)
+  ---
+  duration_ms: 28.260042
+  type: 'test'
+  ...
+# Subtest: trang tự do: không nằm trong danh sách layout cho AI, mọi mẫu dựng ra phần tử hợp lệ
+ok 71 - trang tự do: không nằm trong danh sách layout cho AI, mọi mẫu dựng ra phần tử hợp lệ
+  ---
+  duration_ms: 2.449584
+  type: 'test'
+  ...
+# Subtest: normalizeSpec: phần tử trang tự do được kẹp toạ độ, chuẩn hoá kiểu, bảng luôn hình chữ nhật, id trùng được cấp lại
+ok 72 - normalizeSpec: phần tử trang tự do được kẹp toạ độ, chuẩn hoá kiểu, bảng luôn hình chữ nhật, id trùng được cấp lại
+  ---
+  duration_ms: 0.285166
+  type: 'test'
+  ...
+# Subtest: normalizeSpec strict: báo lỗi khi bảng quá nhiều hàng hoặc chữ phần tử quá dài
+ok 73 - normalizeSpec strict: báo lỗi khi bảng quá nhiều hàng hoặc chữ phần tử quá dài
+  ---
+  duration_ms: 0.149708
+  type: 'test'
+  ...
+# Subtest: ảnh đã chỉnh sửa: giữ src/edit hợp lệ, bỏ edit khi src trùng asset; pos/zoom được kẹp
+ok 74 - ảnh đã chỉnh sửa: giữ src/edit hợp lệ, bỏ edit khi src trùng asset; pos/zoom được kẹp
+  ---
+  duration_ms: 0.3575
+  type: 'test'
+  ...
+# Subtest: collectAssetIds/dropForeignAssets: tính cả ảnh gốc (src) và ảnh/video trong phần tử trang tự do
+ok 75 - collectAssetIds/dropForeignAssets: tính cả ảnh gốc (src) và ảnh/video trong phần tử trang tự do
+  ---
+  duration_ms: 0.277917
+  type: 'test'
+  ...
+# Subtest: renderer: chế độ edit gắn data-e/data-m, chế độ trình chiếu thì không; nội dung phần tử luôn được escape
+ok 76 - renderer: chế độ edit gắn data-e/data-m, chế độ trình chiếu thì không; nội dung phần tử luôn được escape
+  ---
+  duration_ms: 1.64575
+  type: 'test'
+  ...
+# Subtest: renderer: ảnh có vị trí/phóng → object-position + scale; không bật Ken Burns khi đã phóng
+ok 77 - renderer: ảnh có vị trí/phóng → object-position + scale; không bật Ken Burns khi đã phóng
+  ---
+  duration_ms: 0.235334
+  type: 'test'
+  ...
+# Subtest: applyFrameEdit: chỉ nhận đường dẫn cho phép, cắt theo giới hạn, bỏ ký tự điều khiển
+ok 78 - applyFrameEdit: chỉ nhận đường dẫn cho phép, cắt theo giới hạn, bỏ ký tự điều khiển
+  ---
+  duration_ms: 0.409916
+  type: 'test'
+  ...
+# Subtest: mediaTarget/setMedia: ô media chính đổi ảnh ↔ video, bộ sưu tập, phần tử ảnh
+ok 79 - mediaTarget/setMedia: ô media chính đổi ảnh ↔ video, bộ sưu tập, phần tử ảnh
+  ---
+  duration_ms: 0.394542
+  type: 'test'
+  ...
+# Subtest: đường dẫn thân thiện: bỏ dấu, giữ hoa/thường, mã 8 ký tự; bài cũ chưa có mã dùng /p/:id
+ok 80 - đường dẫn thân thiện: bỏ dấu, giữ hoa/thường, mã 8 ký tự; bài cũ chưa có mã dùng /p/:id
+  ---
+  duration_ms: 1.308167
+  type: 'test'
+  ...
+# Subtest: stockImageService: tìm ảnh (tiếng Việt → lang=vi), ánh xạ kết quả, nhớ đệm; không lộ khoá API trong kết quả
+ok 81 - stockImageService: tìm ảnh (tiếng Việt → lang=vi), ánh xạ kết quả, nhớ đệm; không lộ khoá API trong kết quả
+  ---
+  duration_ms: 0.645416
+  type: 'test'
+  ...
+# Subtest: stockImageService: tải ảnh chỉ từ máy chủ Pixabay, chặn ảnh quá lớn, thiếu khoá → 503
+ok 82 - stockImageService: tải ảnh chỉ từ máy chủ Pixabay, chặn ảnh quá lớn, thiếu khoá → 503
+  ---
+  duration_ms: 0.749458
+  type: 'test'
+  ...
+# Subtest: applyImageEdit: lật rồi mới xoay (khớp trình chỉnh sửa phía trình duyệt), cắt theo khung bao sau xoay
+ok 83 - applyImageEdit: lật rồi mới xoay (khớp trình chỉnh sửa phía trình duyệt), cắt theo khung bao sau xoay
+  ---
+  duration_ms: 68.90125
+  type: 'test'
+  ...
+# Subtest: F08: một tác vụ lỗi → các tác vụ đang chạy vẫn hoàn tất TRƯỚC khi pool báo lỗi; không bắt đầu tác vụ mới
+ok 84 - F08: một tác vụ lỗi → các tác vụ đang chạy vẫn hoàn tất TRƯỚC khi pool báo lỗi; không bắt đầu tác vụ mới
+  ---
+  duration_ms: 42.715083
+  type: 'test'
+  ...
+# Subtest: pool: thành công → giữ đúng thứ tự kết quả và giới hạn đồng thời
+ok 85 - pool: thành công → giữ đúng thứ tự kết quả và giới hạn đồng thời
+  ---
+  duration_ms: 29.2825
+  type: 'test'
+  ...
+# Subtest: normalizeSpec org: ≤ 6 nhánh (so sánh vẫn ≤ 3), icon nhánh theo danh sách, root giữ khi đổi bố cục, thiếu nhánh → lùi bố cục
+ok 86 - normalizeSpec org: ≤ 6 nhánh (so sánh vẫn ≤ 3), icon nhánh theo danh sách, root giữ khi đổi bố cục, thiếu nhánh → lùi bố cục
+  ---
+  duration_ms: 1.550916
+  type: 'test'
+  ...
+# Subtest: renderer org: ô đứng đầu + đường nối + nhánh có icon, mục con; ô chữ sửa được; không ô gốc thì không đường nối
+ok 87 - renderer org: ô đứng đầu + đường nối + nhánh có icon, mục con; ô chữ sửa được; không ô gốc thì không đường nối
+  ---
+  duration_ms: 1.445708
+  type: 'test'
+  ...
+# Subtest: biến thể org: ô khối chỉ khi chữ con đủ ngắn so với số nhánh
+ok 88 - biến thể org: ô khối chỉ khi chữ con đủ ngắn so với số nhánh
+  ---
+  duration_ms: 0.1635
+  type: 'test'
+  ...
+# Subtest: cleanRedraw: chỉ nhận sơ đồ đơn giản (org 2–6 nhánh ≤ 8 mục, timeline 3–8 mốc, process 3–6 bước), nhãn quá dài → bỏ (không cắt chữ)
+ok 89 - cleanRedraw: chỉ nhận sơ đồ đơn giản (org 2–6 nhánh ≤ 8 mục, timeline 3–8 mốc, process 3–6 bước), nhãn quá dài → bỏ (không cắt chữ)
+  ---
+  duration_ms: 0.724042
+  type: 'test'
+  ...
+# Subtest: dàn ý org: redrawPoints ↔ parseOrgPoints khứ hồi; outlineSlideToSpec dựng root + nhánh
+ok 90 - dàn ý org: redrawPoints ↔ parseOrgPoints khứ hồi; outlineSlideToSpec dựng root + nhánh
+  ---
+  duration_ms: 0.75575
+  type: 'test'
+  ...
+# Subtest: composeDeckFromOutline org: nội dung nhánh lấy đúng dàn ý (AI chỉ góp icon theo thứ tự)
+ok 91 - composeDeckFromOutline org: nội dung nhánh lấy đúng dàn ý (AI chỉ góp icon theo thứ tự)
+  ---
+  duration_ms: 0.338459
+  type: 'test'
+  ...
+# Subtest: applyRedraws: trang AI ghi mã → đổi bố cục + chép đúng; bỏ sót → thêm trang cạnh chủ đề / đổi trang chữ khi hết hạn mức; không đè media
+ok 92 - applyRedraws: trang AI ghi mã → đổi bố cục + chép đúng; bỏ sót → thêm trang cạnh chủ đề / đổi trang chữ khi hết hạn mức; không đè media
+  ---
+  duration_ms: 2.370791
+  type: 'test'
+  ...
+# Subtest: schema AI: khoanh vùng có redraw; dàn ý có trường diagram khi có DRn; dựng bài có root + icon nhánh
+ok 93 - schema AI: khoanh vùng có redraw; dàn ý có trường diagram khi có DRn; dựng bài có root + icon nhánh
+  ---
+  duration_ms: 0.340208
+  type: 'test'
+  ...
+# Subtest: editPaths: sửa ô đứng đầu trên khung xem trước, cắt theo giới hạn
+ok 94 - editPaths: sửa ô đứng đầu trên khung xem trước, cắt theo giới hạn
+  ---
+  duration_ms: 0.313583
+  type: 'test'
+  ...
+# Subtest: dàn ý strict: lỗi rõ ràng; trang chỉ có video HOẶC ảnh; tuỳ chọn tạo bài do server giữ
+ok 95 - dàn ý strict: lỗi rõ ràng; trang chỉ có video HOẶC ảnh; tuỳ chọn tạo bài do server giữ
+  ---
+  duration_ms: 1.595292
+  type: 'test'
+  ...
+# Subtest: dàn ý: số liệu kiểu Việt Nam, tách "Tiêu đề: diễn giải"
+ok 96 - dàn ý: số liệu kiểu Việt Nam, tách "Tiêu đề: diễn giải"
+  ---
+  duration_ms: 0.452417
+  type: 'test'
+  ...
+# Subtest: dàn ý → slide dự phòng: đúng cấu trúc theo bố cục
+ok 97 - dàn ý → slide dự phòng: đúng cấu trúc theo bố cục
+  ---
+  duration_ms: 0.3025
+  type: 'test'
+  ...
+# Subtest: gắn media theo dàn ý: video/1 ảnh → bố cục có ô media; ≥2 ảnh → bộ sưu tập
+ok 98 - gắn media theo dàn ý: video/1 ảnh → bố cục có ô media; ≥2 ảnh → bộ sưu tập
+  ---
+  duration_ms: 0.207333
+  type: 'test'
+  ...
+# Subtest: dựng bài: ghép theo ref, giữ chữ người dùng đã duyệt, tôn trọng bố cục chọn tay, trang thiếu → dựng dự phòng
+ok 99 - dựng bài: ghép theo ref, giữ chữ người dùng đã duyệt, tôn trọng bố cục chọn tay, trang thiếu → dựng dự phòng
+  ---
+  duration_ms: 0.95175
+  type: 'test'
+  ...
+# Subtest: chọn tông màu khi tạo: tự động / mẫu (tông theo mẫu) / tuỳ chỉnh (kiểm tra mã màu)
+ok 100 - chọn tông màu khi tạo: tự động / mẫu (tông theo mẫu) / tuỳ chỉnh (kiểm tra mã màu)
+  ---
+  duration_ms: 0.403875
+  type: 'test'
+  ...
+# Subtest: bảng màu: màu nhấn luôn đủ tương phản với nền (kể cả màu người dùng nhập khó đọc)
+ok 101 - bảng màu: màu nhấn luôn đủ tương phản với nền (kể cả màu người dùng nhập khó đọc)
+  ---
+  duration_ms: 1.439916
+  type: 'test'
+  ...
+# Subtest: phông chữ: đủ tệp, có unicode-range tiếng Việt, chặn đường dẫn ngoài danh sách
+ok 102 - phông chữ: đủ tệp, có unicode-range tiếng Việt, chặn đường dẫn ngoài danh sách
+  ---
+  duration_ms: 4.952042
+  type: 'test'
+  ...
+# Subtest: link YouTube: nhận mọi dạng phổ biến, từ chối link lạ
+ok 103 - link YouTube: nhận mọi dạng phổ biến, từ chối link lạ
+  ---
+  duration_ms: 0.539959
+  type: 'test'
+  ...
+# Subtest: video tải lên: nhận MP4/MOV/WebM theo magic bytes, từ chối M4A (chỉ tiếng)
+ok 104 - video tải lên: nhận MP4/MOV/WebM theo magic bytes, từ chối M4A (chỉ tiếng)
+  ---
+  duration_ms: 0.403375
+  type: 'test'
+  ...
+# Subtest: thiết kế trong spec: chặn giá trị lạ, kẹp kích thước logo, asset logo/video được kiểm soát
+ok 105 - thiết kế trong spec: chặn giá trị lạ, kẹp kích thước logo, asset logo/video được kiểm soát
+  ---
+  duration_ms: 0.7805
+  type: 'test'
+  ...
+# Subtest: renderer: video 16:9 có nút phát + chống XSS tên video; nền/phông/tông gắn vào trang; logo theo tỷ lệ ảnh
+ok 106 - renderer: video 16:9 có nút phát + chống XSS tên video; nền/phông/tông gắn vào trang; logo theo tỷ lệ ảnh
+  ---
+  duration_ms: 1.380709
+  type: 'test'
+  ...
+# Subtest: build: chỉ nhận step/dim/tour (auto = không lưu), giữ qua lưu nghiêm ngặt
+ok 107 - build: chỉ nhận step/dim/tour (auto = không lưu), giữ qua lưu nghiêm ngặt
+  ---
+  duration_ms: 2.214208
+  type: 'test'
+  ...
+# Subtest: renderer: data-build trên slide, data-step trên phần tử bật "Hiện khi bấm"
+ok 108 - renderer: data-build trên slide, data-step trên phần tử bật "Hiện khi bấm"
+  ---
+  duration_ms: 3.325167
+  type: 'test'
+  ...
+# Subtest: engine: bộ chọn "ý" phủ đơn vị nội dung của mọi bố cục có danh sách
+ok 109 - engine: bộ chọn "ý" phủ đơn vị nội dung của mọi bố cục có danh sách
+  ---
+  duration_ms: 14.275042
+  type: 'test'
+  ...
+# Subtest: nền 3D: tên hợp lệ, dự phòng 2D tồn tại, engine giữ bản sao FALLBACK_2D khớp
+ok 110 - nền 3D: tên hợp lệ, dự phòng 2D tồn tại, engine giữ bản sao FALLBACK_2D khớp
+  ---
+  duration_ms: 0.960333
+  type: 'test'
+  ...
+# Subtest: logo3d: chuẩn hoá chuyển động/độ dày/ảnh, dựng ảnh dự phòng có crossorigin, asset được kiểm
+ok 111 - logo3d: chuẩn hoá chuyển động/độ dày/ảnh, dựng ảnh dự phòng có crossorigin, asset được kiểm
+  ---
+  duration_ms: 1.101708
+  type: 'test'
+  ...
+# Subtest: renderService: gói 3D chỉ nhúng inline khi bài dùng 3D; khung soạn thảo tải qua URL
+ok 112 - renderService: gói 3D chỉ nhúng inline khi bài dùng 3D; khung soạn thảo tải qua URL
+  ---
+  duration_ms: 13.738458
+  type: 'test'
+  ...
+# Subtest: F04: nhiều người dùng chung 1 IP — mỗi người có hạn mức riêng, người này vượt không chặn người kia
+ok 113 - F04: nhiều người dùng chung 1 IP — mỗi người có hạn mức riêng, người này vượt không chặn người kia
+  ---
+  duration_ms: 77.707083
+  type: 'test'
+  ...
+# Subtest: F04: chưa đăng nhập tính theo IP với hạn mức chặt hơn; không ảnh hưởng người đã đăng nhập
+ok 114 - F04: chưa đăng nhập tính theo IP với hạn mức chặt hơn; không ảnh hưởng người đã đăng nhập
+  ---
+  duration_ms: 7.516667
+  type: 'test'
+  ...
+# Subtest: F04: tầng IP chỉ là chốt chặn lụt (trần cao, cấu hình được)
+ok 115 - F04: tầng IP chỉ là chốt chặn lụt (trần cao, cấu hình được)
+  ---
+  duration_ms: 14.757542
+  type: 'test'
+  ...
+# Subtest: SSRF: chặn địa chỉ nội bộ, loopback, metadata, IPv4-mapped
+ok 116 - SSRF: chặn địa chỉ nội bộ, loopback, metadata, IPv4-mapped
+  ---
+  duration_ms: 4.669917
+  type: 'test'
+  ...
+# Subtest: SSRF: chỉ nhận http/https cổng chuẩn, không thông tin đăng nhập, không IP nội bộ
+ok 117 - SSRF: chỉ nhận http/https cổng chuẩn, không thông tin đăng nhập, không IP nội bộ
+  ---
+  duration_ms: 0.904542
+  type: 'test'
+  ...
+# Subtest: magic bytes: không tin phần mở rộng
+ok 118 - magic bytes: không tin phần mở rộng
+  ---
+  duration_ms: 0.369792
+  type: 'test'
+  ...
+# Subtest: tenantClause: luôn sinh điều kiện tenant, thiếu/sai tenant → dừng truy vấn
+ok 119 - tenantClause: luôn sinh điều kiện tenant, thiếu/sai tenant → dừng truy vấn
+  ---
+  duration_ms: 0.776208
+  type: 'test'
+  ...
+# Subtest: URL ảnh có chữ ký: đúng id + còn hạn mới hợp lệ
+ok 120 - URL ảnh có chữ ký: đúng id + còn hạn mới hợp lệ
+  ---
+  duration_ms: 0.967208
+  type: 'test'
+  ...
+# Subtest: F11: mật khẩu mới > 72 byte bị từ chối (bcrypt cắt lặng lẽ); tiếng Việt có dấu tính theo byte
+ok 121 - F11: mật khẩu mới > 72 byte bị từ chối (bcrypt cắt lặng lẽ); tiếng Việt có dấu tính theo byte
+  ---
+  duration_ms: 4.484708
+  type: 'test'
+  ...
+# Subtest: F01: tạo bài kèm ảnh → ảnh lưu vào tenant + bài đúng, dàn ý lập được (không failed)
+ok 122 - F01: tạo bài kèm ảnh → ảnh lưu vào tenant + bài đúng, dàn ý lập được (không failed)
+  ---
+  duration_ms: 69.757875
+  type: 'test'
+  ...
+# Subtest: F01: dựng bài với ảnh minh hoạ AI → ảnh được lưu vào tenant + bài đúng và gắn vào trang
+ok 123 - F01: dựng bài với ảnh minh hoạ AI → ảnh được lưu vào tenant + bài đúng và gắn vào trang
+  ---
+  duration_ms: 52.659292
+  type: 'test'
+  ...
+# Subtest: F05: xuất HTML chỉ nạp ảnh/video mà bài dùng (ảnh + video thừa trong thư viện không bị đọc)
+ok 124 - F05: xuất HTML chỉ nạp ảnh/video mà bài dùng (ảnh + video thừa trong thư viện không bị đọc)
+  ---
+  duration_ms: 6.294875
+  type: 'test'
+  ...
+# Subtest: F05: thumbnail chỉ nạp ảnh của trang 1
+ok 125 - F05: thumbnail chỉ nạp ảnh của trang 1
+  ---
+  duration_ms: 26.307583
+  type: 'test'
+  ...
+# Subtest: F09: nhân bản lỗi khi sao chép media → không còn bài ready thiếu ảnh (bản dở bị dọn)
+ok 126 - F09: nhân bản lỗi khi sao chép media → không còn bài ready thiếu ảnh (bản dở bị dọn)
+  ---
+  duration_ms: 1.737917
+  type: 'test'
+  ...
+# Subtest: F09: nhân bản thành công → bản sao ready, đủ media
+ok 127 - F09: nhân bản thành công → bản sao ready, đủ media
+  ---
+  duration_ms: 0.553167
+  type: 'test'
+  ...
+# Subtest: F12: readAsset (không chữ ký) từ chối tài khoản đang phải đổi mật khẩu; tài khoản bình thường đọc được
+ok 128 - F12: readAsset (không chữ ký) từ chối tài khoản đang phải đổi mật khẩu; tài khoản bình thường đọc được
+  ---
+  duration_ms: 0.3945
+  type: 'test'
+  ...
+# {"t":"2026-10-11T23:48:33.324Z","level":"warn","msg":"thumbnail_failed","id":"8a1b2a2e-40c0-48fd-8d57-f19633af75f1","err":"browser.screenshotSlides is not a function"}
+# Subtest: redraw: sơ đồ được vẽ lại → ảnh gốc vẫn lưu làm asset của bài (không nằm trong dàn ý)
+ok 129 - redraw: sơ đồ được vẽ lại → ảnh gốc vẫn lưu làm asset của bài (không nằm trong dàn ý)
+  ---
+  duration_ms: 114.788333
+  type: 'test'
+  ...
+# Subtest: accessRole: chủ bài / được mời sửa / còn lại chỉ xem
+ok 130 - accessRole: chủ bài / được mời sửa / còn lại chỉ xem
+  ---
+  duration_ms: 0.685416
+  type: 'test'
+  ...
+# Subtest: mời người: chỉ chủ bài; email phải là tài khoản đang hoạt động; lần đầu chia sẻ tạo bản gốc
+ok 131 - mời người: chỉ chủ bài; email phải là tài khoản đang hoạt động; lần đầu chia sẻ tạo bản gốc
+  ---
+  duration_ms: 1.075958
+  type: 'test'
+  ...
+# Subtest: handoff: chủ bài + người sửa chốt được; người xem bị chặn; tối đa 5 bản, trùng phiên bản → 409
+ok 132 - handoff: chủ bài + người sửa chốt được; người xem bị chặn; tối đa 5 bản, trùng phiên bản → 409
+  ---
+  duration_ms: 3.60875
+  type: 'test'
+  ...
+# Subtest: xoá handoff: chủ bài xoá mọi bản, người sửa chỉ xoá bản mình chốt; bản gốc không xoá được
+ok 133 - xoá handoff: chủ bài xoá mọi bản, người sửa chỉ xoá bản mình chốt; bản gốc không xoá được
+  ---
+  duration_ms: 1.632208
+  type: 'test'
+  ...
+# Subtest: khôi phục: chỉ chủ bài; không chọn bản → về bản gốc; chưa từng chia sẻ → báo cần chọn bản handoff
+ok 134 - khôi phục: chỉ chủ bài; không chọn bản → về bản gốc; chưa từng chia sẻ → báo cần chọn bản handoff
+  ---
+  duration_ms: 2.329291
+  type: 'test'
+  ...
+# Subtest: F13: bản gốc lỗi → không ai được cấp quyền (bản gốc chụp TRƯỚC khi mời)
+ok 135 - F13: bản gốc lỗi → không ai được cấp quyền (bản gốc chụp TRƯỚC khi mời)
+  ---
+  duration_ms: 0.588416
+  type: 'test'
+  ...
+# Subtest: F07: trần số người được mời do repository quyết định (cùng giao dịch) → TOO_MANY_SHARES
+ok 136 - F07: trần số người được mời do repository quyết định (cùng giao dịch) → TOO_MANY_SHARES
+  ---
+  duration_ms: 0.688542
+  type: 'test'
+  ...
+# Subtest: F06: nhiều tệp, mỗi tệp dưới giới hạn nhưng tổng vượt → 413, không còn tệp tạm
+ok 137 - F06: nhiều tệp, mỗi tệp dưới giới hạn nhưng tổng vượt → 413, không còn tệp tạm
+  ---
+  duration_ms: 146.030916
+  type: 'test'
+  ...
+# Subtest: F06: tổng trong giới hạn → nhận đủ
+ok 138 - F06: tổng trong giới hạn → nhận đủ
+  ---
+  duration_ms: 11.348125
+  type: 'test'
+  ...
+# Subtest: placeUserMedia: AI đặt đủ → giữ nguyên; bỏ trùng; trang có video không kèm ảnh
+ok 139 - placeUserMedia: AI đặt đủ → giữ nguyên; bỏ trùng; trang có video không kèm ảnh
+  ---
+  duration_ms: 1.541416
+  type: 'test'
+  ...
+# Subtest: placeUserMedia: AI bỏ sót → đặt vào trang chữ trống trước, không đụng trang số liệu/trang kết
+ok 140 - placeUserMedia: AI bỏ sót → đặt vào trang chữ trống trước, không đụng trang số liệu/trang kết
+  ---
+  duration_ms: 0.2615
+  type: 'test'
+  ...
+# Subtest: placeUserMedia: nhiều ảnh thiếu chỗ → thêm trang bộ sưu tập trước trang kết (còn hạn mức trang)
+ok 141 - placeUserMedia: nhiều ảnh thiếu chỗ → thêm trang bộ sưu tập trước trang kết (còn hạn mức trang)
+  ---
+  duration_ms: 0.58325
+  type: 'test'
+  ...
+# Subtest: placeUserMedia: số trang cố định (room 0) → dồn vào trang sẵn có, vẫn đủ mọi ảnh
+ok 142 - placeUserMedia: số trang cố định (room 0) → dồn vào trang sẵn có, vẫn đủ mọi ảnh
+  ---
+  duration_ms: 0.157417
+  type: 'test'
+  ...
+# Subtest: placeUserMedia: không còn trang nào trống cho video → buộc thêm trang (không bỏ media người dùng)
+ok 143 - placeUserMedia: không còn trang nào trống cho video → buộc thêm trang (không bỏ media người dùng)
+  ---
+  duration_ms: 0.12425
+  type: 'test'
+  ...
+# Subtest: dàn ý giữ fit contain của ảnh đồ hoạ → slide hiển thị trọn khung, bố cục không cắt ảnh
+ok 144 - dàn ý giữ fit contain của ảnh đồ hoạ → slide hiển thị trọn khung, bố cục không cắt ảnh
+  ---
+  duration_ms: 0.72975
+  type: 'test'
+  ...
+# Subtest: precheckMedia: nhận ảnh/video theo magic bytes, ghép ảnh bìa theo vị trí, từ chối loại khác + vượt giới hạn
+ok 145 - precheckMedia: nhận ảnh/video theo magic bytes, ghép ảnh bìa theo vị trí, từ chối loại khác + vượt giới hạn
+  ---
+  duration_ms: 27.4235
+  type: 'test'
+  ...
+# Subtest: schema dàn ý: có video gửi kèm → mỗi trang bắt buộc trường video; không có → giữ schema cũ
+ok 146 - schema dàn ý: có video gửi kèm → mỗi trang bắt buộc trường video; không có → giữ schema cũ
+  ---
+  duration_ms: 0.553125
+  type: 'test'
+  ...
+# Subtest: fits: biến thể chỉ hợp khi nội dung phù hợp (vòng % 0–100, thanh cùng đơn vị, mũi tên tên ngắn)
+ok 147 - fits: biến thể chỉ hợp khi nội dung phù hợp (vòng % 0–100, thanh cùng đơn vị, mũi tên tên ngắn)
+  ---
+  duration_ms: 0.846416
+  type: 'test'
+  ...
+# Subtest: resolveVariant: người dùng sửa nội dung làm biến thể hết hợp → quay về mặc định
+ok 148 - resolveVariant: người dùng sửa nội dung làm biến thể hết hợp → quay về mặc định
+  ---
+  duration_ms: 0.111916
+  type: 'test'
+  ...
+# Subtest: artDirect: xác định theo hạt giống, chỉ chọn biến thể hợp lệ, hạt giống khác → bài khác
+ok 149 - artDirect: xác định theo hạt giống, chỉ chọn biến thể hợp lệ, hạt giống khác → bài khác
+  ---
+  duration_ms: 7.105916
+  type: 'test'
+  ...
+# Subtest: artDirect: hai trang cùng bố cục trong bài hiếm khi trùng kiểu
+ok 150 - artDirect: hai trang cùng bố cục trong bài hiếm khi trùng kiểu
+  ---
+  duration_ms: 11.392375
+  type: 'test'
+  ...
+# Subtest: normalizeSpec: giữ style/variant hợp lệ, bỏ giá trị lạ; renderer gắn data-style + lớp V-*
+ok 151 - normalizeSpec: giữ style/variant hợp lệ, bỏ giá trị lạ; renderer gắn data-style + lớp V-*
+  ---
+  duration_ms: 18.553417
+  type: 'test'
+  ...
+# Subtest: renderer: mọi biến thể dựng được (không lỗi, không lọt chuỗi chưa thoát)
+ok 152 - renderer: mọi biến thể dựng được (không lỗi, không lọt chuỗi chưa thoát)
+  ---
+  duration_ms: 15.03625
+  type: 'test'
+  ...
+# Subtest: keepPhotoImages: bỏ infographic, trang ảnh hết ảnh → tự chọn bố cục, gallery còn 1 ảnh → image
+ok 153 - keepPhotoImages: bỏ infographic, trang ảnh hết ảnh → tự chọn bố cục, gallery còn 1 ảnh → image
+  ---
+  duration_ms: 0.232708
+  type: 'test'
+  ...
+# Subtest: imageTraits: ảnh chụp (chuyển màu mượt) khác đồ hoạ phẳng (mảng màu + chữ sắc nét)
+ok 154 - imageTraits: ảnh chụp (chuyển màu mượt) khác đồ hoạ phẳng (mảng màu + chữ sắc nét)
+  ---
+  duration_ms: 639.519
+  type: 'test'
+  ...
+# Subtest: sniff: Office đời cũ (OLE), HEIC, AVIF, văn bản UTF-16 và mã hoá cũ
+ok 155 - sniff: Office đời cũ (OLE), HEIC, AVIF, văn bản UTF-16 và mã hoá cũ
+  ---
+  duration_ms: 0.7225
+  type: 'test'
+  ...
+# Subtest: decodeText: UTF-8 (có/không BOM), UTF-16 LE/BE, Windows-1258 → chuỗi NFC
+ok 156 - decodeText: UTF-8 (có/không BOM), UTF-16 LE/BE, Windows-1258 → chuỗi NFC
+  ---
+  duration_ms: 0.313709
+  type: 'test'
+  ...
+# Subtest: readBuffer XLSX: bảng có tên cột, % và ngày định dạng đúng, trang tính ẩn được đánh dấu
+ok 157 - readBuffer XLSX: bảng có tên cột, % và ngày định dạng đúng, trang tính ẩn được đánh dấu
+  ---
+  duration_ms: 7.255375
+  type: 'test'
+  ...
+# Subtest: readBuffer DOCX: giữ bảng (dạng hàng | cột) và đoạn văn theo đúng thứ tự
+ok 158 - readBuffer DOCX: giữ bảng (dạng hàng | cột) và đoạn văn theo đúng thứ tự
+  ---
+  duration_ms: 1.351666
+  type: 'test'
+  ...
+# Subtest: readBuffer ODS + Office đời cũ: đọc bảng ODF; .doc/.xls báo cách lưu lại
+ok 159 - readBuffer ODS + Office đời cũ: đọc bảng ODF; .doc/.xls báo cách lưu lại
+  ---
+  duration_ms: 1.848875
+  type: 'test'
+  ...
+# Subtest: boxToRegion: toạ độ 0–1000 → điểm ảnh có nới mép; bỏ vùng quá nhỏ / gần cả trang / sai dạng
+ok 160 - boxToRegion: toạ độ 0–1000 → điểm ảnh có nới mép; bỏ vùng quá nhỏ / gần cả trang / sai dạng
+  ---
+  duration_ms: 0.6275
+  type: 'test'
+  ...
+# {"t":"2026-10-11T23:48:33.537Z","level":"warn","msg":"visual_shots_failed","kind":"pdf","step":"locate","err":"quota"}
+# {"t":"2026-10-11T23:48:33.542Z","level":"warn","msg":"visual_shots_failed","kind":"pdf","step":"render","err":"pdftoppm_missing"}
+# {"t":"2026-10-11T23:48:33.551Z","level":"warn","msg":"visual_shots_failed","kind":"office","step":"office","err":"soffice_missing"}
+# Subtest: extractVisuals: render trang, cắt ảnh giao diện + sơ đồ AI chỉ ra, xén nền thừa của sơ đồ, bỏ hình trùng/chất lượng thấp
+ok 161 - extractVisuals: render trang, cắt ảnh giao diện + sơ đồ AI chỉ ra, xén nền thừa của sơ đồ, bỏ hình trùng/chất lượng thấp
+  ---
+  duration_ms: 311.841792
+  type: 'test'
+  ...
+# Subtest: sanitizeOffice: bỏ quan hệ ngoài (SSRF/tệp cục bộ), trường nhúng nội dung ngoài, macro; giữ quan hệ nội bộ
+ok 162 - sanitizeOffice: bỏ quan hệ ngoài (SSRF/tệp cục bộ), trường nhúng nội dung ngoài, macro; giữ quan hệ nội bộ
+  ---
+  duration_ms: 5.303625
+  type: 'test'
+  ...
+# Subtest: readBuffer: PPTX/DOCX giữ tệp gốc (docs) để render trang; XLSX thì không
+ok 163 - readBuffer: PPTX/DOCX giữ tệp gốc (docs) để render trang; XLSX thì không
+  ---
+  duration_ms: 2.558167
+  type: 'test'
+  ...
+# Subtest: mergeEmbedded: ảnh nhúng trùng hình đã cắt → bỏ ảnh nhúng (ảnh gốc nét hơn thay nội dung hình cắt)
+ok 164 - mergeEmbedded: ảnh nhúng trùng hình đã cắt → bỏ ảnh nhúng (ảnh gốc nét hơn thay nội dung hình cắt)
+  ---
+  duration_ms: 23.1485
+  type: 'test'
+  ...
+# Subtest: placeDiagrams: mỗi sơ đồ 1 trang ảnh lớn; gỡ khỏi trang thẻ/bộ sưu tập/bìa; sơ đồ thừa → trang mới cạnh nội dung liên quan
+ok 165 - placeDiagrams: mỗi sơ đồ 1 trang ảnh lớn; gỡ khỏi trang thẻ/bộ sưu tập/bìa; sơ đồ thừa → trang mới cạnh nội dung liên quan
+  ---
+  duration_ms: 2.052375
+  type: 'test'
+  ...
+# Subtest: placeUserMedia force=false: chỉ vào trang chữ ngắn hoặc trang mới khi còn hạn mức; hết chỗ thì bỏ, giữ khung trình duyệt
+ok 166 - placeUserMedia force=false: chỉ vào trang chữ ngắn hoặc trang mới khi còn hạn mức; hết chỗ thì bỏ, giữ khung trình duyệt
+  ---
+  duration_ms: 0.471292
+  type: 'test'
+  ...
+# Subtest: khung trình duyệt: dàn ý → slide → spec giữ frame (chỉ với ảnh trọn khung)
+ok 167 - khung trình duyệt: dàn ý → slide → spec giữ frame (chỉ với ảnh trọn khung)
+  ---
+  duration_ms: 1.03025
+  type: 'test'
+  ...
+# Subtest: renderer: ảnh trọn khung → tấm nền trắng đúng tỷ lệ asset, khung trình duyệt; ảnh rất ngang → cột ảnh rộng
+ok 168 - renderer: ảnh trọn khung → tấm nền trắng đúng tỷ lệ asset, khung trình duyệt; ảnh rất ngang → cột ảnh rộng
+  ---
+  duration_ms: 1.242375
+  type: 'test'
+  ...
+# Subtest: F10: môi trường truyền cho LibreOffice/pdftoppm không chứa khoá/bí mật của ứng dụng
+ok 169 - F10: môi trường truyền cho LibreOffice/pdftoppm không chứa khoá/bí mật của ứng dụng
+  ---
+  duration_ms: 0.397958
+  type: 'test'
+  ...
+1..169
+# tests 169
+# suites 0
+# pass 169
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3473.442208

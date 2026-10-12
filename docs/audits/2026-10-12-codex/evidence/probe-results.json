@@ -1,0 +1,64 @@
+[
+  {
+    "id": "SSRF_MAPPED_NEGATIVE",
+    "observed": "private mapped IPv6 blocked by Node BlockList; initial static hypothesis rejected",
+    "checks": [
+      {
+        "input": "http://[::ffff:127.0.0.1]/",
+        "blocked": "SSRF_BLOCKED"
+      },
+      {
+        "input": "http://[::ffff:169.254.169.254]/",
+        "blocked": "SSRF_BLOCKED"
+      },
+      {
+        "input": "http://[::ffff:10.0.0.1]/",
+        "blocked": "SSRF_BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "MEDIA_SIGNATURE",
+    "accepted": "outlining",
+    "final": "failed",
+    "invalidStorageCall": {
+      "key": "tenants/undefined/presentations/11111111-1111-4111-8111-111111111111/c8064385-2cf9-4f7e-97c5-7062ab0c9679.webp",
+      "hasBuffer": false
+    }
+  },
+  {
+    "id": "SHARE_QUOTA",
+    "initial": 99,
+    "parallelRequests": 2,
+    "final": 101,
+    "limit": 100,
+    "scope": "service with deterministic repository stubs; MySQL race not executed"
+  },
+  {
+    "id": "LAST_ADMIN",
+    "activeAdmins": 0,
+    "scope": "service with deterministic repository stubs; MySQL race not executed"
+  },
+  {
+    "id": "MEDIA_CLEANUP_RACE",
+    "created": [
+      "files/probe-1",
+      "files/probe-2",
+      "files/probe-3"
+    ],
+    "deleted": [
+      "files/probe-1"
+    ],
+    "orphan": [
+      "files/probe-2",
+      "files/probe-3"
+    ],
+    "scope": "mock provider; no real file uploaded"
+  },
+  {
+    "id": "BCRYPT_BYTES",
+    "policyAcceptsBoth": true,
+    "equalDespiteDifferentSuffix": true,
+    "prefixBytes": 72
+  }
+]

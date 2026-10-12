@@ -1,0 +1,17 @@
+{
+  "manifest_files": 305,
+  "changed_source_files": [
+    "shared/deck/layers.js",
+    "shared/deck/limits.js",
+    "shared/deck/render.js",
+    "shared/deck/theme.css",
+    "shared/deck/variants.js",
+    "src/services/geminiService.js",
+    "src/services/specService.js"
+  ],
+  "syntax_files": 115,
+  "syntax_errors": [],
+  "node": "v24.15.0",
+  "git_status": " M shared/deck/layers.js\n M shared/deck/limits.js\n M shared/deck/render.js\n M shared/deck/theme.css\n M shared/deck/variants.js\n M src/services/geminiService.js\n M src/services/specService.js\n",
+  "head": "ec7bdf78d1928c7c66477109761fcc57451873c7"
+}

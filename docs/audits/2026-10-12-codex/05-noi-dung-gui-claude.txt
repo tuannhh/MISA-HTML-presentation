@@ -1,0 +1,1308 @@
+Bạn là người phản biện kỹ thuật độc lập, được chủ dự án yêu cầu Codex audit và debate với Claude nhằm cải thiện app, không thắng thua. Chỉ phân tích, không viết/sửa code. Không có công cụ. Audit một modular monolith Node24 Express5 MySQL8.4 Vue3 tạo HTML presentation qua Gemini. Người dùng chốt mục tiêu 500 người đồng thời, ổn định Docker rồi bàn giao DevOps production. Hiện 134 unit tests PASS; smoke phụ thuộc Gemini thật và SELF_REGISTRATION=false mặc định nên chưa chạy; integration script trỏ thư mục không tồn tại. Findings candidate: (1) storeImage đổi từ 5 tham số thành deck,kind,img,name nhưng storeUserMedia/illustrate gọi cũ: đã tái hiện failed, key undefined, buffer undefined. (2) UI updateMeta giữ dirty draft nhưng adopt version mới gây stale write; save đang bay ghi đè edits phát sinh. (3) admin cuối cùng race; quota shares/media/templates check-then-write, đã probe shares99+2=101, admin2 demote=0 bằng repos giả có barrier. (4) mediaService Promise.all reject cleanup sớm, đã fake-provider tái hiện 2 remote files thiếu delete. (5) queue RAM mất jobs restart; shutdown chờ HTTP nhưng không chờ jobs; render queue không cap. (6) NAT 500 users và api limit600/IP/min -> false429 ngay cả polling. (7) all media inline cho export/thumb, load unreferenced video tốn RAM/rò media chưa dùng vào HTML; duplicate không compensate DB/files. (8) baseline ghi sau share/public không atomic; migrations cũ shrink brand ENUM; baseline ghi marker giả upgrade; DB_NAME hardcode. (9) cookie secure có thể false production, logger raw Error.message; signed URL bearer 2-3h không revoke là tradeoff cần quyết định, không khẳng định breach. (10) office regex sanitizer không phải sandbox; child inherits secrets. (11) bcrypt policy128 chars vs72bytes đã chứng minh collision suffix. (12) readiness chỉ DB không deadline/draining, telemetry/CI/DR thiếu. Mapped IPv6 SSRF ban đầu nghi ngờ nhưng probe đã CHẶN đúng nhờ Node BlockList, KHÔNG đưa thành finding.
+Đề xuất: giữ stack, tạo test nền đầy đủ trước sửa; PR nhỏ; durable MySQL jobs/outbox+lease+fencing+idempotency, cùng codebase nhưng API/worker tách container Docker vì CPU/memory và shutdown; shared Redis CHỈ rate limiter nếu API>1 hoặc backend counters MySQL cần đo; local volume singlehost trước, S3/MinIO nếu multihost; per-user heavy quotas, streaming total cap uploads, weighted resource budgets, restore drill. Yêu cầu phản biện: tìm false positives/mức độ quá tay, missing critical bug, tradeoffs MySQL queue vs Redis/BullMQ, phù hợp500 users, trật tự test-first và acceptance criteria; KHÔNG khẳng định đã xem code ngoài đoạn đính kèm. Trả tiếng Việt khoảng1000-1600 từ, phân biệt confirmed/static/hypothesis.
+
+SOURCE src/services/presentationService.js
+150:       await removeUploads(uploads);
+151:       throw err;
+152:     }
+153: 
+154:     // Chạy nền; client theo dõi trạng thái bằng GET /api/presentations/:id.
+155:     const job = { url: input.url, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages };
+156:     genQueue
+157:       .run(() => generateOutline(user.id, id, job))
+158:       .catch((err) => logger.error('outline_unhandled', { id, err }))
+159:       .finally(() => removeUploads(uploads));
+160:     return { id, code, title, status: 'outlining' };
+161:   }
+162: 
+163:   // Lưu media gửi kèm thành asset của bài (ảnh → WebP ≤1920px; video giữ nguyên tệp + ảnh bìa trình duyệt chụp) và chuẩn bị
+164:   // hình xem trước cho AI (ảnh + ảnh bìa video được ưu tiên trong hạn mức xem trước vì là media bắt buộc).
+165:   async function storeUserMedia(tenantId, id, userMedia) {
+166:     const owner = { id: tenantId };
+167:     const out = { images: [], videos: [], previewBytes: 0 };
+168:     const preview = async (buffer) => {
+169:       if (out.images.length + out.videos.length >= MODEL_IMAGE_PREVIEWS || out.previewBytes >= MODEL_PREVIEW_BYTES) return null;
+170:       const p = await previewForModel(buffer, { side: MODEL_PREVIEW_SIDE }).catch(() => null);
+171:       if (p) out.previewBytes += p.length;
+172:       return p;
+173:     };
+174:     for (const f of userMedia?.images || []) {
+175:       const img = await normalizeImage(await readFile(f.path));
+176:       const a = await storeImage(owner, id, 'image', img, f.name);
+177:       out.images.push({ asset: a.id, name: f.name, width: img.width, height: img.height, preview: await preview(img.buffer), traits: await imageTraits(img.buffer).catch(() => null) });
+178:     }
+179:     for (const f of userMedia?.videos || []) {
+180:       let poster = null;
+181:       let posterImg = null;
+182:       if (f.poster) {
+183:         posterImg = await normalizeImage(await readFile(f.poster), { maxSide: 1280 }).catch(() => null);
+184:         if (posterImg) poster = await storeImage(owner, id, 'poster', posterImg, null);
+185:       }
+186:       const assetId = randomUUID();
+187:       const key = assetKey(tenantId, id, assetId, f.type);
+188:       await storage.putFile(key, f.path);
+189:       await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[f.type], bytes: f.size, width: null, height: null, storageKey: key, originalName: f.name });
+190:       const title = f.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 200);
+191:       out.videos.push({ name: f.name, preview: posterImg ? await preview(posterImg.buffer) : null, video: { provider: 'file', asset: assetId, poster: poster?.id || null, title, caption: '' } });
+192:     }
+193:     return out;
+194:   }
+195: 
+196:   async function generateOutline(tenantId, id, input) {
+197:     const started = Date.now();
+355:     assertMedia(outline, await assets.listOwnedForPresentation(user.id, id));
+356:     const affected = await presentations.saveOutlineOwned(user.id, id, { outline, title: outline.title }, body.outlineVersion);
+357:     if (!affected) throw conflict('Dàn ý đã được sửa ở nơi khác. Tải lại để lấy bản mới nhất.', 'VERSION_CONFLICT');
+358:     return get(user, id);
+359:   }
+360: 
+361:   async function build(user, id, body, ip) {
+362:     let expected = body.outlineVersion;
+363:     if (body.outline !== undefined) expected = (await saveOutline(user, id, body)).outlineVersion;
+364:     else {
+365:       const row = await owned(user, id);
+366:       if (row.status !== 'outline') throw conflict('Bài trình bày không ở bước duyệt dàn ý', 'NOT_OUTLINE');
+367:       if (!Number.isInteger(expected)) throw badRequest('Thiếu outlineVersion', 'VERSION_REQUIRED');
+368:     }
+369:     if (genQueue.pending >= MAX_PENDING_JOBS) throw unavailable('Hệ thống đang xử lý nhiều yêu cầu, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
+370:     const affected = await presentations.startBuildOwned(user.id, id, expected);
+371:     if (!affected) throw conflict('Dàn ý đã thay đổi hoặc bài đang được dựng. Tải lại để xem trạng thái mới nhất.', 'VERSION_CONFLICT');
+372:     await audit.record({ actorId: user.id, action: 'presentation.build', targetType: 'presentation', targetId: id, ip });
+373:     genQueue.run(() => buildDeck(user.id, id)).catch((err) => logger.error('build_unhandled', { id, err }));
+374:     return { id, status: 'generating' };
+375:   }
+376: 
+377:   async function buildDeck(tenantId, id) {
+378:     const started = Date.now();
+379:     try {
+380:       const row = await presentations.findOwned(tenantId, id);
+381:       if (!row?.outline) throw unprocessable('Không tìm thấy dàn ý', 'NOT_OUTLINE');
+382:       const aiImages = row.outline.options?.aiImages === true && config.aiImages.enabled && config.aiImages.perDeck > 0;
+383:       const raw = await gemini.designDeck({ outline: row.outline, ratio: row.ratio, instructions: row.instructions, imagePrompts: aiImages });
+384:       const composed = composeDeckFromOutline(row.outline, mapModelDeck(raw, []).slides);
+385:       // Câu lệnh ảnh minh hoạ theo thứ tự trang (normalizeSpec bỏ trường lạ nên lấy trước).
+386:       const prompts = composed.slides.map((sl) => (typeof sl.imagePrompt === 'string' ? sl.imagePrompt : ''));
+387:       const { spec } = normalizeSpec(composed);
+388:       if (!spec.slides.length) throw unprocessable('AI không dựng được trang nào', 'AI_EMPTY');
+389:       const illustrated = aiImages ? await illustrate(tenantId, id, spec, prompts, row.outline.options?.tone) : 0;
+390:       // Phong cách + biến thể từng trang chọn ngầm theo nội dung; hạt giống ngẫu nhiên → mỗi lần dựng một diện mạo khác.
+391:       const [rw, rh] = String(row.ratio || '16:9').split(':').map(Number);
+392:       artDirect(spec, { seed: randomUUID(), ratio: rw / rh || 16 / 9 });
+393:       dropForeignAssets(spec, new Set((await assets.listMediaForPresentation(id)).map((a) => a.id)));
+394:       await presentations.setGenerationResult(tenantId, id, { status: 'ready', spec, title: null });
+395:       logger.info('build_ready', { id, slides: spec.slides.length, style: spec.style, aiImages: illustrated, ms: Date.now() - started });
+396:       scheduleThumbnail(tenantId, id, 0);
+397:     } catch (err) {
+398:       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi dựng bài trình bày. Vui lòng bấm "Dựng bài" để thử lại.';
+399:       if (!(err instanceof HttpError)) logger.error('build_failed', { id, err });
+400:       else logger.warn('build_failed', { id, code: err.code });
+401:       await presentations.buildFailed(tenantId, id, msg).catch(() => {});
+402:     }
+403:   }
+404: 
+405:   // Ảnh minh hoạ AI cho trang cần ảnh mà chưa có media (ưu tiên trang bìa → mở đầu phần → theo thứ tự), tối đa perDeck ảnh.
+406:   // Lỗi từng ảnh không làm hỏng lượt dựng bài (trang giữ nguyên hình minh hoạ mặc định).
+407:   async function illustrate(tenantId, id, spec, prompts, tone) {
+408:     const want = [];
+409:     spec.slides.forEach((sl, i) => {
+410:       const p = String(prompts[i] || '').trim().slice(0, SPEC_LIMITS.aiPrompt);
+411:       if (!p || sl.video || sl.image?.asset || !AI_IMAGE_LAYOUTS.has(sl.layout)) return;
+412:       if (sl.layout === 'bullets' && sl.items.length > 4) return;
+413:       want.push({ i, p });
+414:     });
+415:     const rank = (sl) => (sl.layout === 'cover' ? 0 : sl.layout === 'section' ? 1 : 2);
+416:     want.sort((a, b) => rank(spec.slides[a.i]) - rank(spec.slides[b.i]) || a.i - b.i);
+417:     const look = tone === 'light' ? 'bright, airy, soft daylight, clean modern look' : 'cinematic, rich deep tones, soft rim light, modern look';
+418:     let added = 0;
+419:     await Promise.all(
+420:       want.slice(0, config.aiImages.perDeck).map((w) =>
+421:         aiQueue.run(async () => {
+422:           const sl = spec.slides[w.i];
+423:           try {
+424:             const out = await gemini.generateImage({ prompt: `${w.p}\nStyle: professional presentation visual, ${look}, high detail, uncluttered composition.`, aspectRatio: '4:3' });
+425:             const img = await normalizeImage(out.buffer);
+426:             const a = await storeImage({ id: tenantId }, id, 'image', img, `ai-minh-hoa-trang-${w.i + 1}`);
+427:             sl.image = { asset: a.id, alt: sl.title.slice(0, SPEC_LIMITS.alt), caption: '', fit: 'cover' };
+428:             added += 1;
+429:           } catch (err) {
+430:             logger.warn('ai_image_failed', { id, slide: w.i, code: err.code || null, err: err instanceof HttpError ? undefined : err.message });
+431:           }
+432:         }),
+433:       ),
+434:     );
+435:     return added;
+436:   }
+437: 
+438:   /* ---------------- đọc ---------------- */
+439:   function toDto(row, viewerId) {
+570:     const fields = { spec, title: String(snap.title || row.title).slice(0, 200) };
+571:     if (config.ratios.includes(snap.ratio)) fields.ratio = snap.ratio;
+572:     const affected = await presentations.updateOwned(row.tenant_id, id, fields, expectedVersion);
+573:     if (!affected) throw conflict('Bài vừa được lưu ở nơi khác. Tải lại rồi khôi phục lại.', 'VERSION_CONFLICT');
+574:     await audit.record({ actorId: user.id, action: 'presentation.restore', targetType: 'presentation', targetId: id, ip, meta: { version: snap.id, kind: snap.kind } });
+575:     scheduleThumbnail(row.tenant_id, id);
+576:     return get(user, id);
+577:   }
+578: 
+579:   async function remove(user, id, ip) {
+580:     await owned(user, id);
+581:     const affected = await presentations.deleteOwned(user.id, id);
+582:     if (!affected) throw notFound('Không tìm thấy bài trình bày');
+583:     await storage.removePrefix(presentationPrefix(user.id, id)).catch((err) => logger.warn('storage_cleanup_failed', { id, err }));
+584:     await audit.record({ actorId: user.id, action: 'presentation.delete', targetType: 'presentation', targetId: id, ip });
+585:   }
+586: 
+587:   // Nhân bản: được phép với bài của mình hoặc bài công khai của người khác → bản sao luôn private, thuộc người nhân bản.
+588:   async function duplicate(user, id, ip) {
+589:     const src = await readable(user, id);
+590:     if (src.status !== 'ready') throw conflict('Chỉ nhân bản được bài trình bày đã tạo xong', 'NOT_READY');
+591:     const isOwner = src.tenant_id === user.id;
+592:     const own = isOwner ? await presentations.findOwned(user.id, id) : null;
+593:     const newId = randomUUID();
+594:     // Media được sao chép sang mã mới: đổi mã trong spec/dàn ý trước khi ghi bản sao.
+595:     const srcAssets = await assets.listMediaForPresentation(id);
+596:     const map = new Map(srcAssets.map((a) => [a.id, randomUUID()]));
+597:     const spec = remapAssetIds(structuredClone(src.spec), map);
+598:     const outline = own?.outline ? remapAssetIds(structuredClone(own.outline), map) : null;
+599:     await withCode((code) => presentations.createCopy(user.id, { id: newId, code, title: `${src.title} (bản sao)`.slice(0, 200), ratio: src.ratio, sourceLabel: src.title, spec, outline }));
+600:     for (const a of srcAssets) {
+601:       const nid = map.get(a.id);
+602:       const key = assetKey(user.id, newId, nid, a.storage_key.split('.').pop());
+603:       await storage.copy(a.storage_key, key);
+604:       await assets.create(user.id, { id: nid, presentationId: newId, kind: a.kind, mime: a.mime, bytes: a.bytes, width: a.width, height: a.height, storageKey: key, originalName: a.original_name });
+605:     }
+606:     await audit.record({ actorId: user.id, action: 'presentation.duplicate', targetType: 'presentation', targetId: newId, ip, meta: { from: id } });
+607:     scheduleThumbnail(user.id, newId, 0);
+608:     return get(user, newId);
+609:   }
+610: 
+611:   /* ---------------- media: ảnh, logo, video, YouTube ---------------- */
+612:   async function mediaTarget(user, id) {
+613:     const row = await editable(user, id);
+614:     if (!MEDIA_STATUSES.has(row.status)) throw conflict('Chưa thể thêm media khi bài đang được AI xử lý', 'NOT_READY');
+615:     return row;
+616:   }
+617: 
+618:   // deck: dòng bài từ mediaTarget — tệp + asset ghi vào tenant của chủ bài (kể cả khi người được mời sửa tải lên).
+619:   async function storeImage(deck, kind, img, name) {
+620:     const assetId = randomUUID();
+621:     const key = assetKey(deck.tenant_id, deck.id, assetId);
+622:     await storage.put(key, img.buffer);
+623:     const row = { id: assetId, kind, mime: img.mime, bytes: img.bytes, width: img.width, height: img.height, original_name: name || null };
+624:     await assets.create(deck.tenant_id, { id: assetId, presentationId: deck.id, kind, mime: img.mime, bytes: img.bytes, width: img.width, height: img.height, storageKey: key, originalName: name || null });
+625:     return assetDto(row);
+626:   }
+627: 
+628:   async function addAsset(user, id, file) {
+629:     const deck = await mediaTarget(user, id);
+630:     if (!file) throw badRequest('Chưa chọn ảnh', 'FILE_REQUIRED');
+755:   async function readAsset(user, assetId, { exp, sig }) {
+756:     let row = null;
+757:     if (sig && signer.verify(assetId, exp, sig)) row = await assets.findById(assetId);
+758:     else if (user) row = await assets.findReadable(user.id, assetId);
+759:     if (!row) throw notFound('Không tìm thấy tệp');
+760:     if (row.kind === 'video') return { path: storage.pathOf(row.storage_key), mime: row.mime };
+761:     return { buffer: await storage.get(row.storage_key), mime: row.mime };
+762:   }
+763: 
+764:   /* ---------------- render / xuất ---------------- */
+765:   // Nạp media của bài: preview dùng URL ký; xuất/PDF/thumbnail nhúng ảnh (data URI); xuất HTML nhúng cả video (nếu vừa trần).
+766:   async function resolvers(presentationId, { inline = false, embedVideos = false } = {}) {
+767:     const rows = await assets.listMediaForPresentation(presentationId);
+768:     const meta = new Map(rows.map((a) => [a.id, a]));
+769:     const urls = new Map();
+770:     const embeds = [];
+771:     const embedIds = new Map();
+772:     let videoBytes = 0;
+773:     const videoCap = config.limits.exportVideoMb * 1048576;
+774:     for (const a of rows) {
+775:       if (a.kind === 'video') {
+776:         if (embedVideos && videoBytes + Number(a.bytes) <= videoCap) {
+777:           videoBytes += Number(a.bytes);
+778:           const eid = `vid-${a.id}`;
+779:           embeds.push({ id: eid, mime: a.mime, b64: (await storage.get(a.storage_key)).toString('base64') });
+780:           embedIds.set(a.id, eid);
+781:         } else if (!inline) urls.set(a.id, signer.url(a.id));
+782:         continue;
+783:       }
+784:       urls.set(a.id, inline ? `data:${a.mime};base64,${(await storage.get(a.storage_key)).toString('base64')}` : signer.url(a.id));
+785:     }
+786:     return {
+787:       assetUrl: (aid) => urls.get(aid) || null,
+788:       assetMeta: (aid) => (meta.has(aid) ? { width: meta.get(aid).width, height: meta.get(aid).height } : null),
+789:       videoEmbed: (aid) => embedIds.get(aid) || null,
+790:       embeds,
+791:     };
+792:   }
+793: 
+794:   // edit: khung xem trước của trình soạn thảo (chủ bài / người được mời sửa) — chữ sửa trực tiếp, bấm ảnh để đổi, kéo thả phần tử.
+795:   async function preview(user, id, nonce, { edit = false } = {}) {
+796:     const row = await readable(user, id);
+797:     if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
+798:     const mode = edit && row.access_role !== 'viewer' ? 'edit' : 'present';
+799:     return renderDeck(row.spec, { ratio: row.ratio, mode, nonce, ...(await resolvers(id)) });
+800:   }
+801: 
+802:   // Xem lại 1 phiên bản (bản gốc / handoff) trước khi khôi phục — chủ bài và người được mời sửa.
+803:   async function previewVersion(user, id, versionId, nonce) {
+804:     await editable(user, id);
+805:     const v = await versions.find(id, versionId);
+806:     if (!v) throw notFound('Không tìm thấy phiên bản');
+807:     const { spec } = normalizeSpec(v.spec);
+808:     dropForeignAssets(spec, new Set((await assets.listMediaForPresentation(id)).map((a) => a.id)));
+809:     return renderDeck(spec, { ratio: config.ratios.includes(v.ratio) ? v.ratio : '16:9', mode: 'present', nonce, ...(await resolvers(id)) });
+810:   }
+811: 
+812:   const idByCode = (code) => (SHORT_CODE_RE.test(String(code)) ? presentations.findIdByCode(code) : null);
+813: 
+814:   async function exportHtml(user, id, ip) {
+815:     const row = await readable(user, id);
+816:     if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
+817:     const html = renderDeck(row.spec, { ratio: row.ratio, mode: 'present', embedFont: true, ...(await resolvers(id, { inline: true, embedVideos: true })) });
+818:     await audit.record({ actorId: user.id, action: 'presentation.export_html', targetType: 'presentation', targetId: id, ip });
+819:     return { html, title: row.title };
+820:   }
+821: 
+822:   async function exportPdf(user, id, ip) {
+823:     const row = await readable(user, id);
+824:     if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
+825:     const html = renderDeck(row.spec, { ratio: row.ratio, mode: 'print', embedFont: true, ...(await resolvers(id, { inline: true })) });
+826:     const pdf = await browser.pdf(html, deckSize(row.ratio));
+827:     await audit.record({ actorId: user.id, action: 'presentation.export_pdf', targetType: 'presentation', targetId: id, ip });
+828:     return { pdf, title: row.title };
+829:   }
+830: 
+831:   /* ---------------- thumbnail (nền, gộp nhiều lần lưu liên tiếp) ---------------- */
+832:   function scheduleThumbnail(tenantId, id, delayMs = 4000) {
+833:     clearTimeout(thumbTimers.get(id));
+834:     const t = setTimeout(() => {
+835:       thumbTimers.delete(id);
+836:       makeThumbnail(tenantId, id).catch((err) => logger.warn('thumbnail_failed', { id, err: err.message }));
+837:     }, delayMs);
+838:     t.unref();
+839:     thumbTimers.set(id, t);
+840:   }
+841: 
+842:   async function makeThumbnail(tenantId, id) {
+843:     const row = await presentations.findOwned(tenantId, id);
+844:     if (!row || row.status !== 'ready' || !row.spec?.slides?.length) return;
+845:     const one = { ...row.spec, slides: [row.spec.slides[0]] };
+846:     const html = renderDeck(one, { ratio: row.ratio, mode: 'present', embedFont: true, ...(await resolvers(id, { inline: true })) });
+847:     const { width, height } = deckSize(row.ratio);
+848:     const [png] = await browser.screenshotSlides(html, { width, height, indices: [0] });
+849:     const webp = await sharp(png).resize({ width: 960 }).webp({ quality: 78 }).toBuffer({ resolveWithObject: true });
+850:     const assetId = randomUUID();
+851:     const key = assetKey(tenantId, id, assetId);
+852:     await storage.put(key, webp.data);
+853:     await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'thumbnail', mime: 'image/webp', bytes: webp.data.length, width: webp.info.width, height: webp.info.height, storageKey: key });
+854:     const old = row.thumbnail_asset_id;
+855:     await presentations.setThumbnail(tenantId, id, assetId);
+856:     if (old) {
+857:       const oldRow = await assets.findById(old);
+858:       await assets.deleteOwned(tenantId, old);
+859:       if (oldRow) await storage.remove(oldRow.storage_key).catch(() => {});
+860:     }
+861:   }
+862: 
+863:   async function recoverStale() {
+864:     const n = await presentations.failStaleGenerating();
+865:     if (n) logger.warn('stale_generations_recovered', { count: n });
+866:   }
+867: 
+868:   return {
+869:     create, list, get, update, remove, duplicate, saveOutline, build, idByCode, owned, editable, restoreSnapshot, previewVersion,
+870:     addAsset, addLogo, addBrand, cutoutLogo, addVideo, addYouTube, readAsset,
+871:     generateImage, searchImages, importStockImage, editImage,
+872:     preview, exportHtml, exportPdf, recoverStale, queueStats: () => ({ pending: genQueue.pending }),
+873:   };
+874: }
+
+SOURCE src/services/sharingService.js
+1: // Chia sẻ theo người + phiên bản handoff.
+2: //  - Chủ bài mời người dùng khác (theo email) với quyền 'viewer' (chỉ xem) hoặc 'editor' (chỉnh sửa); đổi quyền, gỡ.
+3: //  - Lần đầu chia sẻ (mời người / bật công khai) → chụp BẢN GỐC (presentation_versions kind='baseline', 1 bản/bài).
+4: //  - Chủ bài và người sửa "handoff" bản đang lưu mà họ thấy ổn — tối đa MAX_HANDOFFS bản; đủ thì phải xoá bớt.
+5: //  - Chỉ chủ bài khôi phục: chọn 1 bản handoff, không chọn → về bản gốc.
+6: // Quyền trên bài lấy từ presentationService (owned / editable) — service này không tự đọc bảng presentations.
+7: import { randomUUID } from 'node:crypto';
+8: import { badRequest, conflict, forbidden, notFound, unprocessable } from '../lib/httpError.js';
+9: import { isUuid } from '../repositories/tenantScope.js';
+10: 
+11: export const MAX_HANDOFFS = 5;
+12: export const MAX_SHARES_PER_DECK = 100;
+13: export const SHARE_ROLES = Object.freeze(['viewer', 'editor']);
+14: const NOTE_MAX = 200;
+15: const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+16: 
+17: const shareDto = (r) => ({ userId: r.user_id, email: r.email, displayName: r.display_name, role: r.role, active: r.status === 'active', createdAt: r.created_at, updatedAt: r.updated_at });
+18: 
+19: function cleanRole(role) {
+20:   if (!SHARE_ROLES.includes(role)) throw badRequest('Quyền không hợp lệ (chỉ xem hoặc chỉnh sửa)', 'INVALID_ROLE');
+21:   return role;
+22: }
+23: 
+24: export function createSharingService({ repos, decks, audit }) {
+25:   const { shares, versions, users } = repos;
+26: 
+27:   /* ---------------- mời người ---------------- */
+28:   async function listShares(user, id) {
+29:     const deck = await decks.owned(user, id);
+30:     return { shares: (await shares.listForPresentation(deck.id)).map(shareDto), visibility: deck.visibility, max: MAX_SHARES_PER_DECK };
+31:   }
+32: 
+33:   async function addShare(user, id, body, ip) {
+34:     const deck = await decks.owned(user, id);
+35:     if (deck.status !== 'ready') throw conflict('Chỉ chia sẻ được bài trình bày đã dựng xong', 'NOT_READY');
+36:     const role = cleanRole(body.role);
+37:     const email = String(body.email ?? '').trim().toLowerCase();
+38:     if (!EMAIL_RE.test(email) || email.length > 190) throw badRequest('Email không hợp lệ', 'INVALID_EMAIL');
+39:     if (email === String(user.email).toLowerCase()) throw badRequest('Bạn đã là chủ bài này', 'SELF_SHARE');
+40:     const target = await users.findActiveByEmail(email);
+41:     if (!target) throw notFound('Không tìm thấy người dùng đang hoạt động với email này', 'USER_NOT_FOUND');
+42:     const existing = await shares.find(deck.id, target.id);
+43:     if (!existing && (await shares.count(deck.id)) >= MAX_SHARES_PER_DECK) {
+44:       throw unprocessable(`Mỗi bài chia sẻ tối đa ${MAX_SHARES_PER_DECK} người`, 'TOO_MANY_SHARES');
+45:     }
+46:     await shares.upsert(deck.id, target.id, role, user.id);
+47:     // Lần đầu chia sẻ → bản gốc để khôi phục (gọi lại không ghi đè).
+48:     await versions.ensureBaseline(deck.id, user.id);
+49:     await audit.record({ actorId: user.id, action: existing ? 'presentation.share_update' : 'presentation.share_add', targetType: 'presentation', targetId: deck.id, ip, meta: { user: target.id, role } });
+50:     return { share: shareDto(await shares.find(deck.id, target.id)), created: !existing };
+51:   }
+52: 
+53:   async function updateShare(user, id, userId, body, ip) {
+54:     const deck = await decks.owned(user, id);
+55:     const role = cleanRole(body.role);
+56:     if (!(await shares.updateRole(deck.id, userId, role))) throw notFound('Người này chưa được chia sẻ bài', 'SHARE_NOT_FOUND');
+57:     await audit.record({ actorId: user.id, action: 'presentation.share_update', targetType: 'presentation', targetId: deck.id, ip, meta: { user: userId, role } });
+58:     return { share: shareDto(await shares.find(deck.id, userId)) };
+59:   }
+60: 
+61:   async function removeShare(user, id, userId, ip) {
+62:     const deck = await decks.owned(user, id);
+63:     if (!(await shares.remove(deck.id, userId))) throw notFound('Người này chưa được chia sẻ bài', 'SHARE_NOT_FOUND');
+64:     await audit.record({ actorId: user.id, action: 'presentation.share_remove', targetType: 'presentation', targetId: deck.id, ip, meta: { user: userId } });
+65:   }
+66: 
+67:   /* ---------------- phiên bản: bản gốc + handoff ---------------- */
+68:   async function versionsView(user, deck) {
+69:     const isOwner = deck.access_role === 'owner';
+70:     const rows = await versions.list(deck.id);
+71:     const items = rows.map((v) => ({
+72:       id: v.id,
+73:       kind: v.kind,
+74:       title: v.title,
+75:       ratio: v.ratio,
+76:       specVersion: v.spec_version,
+77:       slideCount: v.slide_count,
+78:       note: v.note || '',
+79:       createdBy: v.created_by ? { id: v.created_by, name: v.creator_name || 'Người dùng đã xoá' } : null,
+80:       createdAt: v.created_at,
+81:       isCurrent: v.spec_version === deck.spec_version,
+82:       // Bản gốc là mốc cố định; handoff: chủ bài xoá mọi bản, người sửa chỉ xoá bản mình chốt.
+83:       canDelete: v.kind === 'handoff' && (isOwner || v.created_by === user.id),
+84:     }));
+85:     const handoffs = items.filter((v) => v.kind === 'handoff').length;
+86:     return { items, handoffs, max: MAX_HANDOFFS, canRestore: isOwner, specVersion: deck.spec_version };
+87:   }
+88: 
+89:   async function listVersions(user, id) {
+90:     return versionsView(user, await decks.editable(user, id));
+91:   }
+92: 
+93:   async function handoff(user, id, body, ip) {
+94:     const deck = await decks.editable(user, id);
+95:     if (!Number.isInteger(body.specVersion)) throw badRequest('Thiếu specVersion', 'VERSION_REQUIRED');
+96:     const note = String(body.note ?? '').trim();
+97:     if (note.length > NOTE_MAX) throw badRequest(`Ghi chú tối đa ${NOTE_MAX} ký tự`, 'NOTE_TOO_LONG');
+98:     const res = await versions.createHandoff({ id: randomUUID(), presentationId: deck.id, expectedVersion: body.specVersion, note, createdBy: user.id, max: MAX_HANDOFFS });
+99:     if (res.error === 'NOT_FOUND') throw notFound('Không tìm thấy bài trình bày');
+100:     if (res.error === 'VERSION_CONFLICT') throw conflict('Bài vừa được lưu thay đổi mới. Tải lại để handoff đúng bản đang có.', 'VERSION_CONFLICT');
+101:     if (res.error === 'DUPLICATE') throw conflict('Phiên bản này đã được handoff rồi', 'HANDOFF_EXISTS');
+102:     if (res.error === 'LIMIT') throw conflict(`Đã đủ ${MAX_HANDOFFS} bản handoff. Xoá bớt một bản trước khi handoff bản mới.`, 'HANDOFF_LIMIT');
+103:     await audit.record({ actorId: user.id, action: 'presentation.handoff', targetType: 'presentation', targetId: deck.id, ip, meta: { version: res.id, specVersion: body.specVersion } });
+104:     return versionsView(user, deck);
+105:   }
+106: 
+107:   async function removeVersion(user, id, versionId, ip) {
+108:     const deck = await decks.editable(user, id);
+109:     const v = await versions.find(deck.id, versionId);
+110:     if (!v) throw notFound('Không tìm thấy phiên bản');
+111:     if (v.kind === 'baseline') throw badRequest('Không thể xoá bản gốc — đây là mốc khôi phục mặc định', 'BASELINE_LOCKED');
+112:     if (deck.access_role !== 'owner' && v.created_by !== user.id) throw forbidden('Chỉ chủ bài hoặc người đã handoff bản này được xoá', 'NOT_VERSION_OWNER');
+113:     if (!(await versions.removeHandoff(deck.id, versionId))) throw notFound('Không tìm thấy phiên bản');
+114:     await audit.record({ actorId: user.id, action: 'presentation.handoff_remove', targetType: 'presentation', targetId: deck.id, ip, meta: { version: versionId } });
+115:     return versionsView(user, deck);
+116:   }
+117: 
+118:   // versionId bỏ trống → khôi phục về bản gốc (lần đầu chia sẻ).
+119:   async function restore(user, id, body, ip) {
+120:     const deck = await decks.owned(user, id);
+121:     const versionId = body.versionId ?? null;
+122:     if (versionId !== null && !isUuid(versionId)) throw badRequest('Mã phiên bản không hợp lệ', 'INVALID_ID');
+123:     const snap = versionId ? await versions.find(deck.id, versionId) : await versions.findBaseline(deck.id);
+124:     if (!snap) {
+125:       if (versionId) throw notFound('Không tìm thấy phiên bản');
+126:       throw conflict('Bài chưa có bản gốc (chưa từng chia sẻ). Hãy chọn một bản handoff để khôi phục.', 'NO_BASELINE');
+127:     }
+128:     return decks.restoreSnapshot(user, deck.id, snap, body.specVersion, ip);
+129:   }
+130: 
+131:   return { listShares, addShare, updateShare, removeShare, listVersions, handoff, removeVersion, restore };
+132: }
+
+SOURCE src/services/authService.js
+1: // Xác thực: đăng ký (giới hạn domain email), đăng nhập, đổi mật khẩu, quản trị tài khoản.
+2: // Mỗi người dùng = 1 tenant. Không tiết lộ email tồn tại hay không khi đăng nhập sai.
+3: import { randomUUID, randomInt } from 'node:crypto';
+4: import bcrypt from 'bcryptjs';
+5: import { badRequest, conflict, forbidden, notFound, unauthorized } from '../lib/httpError.js';
+6: 
+7: const EMAIL_RE = /^[^\s@]{1,64}@[a-z0-9.-]{1,180}\.[a-z]{2,}$/i;
+8: // Hash giả để so sánh khi email không tồn tại → thời gian phản hồi như nhau (chống dò tài khoản).
+9: let dummyHash = null;
+10: const getDummyHash = (rounds) => (dummyHash ??= bcrypt.hashSync(randomUUID(), rounds));
+11: 
+12: export function normalizeEmail(email) {
+13:   return String(email || '').trim().toLowerCase();
+14: }
+15: 
+16: export function checkPasswordPolicy(pw) {
+17:   const p = String(pw || '');
+18:   if (p.length < 10 || p.length > 128) return 'Mật khẩu dài 10–128 ký tự';
+19:   if (!/[a-zA-Z]/.test(p) || !/\d/.test(p)) return 'Mật khẩu phải có cả chữ và số';
+20:   return null;
+21: }
+22: 
+23: export function generateTempPassword() {
+24:   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+25:   let s = '';
+26:   for (let i = 0; i < 14; i += 1) s += alphabet[randomInt(alphabet.length)];
+27:   return `${s}7a`;
+28: }
+29: 
+30: export function publicUser(u) {
+31:   return {
+32:     id: u.id,
+33:     email: u.email,
+34:     displayName: u.display_name,
+35:     role: u.role,
+36:     status: u.status,
+37:     mustChangePassword: !!u.must_change_password,
+38:     createdAt: u.created_at,
+39:     lastLoginAt: u.last_login_at,
+40:   };
+41: }
+42: 
+43: export function createAuthService({ config, repos, audit }) {
+44:   const { users } = repos;
+45:   const rounds = config.auth.bcryptRounds;
+46: 
+47:   function domainAllowed(email) {
+48:     const domains = config.auth.allowedEmailDomains;
+49:     if (!domains.length) return true;
+50:     const d = email.split('@')[1] || '';
+51:     return domains.includes(d);
+52:   }
+53: 
+54:   function validateEmail(email) {
+55:     if (!EMAIL_RE.test(email) || email.length > 190) throw badRequest('Email không hợp lệ', 'INVALID_EMAIL');
+56:   }
+57: 
+58:   function validateName(name) {
+59:     const n = String(name || '').trim();
+60:     if (n.length < 2 || n.length > 120) throw badRequest('Họ tên từ 2 đến 120 ký tự', 'INVALID_NAME');
+61:     return n;
+62:   }
+63: 
+64:   return {
+65:     publicConfig() {
+66:       return { selfRegistration: config.auth.selfRegistration, allowedEmailDomains: config.auth.allowedEmailDomains };
+67:     },
+68: 
+69:     async register({ email, password, displayName }, ip) {
+70:       if (!config.auth.selfRegistration) throw forbidden('Hệ thống không mở đăng ký tự do. Liên hệ quản trị viên để được cấp tài khoản.', 'REGISTRATION_CLOSED');
+71:       const e = normalizeEmail(email);
+72:       validateEmail(e);
+73:       if (!domainAllowed(e)) throw forbidden(`Chỉ chấp nhận email thuộc: ${config.auth.allowedEmailDomains.map((d) => `@${d}`).join(', ')}`, 'EMAIL_DOMAIN_NOT_ALLOWED');
+74:       const name = validateName(displayName);
+75:       const policy = checkPasswordPolicy(password);
+76:       if (policy) throw badRequest(policy, 'WEAK_PASSWORD');
+77:       if (await users.findByEmailWithHash(e)) throw conflict('Email này đã được đăng ký', 'EMAIL_TAKEN');
+78:       const id = randomUUID();
+79:       try {
+80:         await users.create({ id, email: e, displayName: name, passwordHash: await bcrypt.hash(password, rounds) });
+81:       } catch (err) {
+82:         if (err.code === 'ER_DUP_ENTRY') throw conflict('Email này đã được đăng ký', 'EMAIL_TAKEN');
+83:         throw err;
+84:       }
+85:       await audit.record({ actorId: id, action: 'auth.register', targetType: 'user', targetId: id, ip });
+86:       return users.findById(id);
+87:     },
+88: 
+89:     async login({ email, password }, ip) {
+90:       const e = normalizeEmail(email);
+91:       const u = e ? await users.findByEmailWithHash(e) : null;
+92:       const ok = await bcrypt.compare(String(password || ''), u ? u.password_hash : getDummyHash(rounds));
+93:       if (!u || !ok) {
+94:         await audit.record({ actorId: u?.id || null, action: 'auth.login', result: 'failure', ip, meta: { reason: 'bad_credentials' } });
+95:         throw unauthorized('Email hoặc mật khẩu không đúng', 'INVALID_CREDENTIALS');
+96:       }
+97:       if (u.status !== 'active') {
+98:         await audit.record({ actorId: u.id, action: 'auth.login', result: 'failure', ip, meta: { reason: 'disabled' } });
+99:         throw forbidden('Tài khoản đã bị khoá. Liên hệ quản trị viên.', 'ACCOUNT_DISABLED');
+100:       }
+101:       await users.touchLogin(u.id);
+102:       await audit.record({ actorId: u.id, action: 'auth.login', ip });
+103:       delete u.password_hash;
+104:       return u;
+105:     },
+106: 
+107:     async changePassword(userId, { currentPassword, newPassword }, ip) {
+108:       const u = await users.findByIdWithHash(userId);
+109:       if (!u) throw unauthorized();
+110:       if (!(await bcrypt.compare(String(currentPassword || ''), u.password_hash))) throw badRequest('Mật khẩu hiện tại không đúng', 'WRONG_PASSWORD');
+111:       const policy = checkPasswordPolicy(newPassword);
+112:       if (policy) throw badRequest(policy, 'WEAK_PASSWORD');
+113:       if (await bcrypt.compare(String(newPassword), u.password_hash)) throw badRequest('Mật khẩu mới phải khác mật khẩu cũ', 'SAME_PASSWORD');
+114:       const version = await users.updatePassword(userId, await bcrypt.hash(newPassword, rounds), false);
+115:       await audit.record({ actorId: userId, action: 'auth.change_password', targetType: 'user', targetId: userId, ip });
+116:       return version;
+117:     },
+118: 
+119:     /* ---------- quản trị ---------- */
+120:     async adminList({ q, page, pageSize }) {
+121:       const res = await users.list({ q: q ? String(q).trim().slice(0, 100) : '', limit: pageSize, offset: (page - 1) * pageSize });
+122:       return { rows: res.rows.map(publicUser), total: res.total };
+123:     },
+124: 
+125:     async adminCreate(actor, { email, displayName, role }, ip) {
+126:       const e = normalizeEmail(email);
+127:       validateEmail(e);
+128:       const name = validateName(displayName);
+129:       const r = role === 'admin' ? 'admin' : 'user';
+130:       if (await users.findByEmailWithHash(e)) throw conflict('Email này đã được đăng ký', 'EMAIL_TAKEN');
+131:       const temp = generateTempPassword();
+132:       const id = randomUUID();
+133:       await users.create({ id, email: e, displayName: name, passwordHash: await bcrypt.hash(temp, rounds), role: r, mustChangePassword: true });
+134:       await audit.record({ actorId: actor.id, action: 'admin.user_create', targetType: 'user', targetId: id, ip, meta: { role: r } });
+135:       return { user: publicUser(await users.findById(id)), temporaryPassword: temp };
+136:     },
+137: 
+138:     async adminUpdate(actor, id, { role, status }, ip) {
+139:       const target = await users.findById(id);
+140:       if (!target) throw notFound('Không tìm thấy người dùng');
+141:       if (role !== undefined && !['user', 'admin'].includes(role)) throw badRequest('Vai trò không hợp lệ', 'INVALID_ROLE');
+142:       if (status !== undefined && !['active', 'disabled'].includes(status)) throw badRequest('Trạng thái không hợp lệ', 'INVALID_STATUS');
+143:       if (id === actor.id && (status === 'disabled' || role === 'user')) throw badRequest('Không thể tự khoá hoặc tự hạ quyền chính mình', 'SELF_LOCKOUT');
+144:       const losingAdmin = target.role === 'admin' && target.status === 'active' && (role === 'user' || status === 'disabled');
+145:       if (losingAdmin && (await users.countActiveAdmins(id)) === 0) throw conflict('Hệ thống cần ít nhất 1 quản trị viên đang hoạt động', 'LAST_ADMIN');
+146:       await users.updateAdminFields(id, { role, status });
+147:       await audit.record({ actorId: actor.id, action: 'admin.user_update', targetType: 'user', targetId: id, ip, meta: { role, status } });
+148:       return publicUser(await users.findById(id));
+149:     },
+150: 
+151:     async adminResetPassword(actor, id, ip) {
+152:       const target = await users.findById(id);
+153:       if (!target) throw notFound('Không tìm thấy người dùng');
+154:       const temp = generateTempPassword();
+155:       await users.updatePassword(id, await bcrypt.hash(temp, rounds), true);
+156:       await audit.record({ actorId: actor.id, action: 'admin.user_reset_password', targetType: 'user', targetId: id, ip });
+157:       return { temporaryPassword: temp };
+158:     },
+159: 
+160:     async createAdmin({ email, displayName }) {
+161:       const e = normalizeEmail(email);
+162:       validateEmail(e);
+163:       const existing = await users.findByEmailWithHash(e);
+164:       const temp = generateTempPassword();
+165:       if (existing) {
+166:         await users.updateAdminFields(existing.id, { role: 'admin', status: 'active' });
+167:         await users.updatePassword(existing.id, await bcrypt.hash(temp, rounds), true);
+168:         return { id: existing.id, temporaryPassword: temp, created: false };
+169:       }
+170:       const id = randomUUID();
+171:       await users.create({ id, email: e, displayName: validateName(displayName || 'Quản trị viên'), passwordHash: await bcrypt.hash(temp, rounds), role: 'admin', mustChangePassword: true });
+172:       return { id, temporaryPassword: temp, created: true };
+173:     },
+174:   };
+175: }
+
+SOURCE src/services/mediaService.js
+1: // Đưa tư liệu nặng (PDF, ghi âm) tới Gemini. Hai chế độ:
+2: //  - trực tiếp: tổng tư liệu nhỏ → đính kèm ngay vào lượt dựng bài (AI vừa đọc/nghe vừa dựng, chất lượng tốt nhất);
+3: //  - hai bước: tư liệu lớn → mỗi tệp (PDF cắt theo cụm trang) được AI chuyển thành văn bản trước, lượt dựng bài chỉ đọc văn bản.
+4: // Vận chuyển: tệp nhỏ gửi inline (base64), tệp lớn qua Files API (giới hạn request inline ~20 MB). Tệp đã tải lên luôn được xoá.
+5: import { openAsBlob } from 'node:fs';
+6: import { readFile } from 'node:fs/promises';
+7: import { PDFDocument } from 'pdf-lib';
+8: import { logger } from '../lib/logger.js';
+9: import { unprocessable } from '../lib/httpError.js';
+10: 
+11: const MB = 1048576;
+12: // Ngân sách inline cho cả request (base64 phình ~33%, còn chỗ cho ảnh xem trước + văn bản).
+13: const INLINE_TOTAL = 8 * MB;
+14: // Lượt chuyển văn bản chỉ mang 1 tệp → được inline lớn hơn.
+15: const INLINE_SINGLE = 14 * MB;
+16: // Ước lượng token: ~32 token/giây ghi âm, ~560 token/trang PDF (ảnh trang + chữ).
+17: const DIRECT_TOKEN_BUDGET = 120000;
+18: const PDF_TOKENS_PER_PAGE = 560;
+19: const AUDIO_TOKENS_PER_SEC = 32;
+20: // Byte/giây giả định để đoán thời lượng (WAV/AIFF không nén; còn lại ~64 kbps — nhầm theo hướng an toàn = coi là dài hơn).
+21: const AUDIO_BYTES_PER_SEC = { wav: 176400, aiff: 176400, flac: 88200 };
+22: // Một cụm PDF cho bước chuyển văn bản: đủ nhỏ để AI chép lại trong giới hạn đầu ra và dưới trần 50 MB/tệp PDF của Gemini.
+23: const PDF_CHUNK_PAGES = 100;
+24: const PDF_CHUNK_BYTES = 45 * MB;
+25: const EXTRACT_CONCURRENCY = 3;
+26: 
+27: const readItem = (m) => (m.buffer ? Promise.resolve(m.buffer) : readFile(m.path));
+28: 
+29: async function pdfPageCount(buffer) {
+30:   try {
+31:     return (await PDFDocument.load(buffer, { ignoreEncryption: true, updateMetadata: false })).getPageCount();
+32:   } catch {
+33:     return null; // PDF lạ/hỏng: để Gemini tự đọc nguyên tệp
+34:   }
+35: }
+36: 
+37: function audioSeconds(m) {
+38:   const ext = Object.entries({ wav: 'audio/wav', aiff: 'audio/aiff', flac: 'audio/flac' }).find(([, mime]) => mime === m.mime)?.[0];
+39:   return m.size / (AUDIO_BYTES_PER_SEC[ext] || 8000);
+40: }
+41: 
+42: // Cắt PDF thành các cụm ≤ PDF_CHUNK_PAGES trang và ≤ PDF_CHUNK_BYTES (cụm vượt dung lượng thì chia đôi tiếp).
+43: async function splitPdf(buffer, pages) {
+44:   if (pages <= PDF_CHUNK_PAGES && buffer.length <= PDF_CHUNK_BYTES) return [{ buffer, from: 1, to: pages }];
+45:   const src = await PDFDocument.load(buffer, { ignoreEncryption: true, updateMetadata: false });
+46:   const perChunk = Math.max(1, Math.min(PDF_CHUNK_PAGES, Math.floor((pages * PDF_CHUNK_BYTES) / buffer.length)));
+47:   const out = [];
+48:   async function build(from, to) {
+49:     const doc = await PDFDocument.create();
+50:     const idx = Array.from({ length: to - from + 1 }, (_, i) => from - 1 + i);
+51:     for (const p of await doc.copyPages(src, idx)) doc.addPage(p);
+52:     const bytes = Buffer.from(await doc.save());
+53:     if (bytes.length > PDF_CHUNK_BYTES && to > from) {
+54:       const mid = Math.floor((from + to) / 2);
+55:       await build(from, mid);
+56:       await build(mid + 1, to);
+57:     } else {
+58:       out.push({ buffer: bytes, from, to });
+59:     }
+60:   }
+61:   for (let from = 1; from <= pages; from += perChunk) await build(from, Math.min(pages, from + perChunk - 1));
+62:   return out;
+63: }
+64: 
+65: async function pool(items, limit, fn) {
+66:   const results = new Array(items.length);
+67:   let next = 0;
+68:   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+69:     while (next < items.length) {
+70:       const i = next++;
+71:       results[i] = await fn(items[i], i);
+72:     }
+73:   });
+74:   await Promise.all(workers);
+75:   return results;
+76: }
+77: 
+78: /**
+79:  * @param media [{ kind:'pdf'|'audio', name, size, mime, path?|buffer? }]
+80:  * @returns {{ direct: [{kind,name,part}], pieces: [{label,text}], cleanup: () => Promise<void> }}
+81:  */
+82: export async function prepareMedia(media, { gemini }) {
+83:   const uploaded = [];
+84:   const cleanup = async () => {
+85:     await Promise.all(uploaded.splice(0).map((name) => gemini.deleteFile(name)));
+86:   };
+87:   if (!media.length) return { direct: [], pieces: [], cleanup };
+88: 
+89:   // Phần tử gửi cho Gemini: inline khi `inline` = true, không thì tải lên Files API (ghi nhận để xoá sau).
+90:   async function toPart({ buffer, path, size, mime, name }, inline) {
+91:     if (inline) return { part: { inlineData: { mimeType: mime, data: (buffer || (await readFile(path))).toString('base64') } } };
+92:     const blob = buffer ? new Blob([buffer], { type: mime }) : await openAsBlob(path, { type: mime });
+93:     const file = await gemini.uploadFile({ blob, size, mime, displayName: name });
+94:     uploaded.push(file.name);
+95:     return { part: { fileData: { mimeType: file.mimeType, fileUri: file.uri } }, uploadedName: file.name };
+96:   }
+97: 
+98:   try {
+99:     // Ước lượng khối lượng để chọn chế độ.
+100:     const info = [];
+101:     let tokens = 0;
+102:     for (const m of media) {
+103:       if (m.kind === 'pdf') {
+104:         const buffer = await readItem(m);
+105:         const pages = await pdfPageCount(buffer);
+106:         info.push({ ...m, buffer, pages });
+107:         tokens += (pages || Math.ceil(m.size / 100000)) * PDF_TOKENS_PER_PAGE;
+108:       } else {
+109:         info.push(m);
+110:         tokens += audioSeconds(m) * AUDIO_TOKENS_PER_SEC;
+111:       }
+112:     }
+113:     const tooBigPdf = info.some((m) => m.kind === 'pdf' && (m.size > PDF_CHUNK_BYTES || (m.pages || 0) > PDF_CHUNK_PAGES * 3));
+114: 
+115:     if (tokens <= DIRECT_TOKEN_BUDGET && !tooBigPdf) {
+116:       const direct = [];
+117:       let inlineLeft = INLINE_TOTAL;
+118:       for (const m of info) {
+119:         const inline = m.size <= inlineLeft;
+120:         if (inline) inlineLeft -= m.size;
+121:         direct.push({ kind: m.kind, name: m.name, part: (await toPart(m, inline)).part });
+122:       }
+123:       logger.info('media_direct', { files: info.length, estimate: Math.round(tokens) });
+124:       return { direct, pieces: [], cleanup };
+125:     }
+126: 
+127:     // Hai bước: tách việc thành từng đơn vị (ghi âm nguyên tệp, PDF theo cụm trang) rồi chạy song song có giới hạn.
+128:     const jobs = [];
+129:     for (const m of info) {
+130:       if (m.kind === 'audio') {
+131:         jobs.push({ kind: 'audio', label: `Bản chuyển thể ghi âm "${m.name}"`, src: m });
+132:         continue;
+133:       }
+134:       const chunks = m.pages ? await splitPdf(m.buffer, m.pages) : [{ buffer: m.buffer, from: 1, to: null }];
+135:       for (const c of chunks) {
+136:         const range = chunks.length > 1 ? ` (trang ${c.from}–${c.to})` : '';
+137:         jobs.push({ kind: 'pdf', label: `PDF "${m.name}"${range}`, src: { buffer: c.buffer, size: c.buffer.length, mime: 'application/pdf', name: `${m.name}${range}` } });
+138:       }
+139:     }
+140:     logger.info('media_two_step', { files: info.length, jobs: jobs.length, estimate: Math.round(tokens) });
+141:     const pieces = await pool(jobs, EXTRACT_CONCURRENCY, async (job) => {
+142:       const { part, uploadedName } = await toPart(job.src, job.src.size <= INLINE_SINGLE);
+143:       const text = await gemini.extractMedia({ kind: job.kind, part, label: job.label });
+144:       // Mỗi lượt chuyển thể độc lập → xoá tệp đã tải lên ngay, không giữ tới cuối.
+145:       if (uploadedName) {
+146:         uploaded.splice(uploaded.indexOf(uploadedName), 1);
+147:         await gemini.deleteFile(uploadedName);
+148:       }
+149:       return { label: job.label, text };
+150:     });
+151:     return { direct: [], pieces, cleanup };
+152:   } catch (err) {
+153:     await cleanup();
+154:     if (err?.message?.includes?.('encrypted')) throw unprocessable('PDF được đặt mật khẩu — hãy bỏ mật khẩu rồi tải lại', 'PDF_ENCRYPTED');
+155:     throw err;
+156:   }
+157: }
+
+SOURCE frontend/src/composables/useEditor.js
+1: // Logic trình soạn thảo dùng chung desktop/mobile: tải bài, bản nháp, lưu (khoá phiên bản), thao tác slide,
+2: // media (ảnh, video, YouTube, logo), thiết kế, chia sẻ, xuất.
+3: import { ref, computed, onBeforeUnmount } from 'vue';
+4: import { get, patch, del, post, download, ApiError } from '@/lib/api.js';
+5: import { newSlide, duplicateSlide, ensureLayoutContent, prepareSpecForSave, clone, SPEC_LIMITS, BUILD_LAYOUTS } from '@/lib/slideModel.js';
+6: import { useMedia } from '@/composables/useMedia.js';
+7: import { withDesignDefaults } from '@/lib/design.js';
+8: import { decorsFor } from '@shared/deck/layers.js';
+9: 
+10: // Bản nháp chưa lưu được giữ tạm khi trang bị gỡ (vd. đổi bề mặt desktop ↔ mobile khi xoay/thu nhỏ cửa sổ).
+11: const pendingDrafts = new Map();
+12: 
+13: export function useEditor(id, { onOutline } = {}) {
+14:   const deck = ref(null);
+15:   const assets = ref([]);
+16:   const media = useMedia(id, assets);
+17:   const draft = ref(null);
+18:   const baseline = ref('');
+19:   const loading = ref(true);
+20:   const saving = ref(false);
+21:   const loadError = ref(null);
+22:   const saveError = ref(null);
+23:   const selected = ref(0);
+24:   const previewKey = ref(Date.now());
+25:   let pollTimer = null;
+26: 
+27:   const dirty = computed(() => !!draft.value && JSON.stringify({ t: draft.value.title, s: draft.value.spec }) !== baseline.value);
+28:   const slide = computed(() => draft.value?.spec?.slides?.[selected.value] || null);
+29:   // edit=1: khung xem trước sửa trực tiếp (chủ bài + người được mời sửa) — nội dung khung được dựng lại từ bản nháp (useLiveDeck).
+30:   const previewUrl = computed(() => (deck.value?.status === 'ready' ? `/api/presentations/${id}/preview?edit=1&v=${previewKey.value}` : ''));
+31: 
+32:   // Video đã dùng trong bài + video tải lên chưa gắn trang nào (thư viện "Video trong bài").
+33:   const videoLibrary = computed(() => {
+34:     const out = new Map();
+35:     for (const s of draft.value?.spec?.slides || []) if (s.video) out.set(s.video.provider === 'youtube' ? `yt:${s.video.id}` : `f:${s.video.asset}`, { ...s.video });
+36:     for (const a of assets.value) if (a.kind === 'video' && !out.has(`f:${a.id}`)) out.set(`f:${a.id}`, { provider: 'file', asset: a.id, poster: null, title: (a.name || '').replace(/\.[a-z0-9]+$/i, ''), caption: '' });
+37:     return [...out.values()];
+38:   });
+39: 
+40:   function adopt(d) {
+41:     deck.value = d;
+42:     assets.value = d.assets || [];
+43:     if (['outlining', 'outline'].includes(d.status) && d.isOwner) onOutline?.(d);
+44:     if (d.status === 'ready' && d.spec) {
+45:       draft.value = { title: d.title, spec: withDesignDefaults(clone(d.spec)) };
+46:       baseline.value = JSON.stringify({ t: draft.value.title, s: draft.value.spec });
+47:       if (selected.value >= d.spec.slides.length) selected.value = Math.max(0, d.spec.slides.length - 1);
+48:     }
+49:   }
+50: 
+51:   async function load() {
+52:     loading.value = true;
+53:     loadError.value = null;
+54:     saveError.value = null;
+55:     try {
+56:       adopt((await get(`/api/presentations/${id}`)).data);
+57:       const kept = pendingDrafts.get(id);
+58:       pendingDrafts.delete(id);
+59:       if (kept && kept.specVersion === deck.value.specVersion) {
+60:         draft.value = kept.draft;
+61:         selected.value = Math.min(kept.selected, kept.draft.spec.slides.length - 1);
+62:       }
+63:       schedulePoll();
+64:     } catch (err) {
+65:       loadError.value = err;
+66:     } finally {
+67:       loading.value = false;
+68:     }
+69:   }
+70: 
+71:   // Bài đang được AI tạo → hỏi lại trạng thái định kỳ.
+72:   function schedulePoll() {
+73:     clearTimeout(pollTimer);
+74:     if (deck.value?.status !== 'generating') return;
+75:     pollTimer = setTimeout(async () => {
+76:       try {
+77:         adopt((await get(`/api/presentations/${id}`)).data);
+78:         previewKey.value = Date.now();
+79:       } catch {
+80:         /* thử lại ở vòng sau */
+81:       }
+82:       schedulePoll();
+83:     }, 2500);
+84:   }
+85: 
+86:   async function save() {
+87:     if (!draft.value || saving.value) return false;
+88:     saving.value = true;
+89:     saveError.value = null;
+90:     try {
+91:       const spec = prepareSpecForSave(draft.value.spec);
+92:       spec.title = draft.value.title.trim() || spec.title;
+93:       const body = { spec, specVersion: deck.value.specVersion };
+94:       if (draft.value.title !== deck.value.title) body.title = draft.value.title.trim();
+95:       adopt((await patch(`/api/presentations/${id}`, body)).data);
+96:       // Khung xem trước đã hiển thị bản nháp (dựng trực tiếp) → không cần tải lại khung sau khi lưu.
+97:       return true;
+98:     } catch (err) {
+99:       saveError.value = err;
+100:       return false;
+101:     } finally {
+102:       saving.value = false;
+103:     }
+104:   }
+105: 
+106:   function discard() {
+107:     if (deck.value) adopt(deck.value);
+108:   }
+109: 
+110:   // Nhận bài mới từ máy chủ (vd. sau khi khôi phục phiên bản) — bỏ bản nháp, dựng lại khung xem trước.
+111:   function applyDeck(d) {
+112:     adopt(d);
+113:     saveError.value = null;
+114:     previewKey.value = Date.now();
+115:   }
+116: 
+117:   // Đổi thuộc tính lưu ngay (tỷ lệ, chia sẻ) — không làm mất bản nháp nội dung đang sửa.
+118:   async function updateMeta(fields) {
+119:     const keep = dirty.value ? clone(draft.value) : null;
+120:     adopt((await patch(`/api/presentations/${id}`, fields)).data);
+121:     if (keep) draft.value = keep;
+122:     if (fields.ratio) previewKey.value = Date.now();
+123:   }
+124: 
+125:   /* ---- thao tác slide ---- */
+126:   const slides = () => draft.value.spec.slides;
+127:   // template: mẫu bố cục cho trang tự do (trang trắng, tiêu đề + nội dung, ảnh trái – chữ phải…).
+128:   function addSlide(layout = 'bullets', template = 'blank') {
+129:     if (slides().length >= SPEC_LIMITS.slides) throw new ApiError(0, 'LIMIT', `Tối đa ${SPEC_LIMITS.slides} trang`);
+130:     slides().splice(selected.value + 1, 0, newSlide(layout, template));
+131:     selected.value += 1;
+132:   }
+133:   function copySlide(i = selected.value) {
+134:     if (slides().length >= SPEC_LIMITS.slides) throw new ApiError(0, 'LIMIT', `Tối đa ${SPEC_LIMITS.slides} trang`);
+135:     slides().splice(i + 1, 0, duplicateSlide(slides()[i]));
+136:     selected.value = i + 1;
+137:   }
+138:   function removeSlide(i = selected.value) {
+139:     if (slides().length <= 1) throw new ApiError(0, 'LIMIT', 'Bài trình bày cần ít nhất 1 trang');
+140:     slides().splice(i, 1);
+141:     selected.value = Math.min(i, slides().length - 1);
+142:   }
+143:   function moveSlide(i, dir) {
+144:     const j = i + dir;
+145:     if (j < 0 || j >= slides().length) return;
+146:     const [s] = slides().splice(i, 1);
+147:     slides().splice(j, 0, s);
+148:     selected.value = j;
+149:   }
+150:   // Trình chiếu: áp cùng cách trình chiếu cho mọi trang có "ý" (trang bìa/mục/trích dẫn/kết không có ý → bỏ qua).
+151:   function setBuildAll(build) {
+152:     let n = 0;
+153:     for (const s of draft.value?.spec.slides || []) {
+154:       if (!BUILD_LAYOUTS.includes(s.layout)) continue;
+155:       if (build === 'auto') delete s.build;
+156:       else s.build = build;
+157:       n += 1;
+158:     }
+159:     return n;
+160:   }
+161: 
+162:   function changeLayout(layout) {
+163:     if (!slide.value) return;
+164:     slide.value.layout = layout;
+165:     // Vị trí chữ đã dời thuộc về bố cục cũ; hoạ tiết đã tắt chỉ giữ loại bố cục mới còn có.
+166:     delete slide.value.moves;
+167:     const keep = (slide.value.hide || []).filter((k) => decorsFor(layout).includes(k));
+168:     if (keep.length) slide.value.hide = keep;
+169:     else delete slide.value.hide;
+170:     ensureLayoutContent(slide.value);
+171:   }
+172:   // "Áp cho mọi trang" ở mục Hoạ tiết: tắt đúng các hoạ tiết này trên mọi trang có chúng (hoạ tiết khác hiện lại).
+173:   function setDecorAll(hide) {
+174:     const want = new Set(Array.isArray(hide) ? hide : []);
+175:     let n = 0;
+176:     for (const s of draft.value?.spec.slides || []) {
+177:       const keys = decorsFor(s.layout);
+178:       const next = keys.filter((k) => want.has(k));
+179:       if (next.length) s.hide = next;
+180:       else delete s.hide;
+181:       n += 1;
+182:     }
+183:     return n;
+184:   }
+185: 
+186:   /* ---- media ---- */
+187:   const uploadImage = (file) => media.uploadImage(file);
+188:   const assetUrl = (assetId) => media.assetUrl(assetId);
+189: 
+190:   /* ---- khác ---- */
+191:   const exportHtml = () => download(`/api/presentations/${id}/export.html`, `${deck.value.title}.html`);
+192:   const exportPdf = () => download(`/api/presentations/${id}/export.pdf`, `${deck.value.title}.pdf`);
+193:   const remove = () => del(`/api/presentations/${id}`);
+194:   const duplicate = async () => (await post(`/api/presentations/${id}/duplicate`)).data;
+195: 
+196:   const onBeforeUnload = (e) => {
+197:     if (dirty.value) {
+198:       e.preventDefault();
+199:       e.returnValue = '';
+200:     }
+201:   };
+202:   window.addEventListener('beforeunload', onBeforeUnload);
+203:   onBeforeUnmount(() => {
+204:     if (dirty.value) pendingDrafts.set(id, { specVersion: deck.value.specVersion, draft: clone(draft.value), selected: selected.value });
+205:     clearTimeout(pollTimer);
+206:     window.removeEventListener('beforeunload', onBeforeUnload);
+207:   });
+208: 
+209:   return {
+210:     deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, previewKey, assets, media, videoLibrary,
+211:     load, save, discard, applyDeck, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout, setBuildAll, setDecorAll,
+212:     uploadImage, assetUrl, exportHtml, exportPdf, remove, duplicate,
+213:   };
+214: }
+215: 
+216: // Đồng bộ slide đang chọn với khung xem trước (iframe sandbox) qua postMessage.
+217: export function usePreviewSync(frameRef, selected) {
+218:   function goto(index) {
+219:     try {
+220:       frameRef.value?.contentWindow?.postMessage({ type: 'deck:goto', index }, '*');
+221:     } catch {
+222:       /* khung chưa sẵn sàng */
+223:     }
+224:   }
+225:   const onMessage = (e) => {
+226:     if (e.source !== frameRef.value?.contentWindow) return;
+227:     const d = e.data;
+228:     if (d && d.type === 'deck:slide' && Number.isInteger(d.index)) selected.value = d.index;
+229:   };
+230:   window.addEventListener('message', onMessage);
+231:   onBeforeUnmount(() => window.removeEventListener('message', onMessage));
+232:   return { goto };
+233: }
+
+SOURCE src/server.js
+1: // Điểm khởi động: đọc cấu hình (fail-fast) → kết nối DB, kiểm tra bảng → dựng service → lắng nghe → tắt êm.
+2: import { loadConfig, redactConfig } from './config/index.js';
+3: import { logger } from './lib/logger.js';
+4: import { createPool, verifyTables } from './db/pool.js';
+5: import { createContainer } from './container.js';
+6: import { createApp } from './app.js';
+7: 
+8: async function main() {
+9:   const config = loadConfig();
+10:   logger.info('config_loaded', { config: redactConfig(config) });
+11:   if (config.isProd && !config.ipAllowlist.length) {
+12:     logger.warn('ip_allowlist_empty', { message: 'IP_ALLOWLIST trống — ứng dụng nhận truy cập từ mọi IP' });
+13:   }
+14: 
+15:   const pool = createPool(config.db);
+16:   await verifyTables(pool);
+17: 
+18:   const container = await createContainer(config, pool);
+19:   await container.services.presentations.recoverStale();
+20:   await container.storage.cleanupUploads(0);
+21: 
+22:   const app = createApp({ config, pool, ...container });
+23:   const server = app.listen(config.port, () => logger.info('server_listening', { port: config.port }));
+24:   server.requestTimeout = 10 * 60 * 1000; // xuất PDF bài dài có thể mất vài phút
+25:   server.headersTimeout = 65 * 1000;
+26: 
+27:   const tempTimer = setInterval(() => {
+28:     container.storage.cleanupTemp().catch(() => {});
+29:     container.storage.cleanupUploads(12 * 3600 * 1000).catch(() => {});
+30:   }, 15 * 60 * 1000);
+31:   tempTimer.unref();
+32: 
+33:   let stopping = false;
+34:   const shutdown = async (signal) => {
+35:     if (stopping) return;
+36:     stopping = true;
+37:     logger.info('shutdown_start', { signal });
+38:     const force = setTimeout(() => process.exit(1), 20000);
+39:     force.unref();
+40:     server.close(async () => {
+41:       await container.browser.close().catch(() => {});
+42:       container.sessionStore.close();
+43:       await pool.end().catch(() => {});
+44:       logger.info('shutdown_done');
+45:       process.exit(0);
+46:     });
+47:   };
+48:   process.on('SIGTERM', () => shutdown('SIGTERM'));
+49:   process.on('SIGINT', () => shutdown('SIGINT'));
+50:   process.on('unhandledRejection', (err) => logger.error('unhandled_rejection', { err }));
+51: }
+52: 
+53: main().catch((err) => {
+54:   logger.error('startup_failed', { err: { message: err.message } });
+55:   process.exit(1);
+56: });
+
+SOURCE src/lib/semaphore.js
+1: // Giới hạn số tác vụ nặng chạy đồng thời trong 1 tiến trình (sinh AI, render PDF).
+2: // Lưu ý: chỉ đúng khi chạy 1 bản sao ứng dụng — xem memory-bank/09-technical-traps.md.
+3: export class Semaphore {
+4:   constructor(max) {
+5:     this.max = max;
+6:     this.active = 0;
+7:     this.queue = [];
+8:   }
+9: 
+10:   get pending() {
+11:     return this.queue.length;
+12:   }
+13: 
+14:   async run(task) {
+15:     if (this.active >= this.max) {
+16:       await new Promise((resolve) => this.queue.push(resolve));
+17:     }
+18:     this.active += 1;
+19:     try {
+20:       return await task();
+21:     } finally {
+22:       this.active -= 1;
+23:       const next = this.queue.shift();
+24:       if (next) next();
+25:     }
+26:   }
+27: }
+
+SOURCE src/middleware/security.js
+1: // CSRF (token đồng bộ trong phiên, gửi qua header X-CSRF-Token) + kiểm tra Origin cho mọi request ghi,
+2: // header bảo mật (helmet) và giới hạn tần suất.
+3: import { randomBytes, timingSafeEqual } from 'node:crypto';
+4: import helmet from 'helmet';
+5: import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
+6: import { forbidden, HttpError } from '../lib/httpError.js';
+7: 
+8: const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
+9: 
+10: export function ensureCsrfToken(req) {
+11:   if (!req.session.csrf) req.session.csrf = randomBytes(32).toString('base64url');
+12:   return req.session.csrf;
+13: }
+14: 
+15: export function csrfProtection(config) {
+16:   const allowed = new URL(config.appBaseUrl).origin;
+17:   return (req, _res, next) => {
+18:     if (SAFE.has(req.method)) return next();
+19:     const origin = req.get('origin');
+20:     if (origin && origin !== allowed && origin !== `${req.protocol}://${req.get('host')}`) {
+21:       return next(forbidden('Yêu cầu không hợp lệ (nguồn gốc lạ)', 'BAD_ORIGIN'));
+22:     }
+23:     const sent = req.get('x-csrf-token') || '';
+24:     const expected = req.session?.csrf || '';
+25:     const a = Buffer.from(sent);
+26:     const b = Buffer.from(expected);
+27:     if (!expected || a.length !== b.length || !timingSafeEqual(a, b)) {
+28:       return next(forbidden('Phiên làm việc đã hết hạn, vui lòng tải lại trang', 'CSRF_INVALID'));
+29:     }
+30:     return next();
+31:   };
+32: }
+33: 
+34: export function securityHeaders() {
+35:   return helmet({
+36:     contentSecurityPolicy: {
+37:       useDefaults: false,
+38:       directives: {
+39:         'default-src': ["'self'"],
+40:         'script-src': ["'self'"],
+41:         'style-src': ["'self'", "'unsafe-inline'"],
+42:         // Ảnh xem trước trong ô "Tìm ảnh" hiển thị trực tiếp từ Pixabay (chọn ảnh → máy chủ tải về thành asset).
+43:         'img-src': ["'self'", 'data:', 'blob:', 'https://pixabay.com', 'https://cdn.pixabay.com'],
+44:         'font-src': ["'self'", 'data:'],
+45:         'connect-src': ["'self'"],
+46:         // Video tải lên (và ảnh bìa chụp từ video ở trình duyệt qua blob:); YouTube phát trong lớp phủ của ứng dụng.
+47:         'media-src': ["'self'", 'blob:'],
+48:         'frame-src': ["'self'", 'https://www.youtube-nocookie.com'],
+49:         'frame-ancestors': ["'none'"],
+50:         'object-src': ["'none'"],
+51:         'base-uri': ["'self'"],
+52:         'form-action': ["'self'"],
+53:       },
+54:     },
+55:     crossOriginEmbedderPolicy: false,
+56:     crossOriginResourcePolicy: { policy: 'same-origin' },
+57:     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+58:     frameguard: { action: 'deny' },
+59:   });
+60: }
+61: 
+62: // CSP riêng cho trang bài trình bày (xem trước): chạy trong sandbox (origin null), chỉ script/style có nonce,
+63: // không được gọi mạng (connect-src none), chỉ nhúng được trong chính ứng dụng.
+64: export function deckCsp(nonce, origin) {
+65:   return [
+66:     'sandbox allow-scripts allow-popups',
+67:     "default-src 'none'",
+68:     `script-src 'nonce-${nonce}'`,
+69:     `style-src 'nonce-${nonce}'`,
+70:     "style-src-attr 'unsafe-inline'",
+71:     `img-src 'self' ${origin} data:`,
+72:     `font-src 'self' ${origin} data:`,
+73:     "connect-src 'none'",
+74:     "base-uri 'none'",
+75:     "form-action 'none'",
+76:     "frame-ancestors 'self'",
+77:   ].join('; ');
+78: }
+79: 
+80: const limitHandler = (message, code) => (_req, _res, next) => next(new HttpError(429, code, message));
+81: 
+82: export function rateLimits() {
+83:   const base = { standardHeaders: 'draft-7', legacyHeaders: false };
+84:   return {
+85:     api: rateLimit({ ...base, windowMs: 60_000, limit: 600, handler: limitHandler('Bạn thao tác quá nhanh, vui lòng thử lại sau', 'RATE_LIMITED') }),
+86:     login: rateLimit({
+87:       ...base,
+88:       windowMs: 15 * 60_000,
+89:       limit: 10,
+90:       keyGenerator: (req) => `${ipKeyGenerator(req.ip)}|${String(req.body?.email || '').toLowerCase().slice(0, 190)}`,
+91:       handler: limitHandler('Đăng nhập sai quá nhiều lần, thử lại sau 15 phút', 'LOGIN_RATE_LIMITED'),
+92:     }),
+93:     register: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 10, handler: limitHandler('Quá nhiều lượt đăng ký, thử lại sau', 'RATE_LIMITED') }),
+94:     generate: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 30, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã tạo quá nhiều bài trong 1 giờ, vui lòng thử lại sau', 'GENERATE_RATE_LIMITED') }),
+95:     build: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 60, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã dựng bài quá nhiều lần trong 1 giờ, vui lòng thử lại sau', 'BUILD_RATE_LIMITED') }),
+96:     // Tải video, đọc link YouTube, tách nền logo — tốn băng thông/CPU hơn thao tác thường.
+97:     // Mời người theo email: chặn dò email hàng loạt.
+98:     share: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 60, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn chia sẻ quá nhanh, vui lòng thử lại sau ít phút', 'SHARE_RATE_LIMITED') }),
+99:     media: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 120, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn thêm media quá nhanh, vui lòng thử lại sau ít phút', 'MEDIA_RATE_LIMITED') }),
+100:     // Tạo ảnh AI tốn chi phí model → hạn mức riêng; tìm ảnh Pixabay (API giới hạn ~100 lượt/phút/khoá).
+101:     aiImage: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 40, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn tạo ảnh AI quá nhanh, vui lòng thử lại sau ít phút', 'AI_IMAGE_RATE_LIMITED') }),
+102:     imageSearch: rateLimit({ ...base, windowMs: 60_000, limit: 40, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn tìm ảnh quá nhanh, vui lòng thử lại sau', 'SEARCH_RATE_LIMITED') }),
+103:     exportPdf: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 20, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn xuất PDF quá nhiều lần, thử lại sau ít phút', 'EXPORT_RATE_LIMITED') }),
+104:   };
+105: }
+
+SOURCE startup/database/changelogs/changelog_database_20261005_170000.sql
+1: -- 2026-10-05: Quy trình "dàn ý trước" + media (video, YouTube) + logo.
+2: --  * presentations.status thêm 'outlining' (AI đang lập dàn ý) và 'outline' (chờ người dùng duyệt dàn ý).
+3: --  * presentations.outline: dàn ý đang duyệt (JSON) — giữ lại sau khi dựng để tham chiếu.
+4: --  * presentations.outline_version: khoá lạc quan khi lưu dàn ý (tách khỏi spec_version).
+5: --  * assets.kind thêm 'video' (video tải lên), 'logo' (logo gốc + bản tách nền), 'poster' (ảnh bìa video/YouTube).
+6: -- Idempotent: MODIFY ENUM chạy lại không đổi dữ liệu; ADD COLUMN kiểm tra INFORMATION_SCHEMA trước.
+7: 
+8: ALTER TABLE presentations
+9:   MODIFY status ENUM('outlining','outline','generating','ready','failed') NOT NULL DEFAULT 'generating';
+10: 
+11: SET @has_outline := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+12:   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'presentations' AND COLUMN_NAME = 'outline');
+13: SET @sql := IF(@has_outline = 0,
+14:   'ALTER TABLE presentations ADD COLUMN outline JSON NULL AFTER spec, ADD COLUMN outline_version INT UNSIGNED NOT NULL DEFAULT 0 AFTER outline',
+15:   'SELECT 1');
+16: PREPARE stmt FROM @sql;
+17: EXECUTE stmt;
+18: DEALLOCATE PREPARE stmt;
+19: 
+20: ALTER TABLE assets
+21:   MODIFY kind ENUM('image','thumbnail','video','logo','poster') NOT NULL DEFAULT 'image';
+22: 
+23: INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261005_170000.sql');
+
+PROBE RESULTS
+[
+  {
+    "id": "SSRF_MAPPED_NEGATIVE",
+    "observed": "private mapped IPv6 blocked by Node BlockList; initial static hypothesis rejected",
+    "checks": [
+      {
+        "input": "http://[::ffff:127.0.0.1]/",
+        "blocked": "SSRF_BLOCKED"
+      },
+      {
+        "input": "http://[::ffff:169.254.169.254]/",
+        "blocked": "SSRF_BLOCKED"
+      },
+      {
+        "input": "http://[::ffff:10.0.0.1]/",
+        "blocked": "SSRF_BLOCKED"
+      }
+    ]
+  },
+  {
+    "id": "MEDIA_SIGNATURE",
+    "accepted": "outlining",
+    "final": "failed",
+    "invalidStorageCall": {
+      "key": "tenants/undefined/presentations/11111111-1111-4111-8111-111111111111/c8064385-2cf9-4f7e-97c5-7062ab0c9679.webp",
+      "hasBuffer": false
+    }
+  },
+  {
+    "id": "SHARE_QUOTA",
+    "initial": 99,
+    "parallelRequests": 2,
+    "final": 101,
+    "limit": 100,
+    "scope": "service with deterministic repository stubs; MySQL race not executed"
+  },
+  {
+    "id": "LAST_ADMIN",
+    "activeAdmins": 0,
+    "scope": "service with deterministic repository stubs; MySQL race not executed"
+  },
+  {
+    "id": "MEDIA_CLEANUP_RACE",
+    "created": [
+      "files/probe-1",
+      "files/probe-2",
+      "files/probe-3"
+    ],
+    "deleted": [
+      "files/probe-1"
+    ],
+    "orphan": [
+      "files/probe-2",
+      "files/probe-3"
+    ],
+    "scope": "mock provider; no real file uploaded"
+  },
+  {
+    "id": "BCRYPT_BYTES",
+    "policyAcceptsBoth": true,
+    "equalDespiteDifferentSuffix": true,
+    "prefixBytes": 72
+  }
+]

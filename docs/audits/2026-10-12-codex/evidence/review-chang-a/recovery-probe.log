@@ -1,0 +1,10 @@
+{
+  "case": "restart incomplete owner copy with outline",
+  "expected": "failed or explicit copy recovery",
+  "actual": {
+    "status": "outline",
+    "source_kind": "copy",
+    "error_message": "Quá trình dựng bị gián đoạn do máy chủ khởi động lại. Bấm \"Dựng bài\" để thử lại."
+  },
+  "defectReproduced": true
+}

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "EDITOR_STALE_VERSION",
+    "observed": "A draft based on v1 overwrote B v2 after metadata response adopted v2",
+    "submittedVersion": 2
+  },
+  {
+    "id": "EDITOR_INFLIGHT_EDIT",
+    "observed": "local edit typed while save awaited response replaced with sent snapshot"
+  }
+]

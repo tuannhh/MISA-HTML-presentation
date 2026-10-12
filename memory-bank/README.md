@@ -29,3 +29,7 @@ Thư mục này chứa **toàn bộ tri thức về dự án MISA Presentation**
 
 - Viết bằng tiếng Việt, giữ nhất quán xuyên suốt.
 - Tất cả nội dung dựa trên mã nguồn thật tại thời điểm viết (2026-10-05). Mục nào chưa kiểm chứng được ghi rõ **"chưa kiểm chứng"**.
+
+## Audit và bàn giao mới nhất
+
+- [Hồ sơ Codex 12/10/2026 — đọc trước khi tiếp tục trên máy khác](../docs/audits/2026-10-12-codex/README.md). Có audit gốc, phản hồi Claude, review commit `233d348`, log và probe tái hiện. Sáu finding A01–A06 còn mở; không hiểu việc lưu hồ sơ là đã sửa lỗi hoặc đã được duyệt sửa.

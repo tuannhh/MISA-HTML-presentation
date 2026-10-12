@@ -1,0 +1,9 @@
+{
+  "case": "50 concurrent builds, repository barrier before enqueue",
+  "generationConcurrency": 2,
+  "documentedMaxPending": 20,
+  "accepted": 50,
+  "pending": 48,
+  "expected": "at most concurrency + 20 admitted",
+  "defectReproduced": true
+}
