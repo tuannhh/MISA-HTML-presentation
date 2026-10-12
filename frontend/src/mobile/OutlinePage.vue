@@ -8,6 +8,7 @@ import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import MobileShell from './MobileShell.vue'
 import ActionSheet from './ActionSheet.vue'
 import OutlineSlideCard from '@/shared/OutlineSlideCard.vue'
+import JobProgress from '@/shared/JobProgress.vue'
 import DesignPanel from '@/shared/DesignPanel.vue'
 import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
@@ -199,6 +200,7 @@ onMounted(ol.load)
           ? 'Đọc tư liệu (kể cả PDF scan, ảnh, ghi âm) và đề xuất nội dung từng trang — thường mất 30 giây đến vài phút. Xong bạn sẽ được xem và sửa dàn ý trước khi dựng giao diện.'
           : 'Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn, tạo ảnh minh hoạ AI (nếu bật) — thường 1–2 phút. Xong sẽ tự mở trình soạn thảo.' }}
       </p>
+      <JobProgress :queue="deck.queue" compact />
       <p class="text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">Màn hình tự cập nhật. Bạn có thể rời đi, AI vẫn tiếp tục.</p>
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>
     </div>

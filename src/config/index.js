@@ -98,6 +98,8 @@ export function loadConfig() {
     }),
     auth: Object.freeze({
       bcryptRounds: int('BCRYPT_ROUNDS', 12, { min: 4, max: 15 }),
+      // Số worker_threads băm/so mật khẩu (mỗi worker ~1 nhân lúc nhiều người đăng nhập cùng lúc).
+      hashThreads: int('PASSWORD_HASH_THREADS', 2, { min: 1, max: 8 }),
     }),
     storage: Object.freeze({
       root: storageDir,

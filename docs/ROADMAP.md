@@ -81,13 +81,29 @@ Hai bố cục mới dùng chung bộ trường liên hệ, dành cho mọi nhó
 - Icon Zalo/Viber/Telegram/iMessage: logo màu riêng `shared/deck/brands.js` (không trộn vào bộ icon nét của slide).
 - Đã làm khác đề xuất: không thêm trường "mức ưu đãi nổi bật" riêng — tiêu đề + quyền lợi (`items`) + thời hạn (`caption`) đủ diễn đạt; mẫu trang nằm trong danh sách bố cục của "Thêm trang" (tự liệt kê). Còn mở: trang công khai/PDF chưa kiểm tay trên điện thoại thật (quét QR in ra).
 
-## B — Lưới kiểm thử luồng chính + đo tải
+## B — Lưới kiểm thử luồng chính + đo tải — ✅ xong 12/10/2026 (trừ soak 1 giờ và bộ vàng Gemini thật)
+
+Đã làm: 43 test tích hợp qua HTTP + MySQL thật + AI giả (`flows-auth`, `flows-deck`, `flows-share`, `https-proxy` + các test cũ) — `memory-bank/07` §Kiểm thử;
+đo tải 500 người trước/sau (`docs/LOAD-TEST.md`) → sửa 3 lỗi chỉ lộ dưới tải (hàng ảnh bìa không trần làm PDF hết giờ + RAM 2,8 GB; bcrypt chặn
+luồng chính; pool DB đầy → 500); giao diện tiến độ hàng đợi `JobProgress` (desktop + mobile). Còn: soak ≥ 1 giờ trên máy chủ thật, bộ vàng ~10 tư liệu với Gemini thật.
+Lỗi biết, chưa sửa: đổi tên bài từ danh sách chỉ đổi tên tệp xuất — `<title>` trong HTML xuất theo `spec.title` tới lần lưu kế tiếp trong trình soạn thảo.
+
 
 - Integration HTTP + MySQL thật cho ~30 luồng giá trị cao (tạo bài có media, outline/build, hai người sửa, chia sẻ/public/handoff/restore, duplicate/restart, templates, HTML/PDF, **xuất bản**, admin/must-change). AI dùng stub có kiểm soát; AI thật dùng bộ vàng riêng (~10 tệp tư liệu MISA).
 - Tải 500 người có think time: warm-up → steady 1 giờ; burst vào hàng đợi, client chậm khi export, Gemini timeout/429. Đo p50/p95/p99, thời gian chờ hàng đợi, tỷ lệ `QUEUE_FULL`, RAM/CPU/đĩa, DB pool wait, quota Gemini. Chọn `GENERATION_CONCURRENCY` theo RAM + quota.
 - Giao diện hàng đợi: đã nhận / đang chờ / đang xử lý + thời gian chờ đo được.
 
-## Gate bàn giao DevOps (trước production, không đợi C)
+## Gate bàn giao DevOps (trước production, không đợi C) — ✅ phần ứng dụng xong 12/10/2026, xem `docs/RUNBOOK.md`
+
+| Hạng mục | Trạng thái |
+|---|---|
+| HTTPS/cookie Secure + proxy | ✅ test tự động `https-proxy.test.js` (Secure/HttpOnly/SameSite, IP thật qua `TRUST_PROXY`, gọi thẳng http không có phiên, cấu hình lệch → không khởi động) — DevOps xác nhận lại trên cổng vào thật |
+| Backup + thử restore DB và tệp cùng nhau | ✅ `scripts/ops/backup.sh` / `restore.sh` / `verify-storage.js`; diễn tập: RTO 11 giây, mất dữ liệu giả lập phục hồi đủ (`LOAD-TEST.md` §4) |
+| RPO/RTO | ✅ đề xuất RPO ≤ 15 phút (backup 15 phút/lần), RTO ≤ 60 phút — DevOps đặt lịch + chép ra ngoài máy |
+| Runbook | ✅ khởi động, nâng schema, rollback, sự cố hàng đợi/đĩa/DB/PDF/quá tải |
+| Cảnh báo cơ bản | ✅ `scripts/ops/check.sh` (ready, hàng AI, job chờ/treo, hàng trình duyệt, ảnh bìa, đĩa, RAM) + log `level:error` — DevOps gắn vào hệ giám sát |
+| Domain public của P | ✅ tài liệu `docs/DEVOPS-NETWORK.md` §6 — DevOps cấu hình `PUBLISH_BASE_URL` + vhost ép Host + CDN |
+
 
 HTTPS/cookie Secure + proxy kiểm thực; backup + **thử restore DB và storage cùng nhau**; RPO/RTO; runbook (khởi động, nâng schema, rollback, sự cố hàng đợi/đĩa/DB); cảnh báo cơ bản (lỗi, RAM, đĩa, job treo); cấu hình domain public của tính năng P (`PUBLISH_BASE_URL` + vhost ép Host + CDN — `docs/DEVOPS-NETWORK.md` §6).
 

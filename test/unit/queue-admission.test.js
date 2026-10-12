@@ -36,6 +36,12 @@ function makeService({ startBuild, create } = {}) {
   return { svc, ai };
 }
 
+// Số chỗ của hàng + job còn trong bộ theo dõi (giao diện hàng đợi) — lỗi/hoàn tất đều phải trả về 0.
+const slots = (svc) => {
+  const q = svc.queueStats();
+  return { active: q.active, pending: q.pending, reserved: q.reserved, oldestWaitSec: q.oldestWaitSec, longestRunSec: q.longestRunSec };
+};
+
 test('Semaphore.reserve: giữ chỗ đồng bộ, không vượt max + maxPending; release trả chỗ; slot chuyển thẳng cho job chờ', async () => {
   const q = new Semaphore(2);
   const tickets = [];
@@ -81,14 +87,14 @@ test('A03: lỗi ghi DB/không đúng trạng thái → trả chỗ; nhiều vò
   for (let round = 0; round < 3; round += 1) {
     const res = await Promise.allSettled(Array.from({ length: 30 }, (_, i) => svc.build({ id: `u${i}` }, `d${i}`, { outlineVersion: 1 }, null)));
     assert.ok(res.every((r) => r.status === 'rejected' && ['DB lỗi', 'Hệ thống đang xử lý nhiều yêu cầu, vui lòng thử lại sau ít phút'].includes(r.reason.message)), `vòng ${round}`);
-    assert.deepEqual(svc.queueStats(), { active: 0, pending: 0, reserved: 0 }, `vòng ${round}: lỗi đã trả hết chỗ`);
+    assert.deepEqual(slots(svc), { active: 0, pending: 0, reserved: 0, oldestWaitSec: 0, longestRunSec: 0 }, `vòng ${round}: lỗi đã trả hết chỗ`);
   }
   fail = false;
   const res = await Promise.allSettled(Array.from({ length: 30 }, (_, i) => svc.build({ id: `u${i}` }, `d${i}`, { outlineVersion: 1 }, null)));
   assert.equal(res.filter((r) => r.status === 'fulfilled').length, CAP, 'đủ chỗ sau các vòng lỗi');
   ai.finishAll();
   for (let i = 0; i < 20 && (svc.queueStats().pending || svc.queueStats().active); i += 1) { await tick(); ai.finishAll(); }
-  assert.deepEqual(svc.queueStats(), { active: 0, pending: 0, reserved: 0 });
+  assert.deepEqual(slots(svc), { active: 0, pending: 0, reserved: 0, oldestWaitSec: 0, longestRunSec: 0 });
   const again = await Promise.allSettled(Array.from({ length: 30 }, (_, i) => svc.build({ id: `v${i}` }, `e${i}`, { outlineVersion: 1 }, null)));
   assert.equal(again.filter((r) => r.status === 'fulfilled').length, CAP, 'job xong trả chỗ');
   ai.finishAll();

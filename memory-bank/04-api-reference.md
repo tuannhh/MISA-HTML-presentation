@@ -18,7 +18,7 @@ Khi `IP_ALLOWLIST` có giá trị: mọi đường dẫn (trừ 2 route health) 
 | Method | Path | Mô tả |
 |---|---|---|
 | GET | `/api/health` | Liveness, không chạm DB → `{status:'ok'}` |
-| GET | `/api/health/ready` | Readiness: `SELECT 1` + `queue.pending`; 503 nếu DB lỗi |
+| GET | `/api/health/ready` | Readiness: `SELECT 1` + `queue` (`active`, `pending`, `reserved`, `avgOutlineSec`, `avgBuildSec`, `avgWaitSec`, `oldestWaitSec`, `longestRunSec`, `thumbnailsPending`, `renderPending`); 503 nếu DB lỗi |
 | GET | `/deck-assets/InterVariable.woff2` | Font Inter cho bài trình bày (công khai, cache 1 năm, CORS `*`) |
 | GET | `/deck-assets/deck3d.js?v=<băm>` | Gói hiệu ứng 3D (three.js, IIFE `window.Deck3D`) cho khung xem trước sandbox — công khai, cache 1 năm (URL có băm nội dung), CORS `*`, CORP cross-origin. Chưa `npm run build` → 404 (bài tự lùi về nền 2D) |
 | GET | `/deck-assets/fonts/<thư mục>/<tệp>.woff2` | Phông Montserrat/Barlow/Roboto/Google Sans (tập con unicode-range). Chỉ phục vụ tệp trong allowlist `FONT_FILES` — ngoài danh sách → 404 |

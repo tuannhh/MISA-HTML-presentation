@@ -39,6 +39,7 @@ async function main() {
     force.unref();
     server.close(async () => {
       await container.browser.close().catch(() => {});
+      await container.hasher.close().catch(() => {});
       container.sessionStore.close();
       await pool.end().catch(() => {});
       logger.info('shutdown_done');

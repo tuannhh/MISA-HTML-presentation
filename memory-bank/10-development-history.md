@@ -1,5 +1,20 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-12 — Roadmap B (kiểm thử luồng chính + đo tải) + Gate bàn giao DevOps
+
+- Yêu cầu: "làm tiếp theo roadmap phần kiểm thử và kiểm tra trước khi bàn giao cho devops".
+- **Test tích hợp qua HTTP** (MySQL thật, AI giả `test/helpers/fakeGemini.mjs` qua `GEMINI_BASE_URL`): harness `test/integration/helpers/httpApp.mjs` (`useHttpApp`, client cookie + CSRF, cổng vào TLS giả); `flows-auth` (6), `flows-deck` (9), `flows-share` (6), `https-proxy` (3). Toàn bộ tích hợp **43/43, 0 skip, ~30 giây**.
+- **Đo tải 500 người** (`deploy/loadtest`, `test/load/provision.mjs` + `load.mjs`, kết quả `docs/LOAD-TEST.md`) lộ 3 lỗi, đã sửa đúng gốc + test:
+  1. Hàng ảnh bìa không trần → PDF hết giờ 180 giây (88% lỗi), RAM 0,4 → 2,8 GB: `src/lib/coalescingQueue.js` (gộp theo bài, lần lượt), trần hàng xuất PDF → 503 `QUEUE_FULL`.
+  2. bcrypt chặn luồng chính (burst 100 đăng nhập ≈ 21 giây đứng): `src/lib/passwordHasher.js` + `passwordWorker.js` (worker_threads, `PASSWORD_HASH_THREADS`).
+  3. Pool DB đầy → 500: errorHandler đổi "Queue limit reached." thành 503 `SERVER_BUSY`.
+  Sau sửa: thao tác thường 0 lỗi, p99 ≤ 1,1 giây; PDF p95 2,1 giây; RAM ≤ 0,7 GB.
+- **Hàng đợi**: `src/lib/jobTracker.js` → `GET /:id` có `queue` (vị trí, đã chờ, dự kiến); `JobProgress.vue` (desktop + mobile, đã soi trên trình duyệt 375 px và desktop); `/api/health/ready` thêm số đo hàng; `Retry-After` cho 503/429.
+- **Chromium**: lỗi khởi động/render → 503 `RENDER_UNAVAILABLE`/`RENDER_FAILED` (trước: 500); sau `close()` không mở lại trình duyệt (việc nền sót lại từng làm test treo vô hạn).
+- **Gate DevOps**: `scripts/ops/backup.sh`, `restore.sh`, `check.sh`, `scripts/verify-storage.js` (Dockerfile chép vào image); `docs/RUNBOOK.md`. Diễn tập trên stack đo tải: xoá 10 bài + 20 tệp → khôi phục đủ, RTO 11 giây.
+- Unit 224 (223 pass, 1 skip — `extractVisuals` cần `pdftoppm`, máy dev Windows không có; Docker có). `npm run build` đạt.
+- Chưa làm: soak 1 giờ trên máy chủ thật; bộ vàng Gemini thật; lỗi biết: `<title>` HTML xuất theo `spec.title`, đổi tên từ danh sách chưa cập nhật tới lần lưu kế tiếp. Ghi nhận ngoài phạm vi: header desktop còn nút 9 chấm (quy tắc dự án yêu cầu bỏ) — đã tách việc riêng.
+
 ## 2026-10-12 — Kiểu chữ tiêu đề trang: viết hoa đầu câu (mặc định) / VIẾT HOA TOÀN BỘ
 
 - Người dùng báo: tiêu đề các trang đang viết hoa chữ cái đầu mọi từ. Yêu cầu 2 kiểu (viết hoa toàn bộ / chỉ viết hoa đầu câu), mặc định viết hoa đầu câu; luôn viết hoa MISA, AMIS, ASP, AI, JETPAY.

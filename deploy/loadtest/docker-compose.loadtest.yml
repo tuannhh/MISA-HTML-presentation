@@ -1,0 +1,33 @@
+# Stack ĐO TẢI riêng (roadmap B) — KHÔNG dùng cho production, không đụng stack đang chạy (project + volume + image tag riêng).
+#   docker build -t misa-presentation:loadtest .
+#   APP_PORT=8093 docker compose -p mp-load -f docker-compose.yml -f deploy/loadtest/docker-compose.loadtest.yml up -d
+#   … chạy test/load/provision.mjs rồi test/load/load.mjs (xem docs/LOAD-TEST.md) …
+#   docker compose -p mp-load -f docker-compose.yml -f deploy/loadtest/docker-compose.loadtest.yml down -v
+# AI = Gemini giả (test/helpers/fakeGemini.mjs) chạy trong container cùng image: độ trễ/lỗi điều khiển qua 127.0.0.1:4010/__control.
+# Khoá API thật trong .env bị ghi đè — không gọi Google, không tốn hạn mức.
+services:
+  app:
+    image: misa-presentation:loadtest
+    environment:
+      GEMINI_API_KEY: fake-load-key
+      GEMINI_BASE_URL: http://fakeai:4010/v1beta
+      PIXABAY_API_KEY: ""
+      GOOGLE_API_KEY: ""
+      PUBLISH_BASE_URL: ""
+      IP_ALLOWLIST: ""
+      APP_BASE_URL: http://localhost:8093
+      SESSION_COOKIE_SECURE: "false"
+    depends_on:
+      fakeai:
+        condition: service_started
+
+  fakeai:
+    image: misa-presentation:loadtest
+    # Mặc định giống Gemini thật đo được (dàn ý/dựng bài 30–50 giây); đổi lúc chạy qua /__control.
+    command: ["node", "/fake/fakeGemini.mjs", "--host", "0.0.0.0", "--port", "4010", "--delay", "30000", "--jitter", "20000"]
+    volumes:
+      - ./test/helpers:/fake:ro
+    ports:
+      - "127.0.0.1:4010:4010"
+    healthcheck:
+      disable: true

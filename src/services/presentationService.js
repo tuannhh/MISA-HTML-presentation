@@ -11,6 +11,8 @@
 import { randomUUID, randomBytes } from 'node:crypto';
 import { open, readFile, rm } from 'node:fs/promises';
 import { logger } from '../lib/logger.js';
+import { createJobTracker } from '../lib/jobTracker.js';
+import { createCoalescingQueue } from '../lib/coalescingQueue.js';
 import { Semaphore } from '../lib/semaphore.js';
 import { badRequest, conflict, forbidden, notFound, tooLarge, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
 import { sniffVideo, VIDEO_MIME } from '../lib/fileType.js';
@@ -109,6 +111,8 @@ export function parseThemeChoice(input) {
 export function createPresentationService({ config, repos, storage, gemini, browser, signer, audit, stock }) {
   const { presentations, assets, versions } = repos;
   const genQueue = new Semaphore(config.limits.generationConcurrency);
+  // Vị trí chờ + thời gian đo được của job AI — giao diện hiện "đã nhận / đang chờ / đang xử lý" (roadmap B).
+  const jobs = createJobTracker({ concurrency: config.limits.generationConcurrency });
   // Tách nền (đặc biệt mô hình AI) tốn CPU → xử lý lần lượt.
   const cutoutQueue = new Semaphore(1);
   // Tạo ảnh AI: giới hạn số yêu cầu chạy song song (dùng chung cho ảnh tự động khi dựng bài và ảnh theo yêu cầu).
@@ -116,6 +120,12 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   // Xuất HTML (nhúng base64) tốn RAM theo dung lượng media → giới hạn số lượt chạy đồng thời.
   const exportQueue = new Semaphore(config.limits.renderConcurrency);
   const thumbTimers = new Map();
+  // Ảnh bìa chạy nền LẦN LƯỢT từng bài: chỉ giữ mã bài cần chụp lại (Map, không trùng — lưu nhiều lần khi đang chờ = 1 lượt),
+  // HTML dựng khi tới lượt. Trước đây mỗi lần lưu tạo 1 lượt chờ trình duyệt kèm HTML nhúng phông (vài MB): đo tải 500 người
+  // → hàng chờ không trần (RAM 0,4 → 2,8 GB) và xuất PDF xếp sau hàng nghìn ảnh bìa (quá 180 giây). Nay PDF chờ tối đa 1 ảnh bìa.
+  const thumbQueue = createCoalescingQueue((id, tenantId) => makeThumbnail(tenantId, id), {
+    onError: (id, err) => logger.warn('thumbnail_failed', { id, err: err.message }),
+  });
   // Vé giữ chỗ hàng tạo/dựng bài: tối đa generationConcurrency đang chạy + MAX_PENDING_JOBS chờ (tính cả yêu cầu đang ghi DB).
   function reserveJob() {
     const ticket = genQueue.reserve(MAX_PENDING_JOBS);
@@ -168,7 +178,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     // Chạy nền; client theo dõi trạng thái bằng GET /api/presentations/:id.
     const job = { url: input.url, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages };
     ticket
-      .run(() => generateOutline(user.id, id, job))
+      .run(jobs.wrap(id, 'outline', () => generateOutline(user.id, id, job)))
       .catch((err) => logger.error('outline_unhandled', { id, err }))
       .finally(() => removeUploads(uploads));
     return { id, code, title, status: 'outlining' };
@@ -436,7 +446,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       ticket.release();
       throw err;
     }
-    ticket.run(() => buildDeck(user.id, id)).catch((err) => logger.error('build_unhandled', { id, err }));
+    ticket.run(jobs.wrap(id, 'build', () => buildDeck(user.id, id))).catch((err) => logger.error('build_unhandled', { id, err }));
     return { id, status: 'generating' };
   }
 
@@ -572,6 +582,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const row = await readable(user, id);
     const dto = toDto(row, user.id);
     dto.spec = row.spec;
+    if (row.status === 'outlining' || row.status === 'generating') dto.queue = jobs.info(id);
     // Người sửa cần thư viện media của bài (ảnh, logo, video) — asset nằm ở tenant của chủ bài.
     if (row.access_role !== 'viewer') dto.assets = (await assets.listOwnedForPresentation(row.tenant_id, id)).map(assetDto);
     if (dto.isOwner) {
@@ -934,6 +945,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   async function exportPdf(user, id, ip) {
     const row = await readable(user, id);
     if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
+    // Hàng chờ trình duyệt có trần như xuất HTML (mỗi lượt chờ giữ HTML nhúng phông/ảnh) → quá trần trả 503 + Retry-After.
+    if (browser.pending >= MAX_EXPORT_PENDING) throw unavailable('Hệ thống đang xuất nhiều bài, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
     const html = renderDeck(row.spec, { ratio: row.ratio, mode: 'print', embedFont: true, ...(await resolvers(id, { inline: true, spec: row.spec })) });
     const pdf = await browser.pdf(html, deckSize(row.ratio));
     await audit.record({ actorId: user.id, action: 'presentation.export_pdf', targetType: 'presentation', targetId: id, ip });
@@ -945,7 +958,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     clearTimeout(thumbTimers.get(id));
     const t = setTimeout(() => {
       thumbTimers.delete(id);
-      makeThumbnail(tenantId, id).catch((err) => logger.warn('thumbnail_failed', { id, err: err.message }));
+      thumbQueue.push(id, tenantId);
     }, delayMs);
     t.unref();
     thumbTimers.set(id, t);
@@ -981,6 +994,6 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     create, list, get, update, remove, duplicate, saveOutline, build, idByCode, owned, editable, restoreSnapshot, previewVersion,
     addAsset, addLogo, addBrand, cutoutLogo, addVideo, addYouTube, readAsset,
     generateImage, searchImages, importStockImage, editImage,
-    preview, exportHtml, exportPdf, renderForPublish, makeThumbnail, recoverStale, queueStats: () => ({ active: genQueue.active, pending: genQueue.pending, reserved: genQueue.reserved }),
+    preview, exportHtml, exportPdf, renderForPublish, makeThumbnail, recoverStale, queueStats: () => ({ active: genQueue.active, pending: genQueue.pending, reserved: genQueue.reserved, ...jobs.stats(), thumbnailsPending: thumbQueue.pending, renderPending: browser.pending ?? 0 }),
   };
 }

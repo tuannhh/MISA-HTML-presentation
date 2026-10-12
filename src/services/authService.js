@@ -1,13 +1,10 @@
 // Xác thực: đăng ký (giới hạn domain email), đăng nhập, đổi mật khẩu, quản trị tài khoản.
 // Mỗi người dùng = 1 tenant. Không tiết lộ email tồn tại hay không khi đăng nhập sai.
 import { randomUUID, randomInt } from 'node:crypto';
-import bcrypt from 'bcryptjs';
 import { badRequest, conflict, forbidden, notFound, unauthorized } from '../lib/httpError.js';
 
 const EMAIL_RE = /^[^\s@]{1,64}@[a-z0-9.-]{1,180}\.[a-z]{2,}$/i;
-// Hash giả để so sánh khi email không tồn tại → thời gian phản hồi như nhau (chống dò tài khoản).
-let dummyHash = null;
-const getDummyHash = (rounds) => (dummyHash ??= bcrypt.hashSync(randomUUID(), rounds));
+import { createPasswordHasher } from '../lib/passwordHasher.js';
 
 export function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -42,9 +39,16 @@ export function publicUser(u) {
   };
 }
 
-export function createAuthService({ config, repos, audit }) {
+// hasher: băm/so bcrypt trên worker_threads (không chặn luồng chính) — container truyền vào để đóng khi tắt máy chủ.
+export function createAuthService({ config, repos, audit, hasher = createPasswordHasher({ threads: config.auth.hashThreads }) }) {
   const { users } = repos;
   const rounds = config.auth.bcryptRounds;
+  // Hash giả để so sánh khi email không tồn tại → thời gian phản hồi như nhau (chống dò tài khoản). Lỗi → lần sau tạo lại.
+  let dummyHash = null;
+  const getDummyHash = () => (dummyHash ??= hasher.hash(randomUUID(), rounds).catch((err) => {
+    dummyHash = null;
+    throw err;
+  }));
 
   function validateEmail(email) {
     if (!EMAIL_RE.test(email) || email.length > 190) throw badRequest('Email không hợp lệ', 'INVALID_EMAIL');
@@ -60,7 +64,7 @@ export function createAuthService({ config, repos, audit }) {
     async login({ email, password }, ip) {
       const e = normalizeEmail(email);
       const u = e ? await users.findByEmailWithHash(e) : null;
-      const ok = await bcrypt.compare(String(password || ''), u ? u.password_hash : getDummyHash(rounds));
+      const ok = await hasher.compare(String(password || ''), u ? u.password_hash : await getDummyHash());
       if (!u || !ok) {
         await audit.record({ actorId: u?.id || null, action: 'auth.login', result: 'failure', ip, meta: { reason: 'bad_credentials' } });
         throw unauthorized('Email hoặc mật khẩu không đúng', 'INVALID_CREDENTIALS');
@@ -78,11 +82,11 @@ export function createAuthService({ config, repos, audit }) {
     async changePassword(userId, { currentPassword, newPassword }, ip) {
       const u = await users.findByIdWithHash(userId);
       if (!u) throw unauthorized();
-      if (!(await bcrypt.compare(String(currentPassword || ''), u.password_hash))) throw badRequest('Mật khẩu hiện tại không đúng', 'WRONG_PASSWORD');
+      if (!(await hasher.compare(String(currentPassword || ''), u.password_hash))) throw badRequest('Mật khẩu hiện tại không đúng', 'WRONG_PASSWORD');
       const policy = checkPasswordPolicy(newPassword);
       if (policy) throw badRequest(policy, 'WEAK_PASSWORD');
-      if (await bcrypt.compare(String(newPassword), u.password_hash)) throw badRequest('Mật khẩu mới phải khác mật khẩu cũ', 'SAME_PASSWORD');
-      const version = await users.updatePassword(userId, await bcrypt.hash(newPassword, rounds), false);
+      if (await hasher.compare(String(newPassword), u.password_hash)) throw badRequest('Mật khẩu mới phải khác mật khẩu cũ', 'SAME_PASSWORD');
+      const version = await users.updatePassword(userId, await hasher.hash(newPassword, rounds), false);
       await audit.record({ actorId: userId, action: 'auth.change_password', targetType: 'user', targetId: userId, ip });
       return version;
     },
@@ -101,7 +105,7 @@ export function createAuthService({ config, repos, audit }) {
       if (await users.findByEmailWithHash(e)) throw conflict('Email này đã được đăng ký', 'EMAIL_TAKEN');
       const temp = generateTempPassword();
       const id = randomUUID();
-      await users.create({ id, email: e, displayName: name, passwordHash: await bcrypt.hash(temp, rounds), role: r, mustChangePassword: true });
+      await users.create({ id, email: e, displayName: name, passwordHash: await hasher.hash(temp, rounds), role: r, mustChangePassword: true });
       await audit.record({ actorId: actor.id, action: 'admin.user_create', targetType: 'user', targetId: id, ip, meta: { role: r } });
       return { user: publicUser(await users.findById(id)), temporaryPassword: temp };
     },
@@ -124,7 +128,7 @@ export function createAuthService({ config, repos, audit }) {
       const target = await users.findById(id);
       if (!target) throw notFound('Không tìm thấy người dùng');
       const temp = generateTempPassword();
-      await users.updatePassword(id, await bcrypt.hash(temp, rounds), true);
+      await users.updatePassword(id, await hasher.hash(temp, rounds), true);
       await audit.record({ actorId: actor.id, action: 'admin.user_reset_password', targetType: 'user', targetId: id, ip });
       return { temporaryPassword: temp };
     },
@@ -136,11 +140,11 @@ export function createAuthService({ config, repos, audit }) {
       const temp = generateTempPassword();
       if (existing) {
         await users.updateAdminFields(existing.id, { role: 'admin', status: 'active' });
-        await users.updatePassword(existing.id, await bcrypt.hash(temp, rounds), true);
+        await users.updatePassword(existing.id, await hasher.hash(temp, rounds), true);
         return { id: existing.id, temporaryPassword: temp, created: false };
       }
       const id = randomUUID();
-      await users.create({ id, email: e, displayName: validateName(displayName || 'Quản trị viên'), passwordHash: await bcrypt.hash(temp, rounds), role: 'admin', mustChangePassword: true });
+      await users.create({ id, email: e, displayName: validateName(displayName || 'Quản trị viên'), passwordHash: await hasher.hash(temp, rounds), role: 'admin', mustChangePassword: true });
       return { id, temporaryPassword: temp, created: true };
     },
   };

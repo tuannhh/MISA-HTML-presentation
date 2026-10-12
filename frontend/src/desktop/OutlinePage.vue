@@ -8,6 +8,7 @@ import DesktopShell from './DesktopShell.vue'
 import OutlineSlideCard from '@/shared/OutlineSlideCard.vue'
 import DesignPanel from '@/shared/DesignPanel.vue'
 import FormAlert from '@/shared/FormAlert.vue'
+import JobProgress from '@/shared/JobProgress.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import MInput from '@/components/mds/MInput.vue'
@@ -116,6 +117,7 @@ onMounted(ol.load)
             : 'Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn, tạo ảnh minh hoạ AI (nếu bật) — thường 1–2 phút. Xong sẽ tự chuyển sang trình soạn thảo.' }}
         </p>
       </div>
+      <JobProgress :queue="deck.queue" />
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>
     </div>
 

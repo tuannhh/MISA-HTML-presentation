@@ -42,6 +42,7 @@ COPY shared ./shared
 COPY models ./models
 COPY scripts/create-admin.js ./scripts/create-admin.js
 COPY scripts/smoke-cleanup.js ./scripts/smoke-cleanup.js
+COPY scripts/verify-storage.js ./scripts/verify-storage.js
 COPY scripts/lib ./scripts/lib
 COPY startup ./startup
 COPY --from=web /app/dist ./dist

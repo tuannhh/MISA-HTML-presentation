@@ -3,6 +3,10 @@
 - `concurrency.test.js`: race ở mức SQL (F07: hạ quyền admin chéo nhau, trần số người được mời) và tính idempotent của changelog (F15).
 - `smoke-cleanup.test.js`: script dọn tài khoản smoke chỉ xoá đúng tài khoản smoke của lần chạy (A01).
 - Các test khác thêm theo từng lỗi (A04 phục hồi bản sao, A06 công khai + bản gốc, Publish…).
+- **Luồng chính qua HTTP** (roadmap B): `flows-auth`, `flows-deck`, `flows-share`, `https-proxy`. Dựng app thật trên cổng ngẫu nhiên + AI giả
+  (`test/helpers/fakeGemini.mjs`) bằng `helpers/httpApp.mjs` → `useHttpApp(config, { before, after }, opts)` — dựng DB **và** app trong 1 hook
+  (node:test chạy song song các hook `before` gốc). `opts.ingress: true` thêm cổng vào giả kết thúc TLS (`X-Forwarded-Proto: https`).
+  Xuất PDF cần Chrome/Edge trên máy (Docker có Chromium); `CHROME_PATH` không tồn tại → harness tự dò.
 
 Mỗi tệp dựng **database tạm tên duy nhất** `<DB_NAME>_it_<ngẫu nhiên>` từ `startup/database/schema.sql`, xoá trong `finally` (kể cả khi dựng lỗi giữa chừng) —
 hai runner chạy cùng lúc không xoá DB của nhau, không động vào dữ liệu thật. Helper: `helpers/testDb.mjs`.

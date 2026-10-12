@@ -4,6 +4,7 @@
 import { existsSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 import { Semaphore } from '../lib/semaphore.js';
+import { HttpError } from '../lib/httpError.js';
 import { logger } from '../lib/logger.js';
 
 const CANDIDATES = [
@@ -18,6 +19,9 @@ const CANDIDATES = [
 export function createBrowserService({ chromePath, concurrency = 2, noSandbox = false, timeoutMs = 120000 }) {
   const sem = new Semaphore(concurrency);
   let browserPromise = null;
+  // Sau close() (tắt máy chủ) không mở lại Chromium: việc nền còn sót (thumbnail) gọi tới sẽ nhận lỗi thay vì
+  // khởi động trình duyệt mới không ai đóng — tiến trình treo, không thoát được.
+  let closed = false;
 
   function resolvePath() {
     if (chromePath) return chromePath;
@@ -27,6 +31,7 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
   }
 
   async function getBrowser() {
+    if (closed) throw new Error('browser service đã đóng');
     if (!browserPromise) {
       const args = ['--disable-dev-shm-usage', '--disable-gpu', '--font-render-hinting=none', '--hide-scrollbars', '--mute-audio'];
       if (noSandbox) args.push('--no-sandbox', '--disable-setuid-sandbox');
@@ -44,9 +49,17 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
     return browserPromise;
   }
 
+  // Lỗi trình duyệt (không khởi động được, hết thời gian, tab bị đóng) → 503 có mã riêng thay vì 500 chung (EXPORT-08):
+  // người dùng biết thử lại sau, giám sát đếm được theo mã; chi tiết chỉ ghi log.
   async function withPage(html, viewport, fn) {
     return sem.run(async () => {
-      const browser = await getBrowser();
+      let browser;
+      try {
+        browser = await getBrowser();
+      } catch (err) {
+        logger.error('chromium_launch_failed', { err: err.message });
+        throw new HttpError(503, 'RENDER_UNAVAILABLE', 'Máy chủ chưa xuất được bài lúc này, vui lòng thử lại sau ít phút');
+      }
       const page = await browser.newPage();
       const timer = setTimeout(() => page.close().catch(() => {}), timeoutMs);
       try {
@@ -61,6 +74,10 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
         await page.setContent(html, { waitUntil: 'load' });
         await page.evaluate(() => (window.__deck ? window.__deck.ready : null));
         return await fn(page);
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        logger.warn('render_failed', { err: err.message });
+        throw new HttpError(503, 'RENDER_FAILED', 'Xuất bài không thành công (quá thời gian hoặc trình duyệt lỗi), vui lòng thử lại');
       } finally {
         clearTimeout(timer);
         await page.close().catch(() => {});
@@ -69,6 +86,10 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
   }
 
   return {
+    // Số lượt đang chờ trình duyệt (xuất PDF đặt trần theo số này).
+    get pending() {
+      return sem.pending;
+    },
     // Chụp các slide ở khung cuối (đầy đủ nội dung). indices: mảng chỉ số slide.
     async screenshotSlides(html, { width, height, indices, scale = 1 }) {
       return withPage(html, { width, height, deviceScaleFactor: scale }, async (page) => {
@@ -93,6 +114,7 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
     },
 
     async close() {
+      closed = true;
       if (browserPromise) {
         const b = await browserPromise.catch(() => null);
         browserPromise = null;

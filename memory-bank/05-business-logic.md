@@ -136,6 +136,13 @@ POST /build {outlineVersion, outline?} → (lưu nếu có outline) → startBui
 - **Tông màu:** xem §7.
 - Giao diện poll `GET /:id` mỗi ~3 giây khi `outlining`/`generating`; danh sách poll khi còn bài đang xử lý hoặc chưa có ảnh bìa. Bấm vào bài đang `outlining`/`outline`/`generating` → `/p/:id/outline`.
 - Khởi động lại server: `recoverStale()` → `generating` còn dàn ý → về `outline` (dựng lại được); `outlining`/`generating` không có dàn ý → `failed` (hàng đợi nằm trong RAM).
+- **Tiến độ hàng đợi (2026-10-12, roadmap B):** `jobTracker` (`src/lib/jobTracker.js`) ghi thời điểm nhận/bắt đầu từng job. `GET /:id` khi `outlining`/`generating` có `queue`:
+  `{state:'waiting', kind, position, waitedSec, startInSec, etaSec, sampleSize}` hoặc `{state:'running', kind, waitedSec, elapsedSec, etaSec, sampleSize}` (null khi tiến trình vừa khởi động lại — job không còn trong RAM).
+  Ước tính dựa trên trung bình 20 job gần nhất cùng loại (`outline`/`build`); chưa có mẫu đo → `etaSec`/`startInSec` = null, giao diện ghi "đang ước tính" thay vì con số. `/api/health/ready` thêm `avgOutlineSec`, `avgBuildSec`, `avgWaitSec`, `oldestWaitSec`, `longestRunSec` (dùng cho cảnh báo job treo — `scripts/ops/check.sh`).
+- **Mã lỗi cho thử lại:** 503 (`QUEUE_FULL`, `RENDER_*`) luôn có `Retry-After: 30`, 429 có `Retry-After: 60` (errorHandler đặt nếu nơi ném lỗi chưa đặt). Chromium không khởi động được → 503 `RENDER_UNAVAILABLE`; lỗi khi render (timeout, tab đóng) → 503 `RENDER_FAILED` (trước đây 500 chung); chi tiết chỉ ghi log `chromium_launch_failed` / `render_failed`.
+- **Ảnh bìa nền + hàng trình duyệt (sửa sau đo tải 2026-10-12):** `scheduleThumbnail` (gộp 4 giây/bài) đẩy mã bài vào `createCoalescingQueue` (`src/lib/coalescingQueue.js`) — chụp **lần lượt 1 bài/lúc**, bài đang chờ được lưu tiếp không thêm lượt, HTML chỉ dựng khi tới lượt. Xuất PDF kiểm `browser.pending ≥ MAX_EXPORT_PENDING (10)` → 503 `QUEUE_FULL`. `/api/health/ready` có `thumbnailsPending`, `renderPending`.
+- **DB quá tải:** lỗi mysql2 "Queue limit reached." (pool `queueLimit` 200) → 503 `SERVER_BUSY` + `Retry-After` thay vì 500.
+- **Đăng nhập không chặn luồng chính:** bcrypt chạy trên worker_threads (`passwordHasher`, `PASSWORD_HASH_THREADS`, mặc định 2) — xem `09`.
 
 ## 3. Chỉnh sửa & lưu
 

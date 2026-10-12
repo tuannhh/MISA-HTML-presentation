@@ -33,6 +33,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `PIXABAY_API_KEY` | (để tìm ảnh) | | Khoá Pixabay — **không commit/log**; thiếu → tìm ảnh trả 503 |
 | `PIXABAY_BASE_URL` | | `https://pixabay.com/api/` | |
 | `BCRYPT_ROUNDS` | | 12 | |
+| `PASSWORD_HASH_THREADS` | | 2 | Số worker_threads băm/so bcrypt (1–8) — luồng chính không bị chặn khi nhiều người đăng nhập cùng lúc |
 | `STORAGE_DIR` | | `./data/storage` (dev) / `/data/storage` (Docker) | |
 | `TEMP_TTL_MINUTES` | | 60 | Dọn tệp tạm quá hạn |
 | `MAX_UPLOAD_MB` / `MAX_IMAGE_UPLOAD_MB` | | 300 / 15 | `MAX_UPLOAD_MB` = **tổng** tệp nguồn 1 lần tạo (và trần tải từ link) |
@@ -119,16 +120,20 @@ Tệp nguồn nằm tạm ở `STORAGE_DIR/uploads` (volume) — khởi động 
 
 | Lệnh | Nội dung |
 |---|---|
-| `npm test` | Unit (node:test): SSRF, magic bytes, tenantScope, URL ký, chuẩn hoá spec, chống XSS renderer (13 test) |
+| `npm test` | Unit (node:test): SSRF, magic bytes, tenantScope, URL ký, chuẩn hoá spec, chống XSS renderer, hàng đợi, jobTracker, passwordHasher, lỗi trình duyệt… (224 test; 1 skip khi máy thiếu `pdftoppm`) |
 | `BASE=http://localhost:8088 node test/smoke/smoke.mjs` | Smoke end-to-end trên server đang chạy: admin cấp tài khoản, CSRF, tạo bài (Gemini thật), cách ly tenant, public/duplicate, lưu + 409, xuất HTML/PDF, admin. In "TẤT CẢ ĐẠT" |
 | `npm run test:integration` | MySQL thật, DB tạm tên duy nhất/tệp (`IT_DB_*`, xem `test/integration/README.md`): race SQL, changelog idempotent, phục hồi bản sao (A04), công khai + bản gốc (A06), dọn smoke (A01), **xuất bản** (publish/cập nhật/gỡ/đồng thời/STALE/admin). Không dựng được DB → FAIL (trừ `IT_OPTIONAL=1`) |
 | `SMOKE_BOOTSTRAP=1 BASE=http://localhost:<APP_PORT> node test/smoke/smoke.mjs` | Smoke trên **compose project riêng** (không chạy vào stack có dữ liệu): tự tạo admin `smoke-admin-<stamp>` mật khẩu ngẫu nhiên, dọn tài khoản `smoke-*-<stamp>` trong `finally` (`scripts/smoke-cleanup.js`). Có sẵn admin → `SMOKE_ADMIN_EMAIL/PASSWORD` (tài khoản tạo ra chỉ bị khoá) |
+| `npm run test:integration` — `flows-auth` / `flows-deck` / `flows-share` / `https-proxy` | (2026-10-12, roadmap B) Luồng chính qua **HTTP thật** + MySQL thật, AI giả (`test/helpers/fakeGemini.mjs`, server HTTP qua `GEMINI_BASE_URL`, điều khiển độ trễ/lỗi). Harness `helpers/httpApp.mjs` (`useHttpApp`): đăng nhập/khoá/đổi mật khẩu/CSRF/rate-limit theo email; dàn ý → dựng, 409 phiên bản, lỗi AI → về dàn ý; cách ly tenant (404 trên 9 endpoint); chia sẻ/handoff/restore; media ký URL; mẫu thiết kế; xuất HTML/PDF (Chrome thật); publish theo Host; hàng đợi đầy 503 + `Retry-After`; cổng vào HTTPS → cookie `Secure`, IP audit đúng. 43 test, ~30 giây |
+| `test/load/provision.mjs` + `test/load/load.mjs` | Đo tải 500 người trên stack riêng `deploy/loadtest` (project `mp-load`, image `:loadtest`, AI giả). Cách chạy + kết quả: `docs/LOAD-TEST.md` |
 | `npm run render:sample` | Render `test/fixtures/sample-spec.json` (14 layout) ra ảnh để soát giao diện |
 
-## Sao lưu (khuyến nghị — chưa tự động hoá)
+## Sao lưu / khôi phục / giám sát (2026-10-12 — `scripts/ops/`, chi tiết `docs/RUNBOOK.md`)
 
-- DB: `docker compose exec mysql sh -c 'mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"' > backup.sql`
-- Tệp: sao lưu volume `app-data`. DB và tệp phải sao lưu **cùng thời điểm** (asset trong DB trỏ tới tệp).
+- `scripts/ops/backup.sh <thư-mục>`: `mysqldump --single-transaction` (chạy trong container mysql, mật khẩu lấy từ env container — không in ra) nén gzip + tar thư mục `private` của volume, `SHA256SUMS` + `MANIFEST` (thời gian, kích thước). DB và tệp lấy **cùng lượt**.
+- `scripts/ops/restore.sh <thư-mục> --yes`: kiểm checksum → dừng app → nạp DB → xoá `sessions` (buộc đăng nhập lại) → thay `private` → bật app, chờ healthy → `node scripts/verify-storage.js` (DB ↔ tệp khớp) → in thời gian từng bước (RTO).
+- `scripts/ops/check.sh`: kiểu Nagios (0 OK/1 WARN/2 CRIT) — ready, hàng đợi (≥15 WARN, ≥22 CRIT), job chờ ≥ 600 s, job chạy ≥ 1200 s, đĩa 80/90%, RAM 85%.
+- Biến: `PROJECT` (compose project), `COMPOSE_FILES`. Trên Git Bash script tự đặt `MSYS_NO_PATHCONV=1`.
 
 ## Chuyển storage sang S3/MinIO (dự kiến)
 

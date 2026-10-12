@@ -13,6 +13,7 @@ import MobileShell from './MobileShell.vue'
 import ActionSheet from './ActionSheet.vue'
 import FullScreenSheet from './FullScreenSheet.vue'
 import ImageStudioPanel from '@/shared/ImageStudioPanel.vue'
+import JobProgress from '@/shared/JobProgress.vue'
 import InsertSlidePanel from '@/shared/InsertSlidePanel.vue'
 import FreeElementsPanel from '@/shared/FreeElementsPanel.vue'
 import VideoPicker from '@/shared/VideoPicker.vue'
@@ -238,6 +239,7 @@ onMounted(ed.load)
       <MSpinner :size="40" />
       <p class="mds-mobile-readable text-[16px] font-semibold leading-6">AI đang dựng “{{ deck.title }}” theo dàn ý</p>
       <p class="text-[14px] leading-5 text-[var(--mds-text-secondary)]">Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn, tạo ảnh minh hoạ AI (nếu bật) — thường 1–2 phút. Bạn có thể rời màn hình, bài vẫn tiếp tục được dựng.</p>
+      <JobProgress :queue="deck.queue" compact />
     </div>
 
     <div v-else-if="deck?.status === 'failed'" class="px-4 py-10">

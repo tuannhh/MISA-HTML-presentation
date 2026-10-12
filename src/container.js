@@ -12,6 +12,7 @@ import { createLocalStorage } from './services/storageService.js';
 import { createGeminiService } from './services/geminiService.js';
 import { createBrowserService } from './services/browserService.js';
 import { createAuthService } from './services/authService.js';
+import { createPasswordHasher } from './lib/passwordHasher.js';
 import { createPresentationService } from './services/presentationService.js';
 import { createTemplateService } from './services/templateService.js';
 import { createSharingService } from './services/sharingService.js';
@@ -37,14 +38,15 @@ export async function createContainer(config, pool, overrides = {}) {
   const signer = createUrlSigner(config.session.secret);
   const stock = overrides.stock || createStockImageService(config.pixabay);
   const sessionStore = new MySqlSessionStore(pool);
+  const hasher = createPasswordHasher({ threads: config.auth.hashThreads });
   const presentations = createPresentationService({ config, repos, storage, gemini, browser, signer, audit: repos.audit, stock });
   const services = {
     sessionStore,
-    auth: createAuthService({ config, repos, audit: repos.audit }),
+    auth: createAuthService({ config, repos, audit: repos.audit, hasher }),
     presentations,
     templates: createTemplateService({ repos, storage, signer, audit: repos.audit }),
     sharing: createSharingService({ repos, decks: presentations, audit: repos.audit }),
     publications: createPublicationService({ config, repos, storage, decks: presentations, audit: repos.audit }),
   };
-  return { repos, services, storage, browser, sessionStore };
+  return { repos, services, storage, browser, sessionStore, hasher };
 }
