@@ -23,7 +23,7 @@ frontend/src/
                      #   OutlineSlideCard, OutlineMedia, VideoPicker, MediaLibrary, VideoOverlay,
                      #   ImageStudio(+Panel), ImageEditor (Cropper.js), RangeField, InsertSlidePanel, FreeElementsPanel,
                      #   IconPicker (biểu tượng + ảnh/logo thay biểu tượng), BrandSettings (tab Thương hiệu: ảnh nhận diện + mẫu),
-                     #   SharePanel (công khai + mời theo email + danh sách quyền), VersionsPanel (handoff, xem lại, khôi phục — xác nhận ngay trong panel)
+                     #   SharePanel (công khai + PublishSection "Xuất bản ra web" + mời theo email + danh sách quyền), VersionsPanel (handoff, xem lại, khôi phục — xác nhận ngay trong panel)
   desktop/           # composition desktop: DesktopShell (MHeaderBar + MSidebar) + các trang
   mobile/            # composition mobile mini-app: MobileShell (MMobileTopBar + MMobileBottomNav) + ActionSheet + FullScreenSheet + các trang
   components/mds/    # bản sao MDS 2.0 (có vá cục bộ — xem 09)

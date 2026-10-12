@@ -7,6 +7,7 @@ Tài liệu dành cho DevOps khi đưa ứng dụng lên **máy chủ trong mạ
 3. [Trình duyệt người dùng cần tới đâu](#3-trình-duyệt-người-dùng-cần-tới-đâu)
 4. [Khi build image trên máy chủ](#4-khi-build-image-trên-máy-chủ)
 5. [Checklist bàn giao](#5-checklist-bàn-giao)
+6. [Domain công khai cho tính năng "Xuất bản ra web"](#6-domain-công-khai-cho-tính-năng-xuất-bản-ra-web) ← DevOps đặt domain + CDN
 
 Cấu hình triển khai chung (Docker, biến môi trường, Nginx): xem [`README.md`](../README.md) và [`memory-bank/07-deployment-infrastructure.md`](../memory-bank/07-deployment-infrastructure.md).
 
@@ -166,3 +167,95 @@ Không muốn mở các tên miền này trên máy chủ: build image ở máy 
 - [ ] DNS công cộng phân giải được từ máy chủ.
 - [ ] Chạy các lệnh kiểm tra mục 1.4 từ 1 máy ngoài danh sách và 1 máy trong mạng MISA.
 - [ ] Giám sát: `/api/health` (sống), `/api/health/ready` (DB sẵn sàng); theo dõi log `ip_blocked`, `ip_allowlist_empty`.
+- [ ] (Nếu dùng "Xuất bản ra web") làm theo mục 6: `PUBLISH_BASE_URL`, cổng Internet **ép Host**, CDN, kiểm tra mục 6.5.
+
+---
+
+## 6. Domain công khai cho tính năng "Xuất bản ra web"
+
+Chủ bài bấm **Xuất bản** → có link `https://<domain-công-khai>/<ten-bai>-<8 ký tự>` gửi cho bất kỳ ai (kể cả ngoài MISA, không đăng nhập).
+Ứng dụng đã làm sẵn; **DevOps chỉ cần đặt domain + đường vào**. Chưa đặt `PUBLISH_BASE_URL` thì tính năng tắt (nút báo "chưa cấu hình").
+
+```
+ Internet ──HTTPS──▶ [CDN] ──▶ [Nginx vhost công khai: ÉP Host = domain công khai] ──▶ app :3000  (chỉ trả trang đã xuất bản)
+ Mạng MISA ─HTTPS──▶ [Nginx / LB nội bộ] ─────────────────────────────────────────▶ app :3000  (giao diện + API, IP_ALLOWLIST)
+```
+
+### 6.1. Cấu hình ứng dụng
+
+```env
+PUBLISH_BASE_URL=https://slides.misa.vn   # ví dụ; chỉ http(s)://domain, không đường dẫn, khác domain của APP_BASE_URL
+```
+
+Sai dạng hoặc trùng domain nội bộ → ứng dụng **không khởi động**, log ghi rõ lỗi. Đổi giá trị: sửa `.env` rồi `docker compose up -d app`.
+
+### 6.2. Phân luồng theo domain (Host) — ứng dụng tự làm
+
+Mọi request có `Host` = domain công khai được xử lý **riêng và kết thúc tại đó**, trước `IP_ALLOWLIST`:
+
+| Đường dẫn ở domain công khai | Phản hồi |
+|---|---|
+| `/<ten-bai>-<mã 8 ký tự>` | Trang trình chiếu tĩnh (ảnh chụp lúc xuất bản). Tên bài sai/cũ → `301` về tên hiện tại |
+| `/m/<mã>/<revision>/<tệp>` | Ảnh/video của bản xuất bản (hỗ trợ `Range` để tua video) |
+| `/robots.txt` | `User-agent: * / Disallow: /` |
+| **Mọi đường dẫn khác** (`/`, `/api/*`, `/login`, phông, gói 3D…) | `404` trang ngắn — **không bao giờ** tới giao diện/API nội bộ, không phiên/cookie |
+
+Ngược lại, domain nội bộ **không** phục vụ trang xuất bản. `/api/health` chỉ có ở domain nội bộ → healthcheck LB/giám sát gọi qua domain nội bộ hoặc IP:cổng nội bộ.
+
+### 6.3. BẮT BUỘC: cổng vào từ Internet phải ép `Host`
+
+`Host` là header do client tự gửi. Nếu vhost công khai chuyển nguyên `Host` của client vào app, người ngoài gửi `Host: <domain nội bộ>` sẽ đi vào **luồng nội bộ** (giao diện + API; còn lớp đăng nhập và `IP_ALLOWLIST` nếu đã đặt). Vì vậy vhost/CDN phía Internet phải **ghi đè** Host thành domain công khai, và chỉ chuyển các đường dẫn trên:
+
+```nginx
+# Vhost CÔNG KHAI (tách riêng với vhost nội bộ). Ví dụ domain slides.misa.vn.
+server {
+  listen 443 ssl;
+  server_name slides.misa.vn;
+  # ssl_certificate ...; ssl_certificate_key ...;
+
+  # Chỉ đúng dạng đường dẫn của trang xuất bản / media / robots — còn lại 404 ngay tại Nginx.
+  location ~ "^/([a-z0-9][a-z0-9-]{0,119}-[a-z0-9]{8}/?|m/[a-z0-9]{8}/[0-9a-f]{16}/[0-9a-f-]{36}\.(webp|png|jpg|gif|mp4|webm|mov)|robots\.txt)$" {
+    limit_except GET HEAD { deny all; }
+    proxy_pass http://app:3000;
+    proxy_set_header Host slides.misa.vn;            # ÉP Host — KHÔNG dùng $host/$http_host ở vhost này
+    proxy_set_header X-Forwarded-Host slides.misa.vn;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Cookie "";                       # trang công khai không dùng cookie
+  }
+  location / { return 404; }
+}
+```
+
+- Vhost **nội bộ** giữ như cũ (chỉ mạng MISA vào được). Nên đặt `IP_ALLOWLIST` để có thêm lớp chặn nếu cấu hình Host bị sai.
+- `TRUST_PROXY` tính theo đường vào dài nhất (vd. CDN → Nginx → app = `2`); không mở cổng app ra Internet.
+- Chống lụt request từ Internet đặt ở CDN/Nginx (vd. `limit_req`) — ứng dụng **không** giới hạn theo IP (người dùng nội bộ chung IP VPN).
+
+### 6.4. CDN (mặc định có) và lập chỉ mục
+
+Ứng dụng đã đặt header phù hợp CDN — CDN chỉ cần **tôn trọng header gốc** (không ép TTL dài hơn cho HTML):
+
+| Loại | `Cache-Control` | Ghi chú |
+|---|---|---|
+| Trang HTML | `public, max-age=60, s-maxage=300, stale-while-revalidate=60` + `ETag` theo revision | Cập nhật/gỡ xuất bản có hiệu lực sau tối đa ~5 phút nếu không purge |
+| Media `/m/...` | `public, max-age=31536000, immutable` | URL chứa revision → bản mới có URL mới, không cần purge |
+| `404` | `public, max-age=30, s-maxage=60` | |
+| `robots.txt` | `public, max-age=86400` | |
+
+- **Gỡ xuất bản cần hiệu lực ngay** (vd. admin gỡ bài vi phạm): purge trên CDN đường dẫn trang `/<ten-bai>-<mã>` (và tiền tố `/m/<mã>/`). Danh sách trang đang xuất bản: `GET /api/admin/publications` (admin, domain nội bộ).
+- **Chặn lập chỉ mục** (công cụ nội bộ): mọi phản hồi có `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex` + `robots.txt` chặn toàn bộ. CDN không được bỏ header này.
+- CDN không cần (và không nên) chuyển cookie; không cache theo cookie.
+
+### 6.5. Kiểm tra sau khi cài
+
+```bash
+# Trang đã xuất bản (lấy link từ nút "Sao chép link"): 200, có X-Robots-Tag noindex
+curl -sI https://slides.misa.vn/<ten-bai>-<ma>
+# robots.txt chặn toàn bộ
+curl -s https://slides.misa.vn/robots.txt
+# Không lộ giao diện/API nội bộ: đều 404
+curl -sI https://slides.misa.vn/  ;  curl -sI https://slides.misa.vn/api/auth/me
+# Giả Host nội bộ qua cổng công khai: vẫn 404 (vhost đã ép Host)
+curl -sI --resolve slides.misa.vn:443:<IP công khai> -H "Host: <domain nội bộ>" https://slides.misa.vn/api/auth/me
+```
+

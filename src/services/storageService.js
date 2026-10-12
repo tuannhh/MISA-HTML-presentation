@@ -68,8 +68,9 @@ export function createLocalStorage({ privateDir, tempDir, tempTtlMinutes, upload
       await rm(resolveKey(key), { force: true });
     },
 
+    // maxRetries: tệp vừa ghi có thể đang bị khoá tạm (EBUSY/EPERM — vd. phần mềm quét virus trên Windows) → thử lại thay vì để sót thư mục.
     async removePrefix(prefix) {
-      await rm(resolveKey(prefix.replace(/\/+$/, '')), { recursive: true, force: true });
+      await rm(resolveKey(prefix.replace(/\/+$/, '')), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     },
 
     // Dọn file tạm quá hạn (export PDF/HTML dở dang, *.part sót lại).

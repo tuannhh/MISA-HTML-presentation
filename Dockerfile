@@ -41,6 +41,8 @@ COPY shared ./shared
 # Mô hình U²-Net-p (Apache-2.0) tách nền logo nền phức tạp — thiếu thì tự lùi về tách theo màu nền.
 COPY models ./models
 COPY scripts/create-admin.js ./scripts/create-admin.js
+COPY scripts/smoke-cleanup.js ./scripts/smoke-cleanup.js
+COPY scripts/lib ./scripts/lib
 COPY startup ./startup
 COPY --from=web /app/dist ./dist
 RUN mkdir -p /data/storage && chown -R node:node /data

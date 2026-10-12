@@ -260,3 +260,23 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 
 ### Giới hạn API khi dùng chung IP
 - **Không dùng IP làm khoá hạn mức** (mạng/VPN MISA → mọi người chung 1 IP; chủ dự án chốt bỏ hẳn 12/10/2026). `api` đặt SAU `loadUser`, chỉ đếm người đã đăng nhập. Thêm route ghi tốn tài nguyên → đặt sau `auth` và dùng limiter `byUser` (khoá `req.user.id`) như `share`/`media`; không thêm `ipKeyGenerator`.
+
+## Chặng A bổ sung + xuất bản (2026-10-12)
+
+### Hàng đợi: giữ chỗ trước `await`
+- Kiểm `pending < trần` rồi mới `await` ghi DB → nhiều request cùng thấy "còn chỗ" (A03). Dùng `Semaphore.reserve(maxPending)` **đồng bộ** trước mọi `await`; vé phải `run()` hoặc `release()` đúng 1 lần (lỗi trước khi vào hàng → `release`). `run()` chuyển thẳng chỗ cho job chờ (không hở khoảng đếm). Tạo bài và dựng bài dùng chung 1 hàng.
+
+### Bản nháp khi `updateMeta` / lưu dàn ý (frontend)
+- Mọi yêu cầu ghi của trình soạn thảo đi qua `serial()` (tuần tự). Xét "đang sửa dở" **lúc phản hồi về**, không phải lúc gửi; giữ `draftVersion` cũ cho bản nháp giữ lại để lần lưu sau vẫn 409 nếu người khác đã lưu. `useOutline.save` giữ chữ gõ thêm trong lúc chờ (A02).
+
+### Bật công khai + bản gốc: 1 giao dịch, khoá dòng bài
+- `presentations.updateOwned(..., { baselineBy })` khoá dòng bài `FOR UPDATE`, cập nhật, rồi `insertBaseline` cùng giao dịch (A06). Tách 2 bước như cũ gây deadlock khi bật công khai song song + mời người lần đầu. Chụp bản gốc / handoff / mời / xuất bản đều khoá **cùng dòng bài** trước.
+
+### Phục hồi sau restart: bản sao dở
+- `failStaleGenerating`: `source_kind='copy'` luôn → `failed` ("Sao chép bị gián đoạn…") — chạy TRƯỚC luật đưa bài AI có dàn ý về `outline` (luật này loại trừ `copy`), không thì bản sao thiếu media bị đẩy sang dựng AI (A04).
+
+### Xuất bản ra web
+- `req.hostname` quyết định luồng → cổng Internet phải ép Host (xem `08`). Thêm route vào domain công khai = thêm vào `publicSiteRoutes` **và** regex `location` mẫu trong `docs/DEVOPS-NETWORK.md` §6.3.
+- Engine trình chiếu ở trang công khai chạy top-level (`EMBED=false`) → video/YouTube mở lớp phủ riêng, cần `media-src 'self'` và `frame-src` YouTube; YouTube cần Referer (`Referrer-Policy: strict-origin-when-cross-origin`).
+- `fetch` (undici) bỏ header `Host` tự đặt → test phân luồng dùng `node:http` (`test/unit/publish-site.test.js`).
+- Test tích hợp/smoke **không** chạy vào stack Docker đang có dữ liệu (`misa-presentation-*`); dùng MySQL tạm (`mp-it-mysql`) hoặc compose project riêng.

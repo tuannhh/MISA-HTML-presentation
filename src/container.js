@@ -6,6 +6,7 @@ import { createTemplateRepository } from './repositories/templateRepository.js';
 import { createAuditRepository } from './repositories/auditRepository.js';
 import { createShareRepository } from './repositories/shareRepository.js';
 import { createVersionRepository } from './repositories/versionRepository.js';
+import { createPublicationRepository } from './repositories/publicationRepository.js';
 import { MySqlSessionStore } from './repositories/sessionStore.js';
 import { createLocalStorage } from './services/storageService.js';
 import { createGeminiService } from './services/geminiService.js';
@@ -14,6 +15,7 @@ import { createAuthService } from './services/authService.js';
 import { createPresentationService } from './services/presentationService.js';
 import { createTemplateService } from './services/templateService.js';
 import { createSharingService } from './services/sharingService.js';
+import { createPublicationService } from './services/publicationService.js';
 import { createStockImageService } from './services/stockImageService.js';
 import { createUrlSigner } from './lib/signedUrl.js';
 
@@ -26,6 +28,7 @@ export async function createContainer(config, pool, overrides = {}) {
     audit: createAuditRepository(pool),
     shares: createShareRepository(pool),
     versions: createVersionRepository(pool),
+    publications: createPublicationRepository(pool),
   };
   const storage = overrides.storage || createLocalStorage(config.storage);
   await storage.init();
@@ -41,6 +44,7 @@ export async function createContainer(config, pool, overrides = {}) {
     presentations,
     templates: createTemplateService({ repos, storage, signer, audit: repos.audit }),
     sharing: createSharingService({ repos, decks: presentations, audit: repos.audit }),
+    publications: createPublicationService({ config, repos, storage, decks: presentations, audit: repos.audit }),
   };
   return { repos, services, storage, browser, sessionStore };
 }

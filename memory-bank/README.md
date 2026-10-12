@@ -7,7 +7,7 @@ Thư mục này chứa **toàn bộ tri thức về dự án MISA Presentation**
 - **Trước khi code bất kỳ thay đổi nào (thêm mới hoặc sửa):** đọc `11-coding-rules.md` trước — đây là nguyên tắc bắt buộc, không phải tham khảo.
 - **Lần đầu tiếp cận dự án:** đọc theo thứ tự số, từ `01` đến `11`.
 - **Cần tra cứu nhanh:** nhảy thẳng vào tệp tương ứng với chủ đề.
-- **Sau khi thay đổi code/kiến trúc:** cập nhật tệp tương ứng + `10-development-history.md` (quy tắc bắt buộc của bộ chuẩn `xoan-backend-standard`, mục `20-memory-bank-mandate.md`).
+- **Sau khi thay đổi code/kiến trúc:** cập nhật tệp tương ứng + `10-development-history.md` (quy tắc bắt buộc của MISA Backend Standard — máy chưa cài bản MISA thì dùng `xoan-backend-standard`, nội dung giống hệt — mục `20-memory-bank-mandate.md`).
 
 ## Danh sách tệp
 

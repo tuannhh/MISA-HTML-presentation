@@ -48,6 +48,18 @@ export function createUserRepository(pool) {
       return rows[0]?.session_version;
     },
 
+    // Chỉ cho scripts/smoke-cleanup.js: liệt kê theo tiền tố email (không theo tenant — script quản trị).
+    async listByEmailPrefix(prefix) {
+      const [rows] = await pool.execute('SELECT id, email, role, created_at FROM users WHERE email LIKE ? ORDER BY created_at', [`${prefix}%`]);
+      return rows;
+    },
+
+    // Xoá hẳn tài khoản (chỉ script quản trị dùng): bài, tệp ghi DB, mẫu, chia sẻ xoá theo khoá ngoại ON DELETE CASCADE/SET NULL.
+    async deleteById(id) {
+      const [res] = await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+      return res.affectedRows;
+    },
+
     async list({ q, limit, offset }) {
       const where = q ? 'WHERE email LIKE ? OR display_name LIKE ?' : '';
       const params = q ? [`%${q}%`, `%${q}%`] : [];

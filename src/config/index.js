@@ -27,6 +27,18 @@ function bool(name, fallback) {
   return ['1', 'true', 'yes', 'on'].includes(String(raw).toLowerCase());
 }
 
+function publishConfig(raw) {
+  if (!raw) return Object.freeze({ baseUrl: '', host: '' });
+  let url = null;
+  try {
+    url = new URL(raw);
+  } catch {
+    /* báo lỗi ở validate */
+  }
+  const valid = url && /^https?:$/.test(url.protocol) && (url.pathname === '/' || url.pathname === '') && !url.search && !url.hash && !url.username;
+  return Object.freeze({ baseUrl: valid ? url.origin : '', host: valid ? url.hostname.toLowerCase() : '', raw, valid: Boolean(valid) });
+}
+
 export function loadConfig() {
   const env = str('NODE_ENV', 'development');
   const isProd = env === 'production';
@@ -38,6 +50,9 @@ export function loadConfig() {
     isTest: env === 'test',
     port: int('PORT', 3000, { min: 1, max: 65535 }),
     appBaseUrl: str('APP_BASE_URL', 'http://localhost:3000'),
+    // Xuất bản công khai: domain riêng (vd. https://slides.misa.vn) do DevOps đặt; trống = tắt tính năng. Phân luồng theo domain:
+    // request tới host này chỉ thấy trang đã xuất bản (src/routes/publicSiteRoutes.js), không bao giờ tới giao diện/API nội bộ.
+    publish: publishConfig(str('PUBLISH_BASE_URL', '')),
     trustProxy: int('TRUST_PROXY', 0, { min: 0, max: 10 }),
     // Chỉ cho truy cập từ các IP/dải IP này (máy chủ đặt trong mạng MISA; DevOps điền IP thật). Rỗng = không giới hạn.
     // Phân tách bằng dấu phẩy/khoảng trắng; nhận IP đơn, CIDR, khoảng a-b; IPv4 + IPv6. Xem lib/ipAllowlist.js.
@@ -150,6 +165,10 @@ function validate(config) {
     const https = /^https:/i.test(config.appBaseUrl);
     if (https && !config.session.cookieSecure) errors.push('APP_BASE_URL là https nhưng SESSION_COOKIE_SECURE=false — đặt SESSION_COOKIE_SECURE=true');
     if (!https && config.session.cookieSecure) errors.push('APP_BASE_URL là http nhưng SESSION_COOKIE_SECURE=true — trình duyệt sẽ không giữ phiên đăng nhập; dùng https hoặc đặt SESSION_COOKIE_SECURE=false');
+  }
+  if (config.publish.raw && !config.publish.valid) errors.push('PUBLISH_BASE_URL phải là http(s)://domain (không có đường dẫn/tham số), vd. https://slides.misa.vn');
+  if (config.publish.host && config.publish.host === new URL(config.appBaseUrl).hostname.toLowerCase()) {
+    errors.push('PUBLISH_BASE_URL phải là domain riêng, khác APP_BASE_URL (domain công khai chỉ phục vụ trang đã xuất bản)');
   }
   const badIps = parseIpAllowlist(config.ipAllowlist).errors;
   if (badIps.length) errors.push(`IP_ALLOWLIST có mục không hợp lệ: ${badIps.join(', ')}`);

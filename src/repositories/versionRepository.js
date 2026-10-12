@@ -11,26 +11,35 @@ function parseSpec(row) {
   return row || null;
 }
 
+// Chụp bản gốc từ dòng presentations hiện tại (trong giao dịch của người gọi, dòng bài đã khoá FOR UPDATE).
+// Dùng chung cho ensureBaseline và giao dịch "bật công khai" của presentationRepository (A06).
+export async function insertBaseline(conn, presentationId, createdBy) {
+  try {
+    const [res] = await conn.execute(
+      `INSERT INTO presentation_versions (id, presentation_id, kind, title, ratio, spec, spec_version, slide_count, created_by)
+       SELECT UUID(), p.id, 'baseline', p.title, p.ratio, p.spec, p.spec_version, p.slide_count, ?
+         FROM presentations p
+        WHERE p.id = ? AND p.status = 'ready' AND p.spec IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM presentation_versions v WHERE v.presentation_id = p.id AND v.kind = 'baseline')`,
+      [createdBy, presentationId],
+    );
+    return res.affectedRows === 1;
+  } catch (err) {
+    // Khoá duy nhất uq_presentation_versions_baseline: bản gốc đã có → không phải lỗi.
+    if (err.code === 'ER_DUP_ENTRY') return false;
+    throw err;
+  }
+}
+
 export function createVersionRepository(pool) {
   return {
-    // Bản gốc: chỉ tạo 1 lần cho mỗi bài (khoá duy nhất uq_presentation_versions_baseline) — gọi lại không ghi đè.
-    // Trả true khi vừa tạo mới.
+    // Bản gốc: chỉ tạo 1 lần cho mỗi bài — gọi lại không ghi đè. Khoá dòng bài trong giao dịch: nhiều lượt chia sẻ đầu cùng lúc
+    // chạy lần lượt (không deadlock INSERT … SELECT), lượt sau thấy bản gốc đã có. Trả true khi vừa tạo mới.
     async ensureBaseline(presentationId, createdBy) {
-      try {
-        const [res] = await pool.execute(
-          `INSERT INTO presentation_versions (id, presentation_id, kind, title, ratio, spec, spec_version, slide_count, created_by)
-           SELECT UUID(), p.id, 'baseline', p.title, p.ratio, p.spec, p.spec_version, p.slide_count, ?
-             FROM presentations p
-            WHERE p.id = ? AND p.status = 'ready' AND p.spec IS NOT NULL
-              AND NOT EXISTS (SELECT 1 FROM presentation_versions v WHERE v.presentation_id = p.id AND v.kind = 'baseline')`,
-          [createdBy, presentationId],
-        );
-        return res.affectedRows === 1;
-      } catch (err) {
-        // Hai lượt chia sẻ đầu tiên chạy cùng lúc: lượt sau vấp khoá duy nhất → bản gốc đã có, không phải lỗi.
-        if (err.code === 'ER_DUP_ENTRY') return false;
-        throw err;
-      }
+      return withTransaction(pool, async (conn) => {
+        await conn.execute('SELECT id FROM presentations WHERE id = ? FOR UPDATE', [presentationId]);
+        return insertBaseline(conn, presentationId, createdBy);
+      });
     },
 
     // Danh sách (không kèm spec): bản gốc trước, rồi handoff mới nhất trước.

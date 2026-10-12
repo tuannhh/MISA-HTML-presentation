@@ -13,6 +13,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `APP_PORT` | | 8080 | (compose) cổng mở ra máy chủ → `3000` |
 | `APP_BASE_URL` | ✅ (production) | `http://localhost:3000` | URL người dùng truy cập — dùng kiểm Origin (CSRF) |
 | `TRUST_PROXY` | | 0 | Số proxy tin cậy (1 khi sau Nginx/Traefik) |
+| `PUBLISH_BASE_URL` | (DevOps đặt khi bật xuất bản) | rỗng = tắt tính năng | Domain **công khai riêng** cho "Xuất bản ra web" (`https://slides.misa.vn`): chỉ `http(s)://domain`, khác domain `APP_BASE_URL`, sai → không khởi động. Phân luồng theo Host, noindex, header CDN — `docs/DEVOPS-NETWORK.md` §6 (bắt buộc ép Host ở cổng Internet) |
 | `IP_ALLOWLIST` | (DevOps điền khi lên server MISA) | rỗng = không giới hạn | IP/dải IP được truy cập (mạng MISA): IP đơn, CIDR, khoảng `a-b`, IPv4/IPv6; phân tách phẩy/khoảng trắng. Mục sai → không khởi động. Rỗng ở production → log cảnh báo `ip_allowlist_empty`. Xem 08 §Giới hạn IP |
 | `SESSION_SECRET` | ✅ | | ≥ 32 ký tự ngẫu nhiên; cũng là khoá HMAC ký URL ảnh |
 | `SESSION_COOKIE_SECURE` | | true khi production | `true` khi chạy HTTPS. Production **không khởi động** nếu lệch `APP_BASE_URL`: https mà `false`, hoặc http mà `true` |
@@ -119,6 +120,8 @@ Tệp nguồn nằm tạm ở `STORAGE_DIR/uploads` (volume) — khởi động 
 |---|---|
 | `npm test` | Unit (node:test): SSRF, magic bytes, tenantScope, URL ký, chuẩn hoá spec, chống XSS renderer (13 test) |
 | `BASE=http://localhost:8088 node test/smoke/smoke.mjs` | Smoke end-to-end trên server đang chạy: admin cấp tài khoản, CSRF, tạo bài (Gemini thật), cách ly tenant, public/duplicate, lưu + 409, xuất HTML/PDF, admin. In "TẤT CẢ ĐẠT" |
+| `npm run test:integration` | MySQL thật, DB tạm tên duy nhất/tệp (`IT_DB_*`, xem `test/integration/README.md`): race SQL, changelog idempotent, phục hồi bản sao (A04), công khai + bản gốc (A06), dọn smoke (A01), **xuất bản** (publish/cập nhật/gỡ/đồng thời/STALE/admin). Không dựng được DB → FAIL (trừ `IT_OPTIONAL=1`) |
+| `SMOKE_BOOTSTRAP=1 BASE=http://localhost:<APP_PORT> node test/smoke/smoke.mjs` | Smoke trên **compose project riêng** (không chạy vào stack có dữ liệu): tự tạo admin `smoke-admin-<stamp>` mật khẩu ngẫu nhiên, dọn tài khoản `smoke-*-<stamp>` trong `finally` (`scripts/smoke-cleanup.js`). Có sẵn admin → `SMOKE_ADMIN_EMAIL/PASSWORD` (tài khoản tạo ra chỉ bị khoá) |
 | `npm run render:sample` | Render `test/fixtures/sample-spec.json` (14 layout) ra ảnh để soát giao diện |
 
 ## Sao lưu (khuyến nghị — chưa tự động hoá)

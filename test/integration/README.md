@@ -1,13 +1,22 @@
 # Test tích hợp (MySQL thật)
 
-`concurrency.test.js` kiểm các race điều kiện ở mức SQL (F07: hạ quyền admin chéo nhau, trần số người được mời) và tính idempotent của
-changelog (F15). Dùng **database tạm** `<DB_NAME>_it` dựng từ `startup/database/schema.sql`, xoá sau khi chạy — không động vào dữ liệu thật.
-Không kết nối được / không đủ quyền → test tự bỏ qua (skip).
+- `concurrency.test.js`: race ở mức SQL (F07: hạ quyền admin chéo nhau, trần số người được mời) và tính idempotent của changelog (F15).
+- `smoke-cleanup.test.js`: script dọn tài khoản smoke chỉ xoá đúng tài khoản smoke của lần chạy (A01).
+- Các test khác thêm theo từng lỗi (A04 phục hồi bản sao, A06 công khai + bản gốc, Publish…).
 
-Chuẩn bị (Docker local):
+Mỗi tệp dựng **database tạm tên duy nhất** `<DB_NAME>_it_<ngẫu nhiên>` từ `startup/database/schema.sql`, xoá trong `finally` (kể cả khi dựng lỗi giữa chừng) —
+hai runner chạy cùng lúc không xoá DB của nhau, không động vào dữ liệu thật. Helper: `helpers/testDb.mjs`.
+
+**Không dựng được database → test FAIL (exit ≠ 0).** Chỉ khi đặt `IT_OPTIONAL=1` (máy dev) mới chuyển thành skip — không đặt cờ này trong CI/gate.
+Gate cần thấy `# fail 0` **và** `# skipped 0`.
+
+Kết nối bằng tài khoản test riêng có quyền tạo/xoá database (`IT_DB_*`), không cần cấp quyền này cho tài khoản runtime của ứng dụng.
+Thiếu `IT_DB_*` thì lùi về `DB_*` trong `.env`.
+
+Chuẩn bị nhanh bằng MySQL tạm riêng (khuyến nghị):
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d mysql   # mở cổng 127.0.0.1:3307
-docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "GRANT ALL ON \`%\\_it\`.* TO \"$MYSQL_USER\"@\"%\"; FLUSH PRIVILEGES;"'
-DB_HOST=127.0.0.1 DB_PORT=3307 npm run test:integration
+docker run -d --name mp-it-mysql -e MYSQL_ROOT_PASSWORD=<mat-khau-tam> -p 127.0.0.1:33099:3306 mysql:8.4
+IT_DB_HOST=127.0.0.1 IT_DB_PORT=33099 IT_DB_USER=root IT_DB_PASSWORD=<mat-khau-tam> npm run test:integration
+docker rm -f mp-it-mysql
 ```

@@ -17,7 +17,7 @@ function disposition(title, ext) {
   return `attachment; filename="${ascii}.${ext}"; filename*=UTF-8''${encodeURIComponent(base)}.${ext}`;
 }
 
-export function presentationRoutes({ service, templates, sharing, config, limits }) {
+export function presentationRoutes({ service, templates, sharing, publications, config, limits }) {
   const r = Router();
   // Tệp nguồn: ghi thẳng ra đĩa (tổng tới MAX_UPLOAD_MB, không giữ trong RAM); tên tệp do server sinh (UUID).
   const maxSourceBytes = config.limits.maxUploadMb * 1048576;
@@ -170,6 +170,11 @@ export function presentationRoutes({ service, templates, sharing, config, limits
     const nonce = randomBytes(16).toString('base64');
     sendDeckHtml(req, res, await service.preview(req.user, req.params.id, nonce, { edit: req.query.edit === '1' }), nonce);
   });
+
+  /* ---- xuất bản ra domain công khai (chỉ chủ bài) ---- */
+  r.get('/:id/publication', auth, id, async (req, res) => ok(res, await publications.status(req.user, req.params.id)));
+  r.post('/:id/publication', auth, id, limits.publish, async (req, res) => ok(res, await publications.publish(req.user, req.params.id, req.ip)));
+  r.delete('/:id/publication', auth, id, async (req, res) => ok(res, await publications.unpublish(req.user, req.params.id, req.ip)));
 
   /* ---- chia sẻ theo người (chỉ chủ bài) ---- */
   r.get('/:id/shares', auth, id, async (req, res) => ok(res, await sharing.listShares(req.user, req.params.id)));

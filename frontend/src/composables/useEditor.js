@@ -26,6 +26,13 @@ export function useEditor(id, { onOutline } = {}) {
   // Phiên bản máy chủ mà BẢN NHÁP xuất phát từ đó. Lưu luôn gửi phiên bản này (không phải phiên bản mới nhất của `deck`):
   // nếu người khác đã lưu trong lúc mình sửa thì máy chủ trả 409 thay vì bị ghi đè lặng lẽ.
   let draftVersion = null;
+  // Mọi yêu cầu ghi (lưu, đổi tỷ lệ/chia sẻ) chạy tuần tự: phản hồi không thể về ngược thứ tự và đè nhau.
+  let chain = Promise.resolve();
+  const serial = (task) => {
+    const run = chain.then(task, task);
+    chain = run.catch(() => {});
+    return run;
+  };
 
   const dirty = computed(() => !!draft.value && JSON.stringify({ t: draft.value.title, s: draft.value.spec }) !== baseline.value);
   const slide = computed(() => draft.value?.spec?.slides?.[selected.value] || null);
@@ -94,6 +101,10 @@ export function useEditor(id, { onOutline } = {}) {
     if (!draft.value || saving.value) return false;
     saving.value = true;
     saveError.value = null;
+    return serial(saveNow);
+  }
+
+  async function saveNow() {
     try {
       const spec = prepareSpecForSave(draft.value.spec);
       spec.title = draft.value.title.trim() || spec.title;
@@ -127,16 +138,20 @@ export function useEditor(id, { onOutline } = {}) {
   }
 
   // Đổi thuộc tính lưu ngay (tỷ lệ, chia sẻ) — không làm mất bản nháp nội dung đang sửa.
-  async function updateMeta(fields) {
-    const keep = dirty.value ? clone(draft.value) : null;
-    const keepVersion = draftVersion;
-    adopt((await patch(`/api/presentations/${id}`, fields)).data);
-    if (keep) {
-      // Bản nháp vẫn xuất phát từ phiên bản cũ: nếu người khác đã lưu trong lúc đó, lần lưu sau phải báo xung đột.
-      draft.value = keep;
-      draftVersion = keepVersion;
-    }
-    if (fields.ratio) previewKey.value = Date.now();
+  function updateMeta(fields) {
+    return serial(async () => {
+      const res = (await patch(`/api/presentations/${id}`, fields)).data;
+      // Xét bản nháp LÚC PHẢN HỒI VỀ (người dùng có thể gõ thêm trong lúc chờ), không phải lúc gửi.
+      const keep = dirty.value ? clone(draft.value) : null;
+      const keepVersion = draftVersion;
+      adopt(res);
+      if (keep) {
+        // Bản nháp vẫn xuất phát từ phiên bản cũ: nếu người khác đã lưu trong lúc đó, lần lưu sau phải báo xung đột.
+        draft.value = keep;
+        draftVersion = keepVersion;
+      }
+      if (fields.ratio) previewKey.value = Date.now();
+    });
   }
 
   /* ---- thao tác slide ---- */

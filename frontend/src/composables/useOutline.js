@@ -159,7 +159,12 @@ export function useOutline(id, { onReady } = {}) {
     }
     saving.value = true;
     try {
-      adopt((await put(`/api/presentations/${id}/outline`, { outline: prepare(), outlineVersion: deck.value.outlineVersion })).data);
+      const sent = JSON.stringify(draft.value);
+      const res = (await put(`/api/presentations/${id}/outline`, { outline: prepare(), outlineVersion: deck.value.outlineVersion })).data;
+      // Gõ thêm trong lúc chờ phản hồi → giữ bản nháp mới (nền = bản vừa lưu, nên vẫn "chưa lưu").
+      const typed = JSON.stringify(draft.value) !== sent ? clone(draft.value) : null;
+      adopt(res);
+      if (typed && res.status === 'outline') draft.value = typed;
       return true;
     } catch (err) {
       saveError.value = err;
@@ -180,9 +185,11 @@ export function useOutline(id, { onReady } = {}) {
     building.value = true;
     try {
       const body = { outlineVersion: deck.value.outlineVersion };
+      const sent = JSON.stringify(draft.value);
       if (dirty.value) body.outline = prepare();
       await post(`/api/presentations/${id}/build`, body);
-      baseline.value = JSON.stringify(draft.value);
+      // Nền = đúng bản đã gửi; chữ gõ thêm trong lúc chờ không bị coi là đã lưu.
+      baseline.value = sent;
       deck.value = { ...deck.value, status: 'generating', errorMessage: null };
       schedulePoll();
       return true;

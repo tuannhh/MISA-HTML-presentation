@@ -1,5 +1,22 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-12 — Chặng A bổ sung (A01–A06) + Xuất bản ra web (domain công khai)
+
+**A01–A06** (review Codex `docs/audits/2026-10-12-codex/09-review-chang-a-codex.md` §5), mỗi mục đỏ → xanh:
+- A01 smoke: `test/smoke/provision.mjs` — admin tạm `smoke-admin-<stamp>` mật khẩu ngẫu nhiên (`SMOKE_BOOTSTRAP=1`, chỉ khi `BASE` trùng cổng compose local) hoặc admin có sẵn (`SMOKE_ADMIN_*`, chỉ khoá tài khoản tạo ra); dọn trong `finally` bằng `scripts/smoke-cleanup.js <stamp>` (xoá user `smoke-*-<stamp>` + thư mục tenant, audit `admin.smoke_cleanup`). `scripts/lib/smokeAccounts.js`; Dockerfile chép 2 script. Test `smoke-provision` (unit) + `smoke-cleanup` (integration).
+- A02 giao diện: `useEditor` chạy mọi ghi qua `serial()`; `updateMeta` xét bản nháp lúc phản hồi về và giữ `draftVersion`; `useOutline.save` giữ chữ gõ thêm. 4 test mới trong `editor-sync.test.js`.
+- A03 hàng đợi: `Semaphore.reserve()` + vé; `presentationService.create/build` giữ chỗ trước mọi `await`, lỗi DB/audit trả chỗ; `queueStats` có `reserved`. `queue-admission.test.js` (burst 50 → đúng 2+20).
+- A04 restart: `failStaleGenerating` đưa bản sao dở về `failed` trước luật dàn ý. `recovery.test.js`.
+- A05 integration: `test/integration/helpers/testDb.mjs` — DB tạm tên duy nhất, teardown `finally`, không dựng được DB → FAIL (trừ `IT_OPTIONAL=1`); README viết lại.
+- A06 công khai: `updateOwned` khoá dòng bài + chụp bản gốc cùng giao dịch (`insertBaseline` dùng chung); test lộ thêm deadlock bật công khai song song + mời người → đã hết. `public-baseline.test.js` (4 test).
+- `memory-bank/README.md`: chuẩn backend ghi MISA Backend Standard (xoan là bản thay thế) — F21.
+
+**Xuất bản ra web** (`05` §17, `08`, `docs/DEVOPS-NETWORK.md` §6): bảng `publications` (changelog `20261012_100000`, `REQUIRED_*`), `PUBLISH_BASE_URL` (trống = tắt; DevOps đặt sau), phân luồng theo Host trước `IP_ALLOWLIST`, noindex + robots, header CDN (HTML 60s trình duyệt/300s CDN + ETag; media immutable), ảnh chụp tĩnh + media chép theo revision, chỉ chủ bài, admin liệt kê/gỡ (API), `PublishSection` trong SharePanel (desktop + mobile). Theo phản hồi DevOps: (1) phân luồng theo domain, (2) chặn Google index, (3) mặc định có CDN.
+- Test: `publish-site.test.js` (unit 5: slug, cấu hình, phân luồng qua `createApp` thật với IP_ALLOWLIST chặn 127.0.0.1, header, 301/304, media revision cũ 404) + `publish.test.js` (integration 8: vòng đời, không URL nội bộ trong HTML, chỉ chủ, tắt, khoá tài khoản/xoá bài, 6 lần song song, 6 lần xuất bản **đầu** song song — lộ lỗi HTML trỏ media theo mã sai (đỏ 3/3 → sửa `CODE_CHANGED` → xanh), STALE, admin). Windows: `rm` thư mục vừa ghi đôi khi EBUSY/ENOTEMPTY → `removePrefix` thử lại (`maxRetries`) và ghi log thay vì nuốt lỗi. Gài lỗi thử (bỏ kiểm `spec_version`, bỏ điều kiện chủ còn active, bỏ xoá revision cũ) → 4 test đỏ.
+- Chạy thật trên trình duyệt (server local + MySQL tạm, `pub.localhost`): xuất bản → trang mở được, ảnh tải từ domain công khai, không lỗi CSP; gỡ → 404; mobile 375px hiển thị đúng; xuất bản lại giữ link.
+- Kiểm chứng cuối: unit 190 (189 pass, 1 skip thiếu `pdftoppm`); integration 18/18 × 3 lần (sau đó `publish.test.js` 8/8 × 5 với test lần đầu song song); `npm run build` đạt; **smoke HTTP + Gemini thật trên compose project riêng** (`-p mpsmoke`, cổng 8099, image tag riêng để không ghi đè `misa-presentation:latest`) → "TẤT CẢ ĐẠT", tự dọn 4 tài khoản smoke, `--list` còn 0; phân luồng Host trong container: domain công khai chỉ `robots.txt` 200, `/`, `/api/*` 404 noindex. Đã gỡ stack/volume/image smoke và MySQL tạm.
+- Chưa làm: màn admin cho danh sách xuất bản (đã có API); thử kill/restart Docker thật cho A04; đo tải trang công khai.
+
 ## 2026-10-12 — Bỏ mọi hạn mức tần suất theo IP
 
 - Chủ dự án chốt: người dùng buộc phải ở trong mạng MISA hoặc VPN MISA nên chung 1 IP; lớp mạng/VPN MISA đã kiểm soát truy cập → bỏ giới hạn theo IP. Trả lời luôn điểm Codex nêu (09 §4: 500 người × 60 req/phút chạm trần IP 30000).

@@ -1,6 +1,7 @@
 <script setup>
 // Chia sẻ bài (chỉ chủ bài) — dùng chung desktop (trong MDialog) và mobile (trong FullScreenSheet, compact).
 //  - Công khai: mọi người dùng XEM được bản trình chiếu (tải và nhân bản về bài của họ) — không ai sửa được bài gốc.
+//  - Xuất bản ra web: trang công khai trên domain riêng, ai có link đều xem được (PublishSection).
 //  - Mời từng người theo email: Chỉ xem / Chỉnh sửa. Người sửa lưu thẳng vào bài và handoff phiên bản; không xoá, không chia sẻ tiếp, không khôi phục.
 // Chế độ công khai do trang cha thực hiện (setVisibility) vì trang đang giữ dữ liệu bài.
 import { computed, onMounted, ref } from 'vue'
@@ -12,6 +13,7 @@ import MIcon from '@/components/mds/MIcon.vue'
 import MTag from '@/components/mds/MTag.vue'
 import MSpinner from '@/components/mds/MSpinner.vue'
 import FormAlert from '@/shared/FormAlert.vue'
+import PublishSection from '@/shared/PublishSection.vue'
 import { useToast } from '@/components/mds/toast.js'
 import { useSharing, SHARE_ROLE_OPTIONS } from '@/composables/useSharing.js'
 import { session } from '@/lib/session.js'
@@ -100,6 +102,9 @@ onMounted(sh.load)
       </div>
       <MSwitch :model-value="visibility === 'public'" :disabled="visBusy" aria-label="Công khai cho mọi người dùng xem" @update:model-value="onVisibility" />
     </section>
+
+    <!-- Xuất bản ra web (domain công khai) -->
+    <PublishSection :deck-id="deckId" :compact="compact" />
 
     <!-- Mời người -->
     <section class="flex flex-col gap-2">

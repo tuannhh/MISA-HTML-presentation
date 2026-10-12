@@ -75,11 +75,19 @@
 - Log `config_loaded` che secret `***`; log HTTP không ghi query string (chứa chữ ký ảnh); audit không ghi mật khẩu/token.
 - Lỗi 500 trả thông điệp chung; stack trace chỉ có trong log server.
 
+## Domain công khai — xuất bản ra web (2026-10-12)
+- Request có `Host` = `PUBLISH_BASE_URL` đi vào `publicSiteRoutes` (mount ngay sau helmet, **trước** `IP_ALLOWLIST`) và **kết thúc ở đó**: chỉ `/<slug>-<code>`, `/m/<code>/<revision>/<file>`, `/robots.txt`; còn lại 404 — không tới API/SPA/phông, không session/cookie. Domain nội bộ không bao giờ trả trang xuất bản. Cấu hình bắt buộc khác domain `APP_BASE_URL`.
+- `Host` do client gửi → cổng Internet (CDN/Nginx vhost công khai) **phải ép Host** = domain công khai; nếu không, người ngoài gửi Host nội bộ sẽ vào luồng nội bộ (còn đăng nhập + `IP_ALLOWLIST`). Ghi rõ trong `docs/DEVOPS-NETWORK.md` §6.3.
+- HTML công khai do renderer sinh (mọi dữ liệu qua `esc()`); CSP riêng: `default-src 'none'`, script/style chỉ nonce lưu cùng revision (trang tĩnh, CDN cache được nên nonce cố định), `img/media-src 'self'`, `frame-src` YouTube nocookie, `connect-src 'none'`, `frame-ancestors 'none'`. Không chứa URL ký/`/api/`/id tenant (test tích hợp kiểm). Media trả kèm `CSP: default-src 'none'; sandbox`; tên tệp chỉ khớp `<uuid>.(webp|png|jpg|gif|mp4|webm|mov)`, revision `[0-9a-f]{16}` và phải là revision **đang** công khai.
+- Chặn lập chỉ mục (công cụ nội bộ): mọi phản hồi `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex` + `robots.txt` `Disallow: /`.
+- Chỉ chủ bài xuất bản/gỡ; admin chỉ thấy bài **đang công khai** (dữ liệu vốn đã công khai) và gỡ được. Audit `presentation.publish|republish|unpublish`, `admin.unpublish`.
+- Không giới hạn tần suất theo IP ở domain công khai (nhất quán quyết định chung) → chống lụt từ Internet đặt ở CDN/Nginx.
+
 ## Rate limit
 
 **Hạn mức không dựa vào IP** (2026-10-11 F04; 2026-10-12 bỏ hẳn tầng IP theo chủ dự án): người dùng buộc phải ở trong mạng MISA hoặc VPN MISA nên chung 1 IP, và lớp mạng/VPN MISA đã kiểm soát truy cập → không giới hạn theo IP. `api` (sau `loadUser`) chỉ đếm người đã đăng nhập, khoá `u:<userId>` 600/phút (`RATE_LIMIT_USER_PER_MIN`); yêu cầu chưa đăng nhập không đếm. Đăng nhập: 10 lần/15 phút theo email. Các hạn mức nghiệp vụ (tạo bài, ảnh AI, PDF, chia sẻ…) theo `req.user.id`, đều đặt sau `auth`. `IP_ALLOWLIST` là tuỳ chọn kiểm soát truy cập riêng, không phải hạn mức — giữ, mặc định trống.
 
-Xem `04-api-reference.md` — API chung, đăng nhập, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube; handoff dùng chung bucket này), mời người chia sẻ (`share` — chống dò email), xuất PDF (bảo vệ CPU Chromium). Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503. Ảnh AI: `aiImage` 40 lượt/10 phút/người + hàng đợi `AI_IMAGES_CONCURRENCY`, quá 12 chờ → 503; tìm ảnh: `imageSearch` 40/phút.
+Xem `04-api-reference.md` — API chung, đăng nhập, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube; handoff dùng chung bucket này), mời người chia sẻ (`share` — chống dò email), xuất PDF (bảo vệ CPU Chromium). Xuất bản ra web: `publish` 30 lượt/10 phút/người. Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503 (giữ chỗ đồng bộ trước mọi `await` — A03, `09`). Ảnh AI: `aiImage` 40 lượt/10 phút/người + hàng đợi `AI_IMAGES_CONCURRENCY`, quá 12 chờ → 503; tìm ảnh: `imageSearch` 40/phút.
 
 ## Nguồn bên ngoài (ảnh Internet)
 
@@ -88,7 +96,7 @@ Xem `04-api-reference.md` — API chung, đăng nhập, tạo bài + dựng bài
 
 ## Kiểm toán
 
-`audit_logs` ghi: đăng nhập (thành công/thất bại), đổi mật khẩu, tạo/dựng (`presentation.build`)/xoá/nhân bản bài, đổi chế độ chia sẻ, mời/đổi quyền/gỡ người (`presentation.share_*`), người được mời sửa lưu bài (`presentation.shared_edit`, meta `owner`), handoff/xoá handoff/khôi phục, xuất HTML/PDF, mọi thao tác admin.
+`audit_logs` ghi: đăng nhập (thành công/thất bại), đổi mật khẩu, tạo/dựng (`presentation.build`)/xoá/nhân bản bài, đổi chế độ chia sẻ, mời/đổi quyền/gỡ người (`presentation.share_*`), người được mời sửa lưu bài (`presentation.shared_edit`, meta `owner`), handoff/xoá handoff/khôi phục, xuất HTML/PDF, xuất bản/cập nhật/gỡ xuất bản ra web, mọi thao tác admin (kể cả `admin.unpublish`, `admin.smoke_cleanup`).
 
 ## Trình chiếu từng ý / 3D (2026-10-06)
 - Tin `deck:step`/`deck:cmd` vào khung chỉ mang hướng (`±1`) hoặc lệnh trong allowlist (`black`, `esc`) — engine bỏ qua giá trị khác. `deck:slide` gửi ra thêm `step/steps` là số nguyên.

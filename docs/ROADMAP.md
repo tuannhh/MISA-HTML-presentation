@@ -5,7 +5,9 @@ Nguồn: review chặng A của Codex ([09-review-chang-a-codex.md](audits/2026-
 
 Thứ tự: **A bổ sung → P (Publish) → B → Gate DevOps → C (khi có số đo)**. Mỗi sửa lỗi theo đỏ → xanh: test tái hiện trước, xác nhận đỏ, sửa, xác nhận xanh.
 
-## A bổ sung — sửa 6 điểm Codex chỉ ra (A01–A06)
+## A bổ sung — sửa 6 điểm Codex chỉ ra (A01–A06) — ✅ xong 12/10/2026
+
+Đã sửa cả 6 mục theo đỏ → xanh (chi tiết `memory-bank/10-development-history.md`). Còn: smoke HTTP chạy trên compose project riêng; thử kill/restart Docker thật cho A04.
 
 | # | Mức | Việc | Điều kiện đóng |
 |---|---|---|---|
@@ -43,11 +45,11 @@ Sau vòng này: chạy toàn bộ unit, integration trên DB riêng, smoke trên
 - **Audit:** `presentation.publish` / `republish` / `unpublish`.
 - **Test:** quyền (chủ/người sửa/người xem/admin), snapshot không đổi khi sửa bài, gỡ → 404, đổi tên vẫn mở, host nội bộ không lộ qua domain public, HTML công khai không chứa tham chiếu tới API/asset ký nội bộ.
 
-### Cần chủ dự án / DevOps chốt trước khi làm
-1. Tên domain public (vd. `slides.misa.vn`) và cách triển khai (1 hay 2 ở trên).
-2. Snapshot thủ công (đề xuất) hay tự cập nhật mỗi lần lưu?
-3. Có cần hết hạn link / mật khẩu xem / đếm lượt xem không? (đề xuất để sau)
-4. Cho phép công cụ tìm kiếm index không? (đề xuất `noindex`)
+### Đã chốt và đã làm (12/10/2026) — ✅
+- DevOps: **phân luồng theo domain** (cách 1), **chặn Google index**, **mặc định có CDN**. Tên domain để DevOps đặt sau qua `PUBLISH_BASE_URL` (trống = tính năng tắt).
+- Snapshot thủ công ("Cập nhật bản xuất bản"); gỡ rồi xuất bản lại giữ link. Hết hạn link / mật khẩu xem / đếm lượt xem / "Đổi link": để sau.
+- Hướng dẫn DevOps: `docs/DEVOPS-NETWORK.md` §6 (bắt buộc **ép Host** ở cổng Internet, header CDN, purge khi gỡ gấp).
+- Còn: màn admin cho danh sách xuất bản (API `GET/DELETE /api/admin/publications` đã có); đo tải trang công khai qua CDN.
 
 ## B — Lưới kiểm thử luồng chính + đo tải
 
@@ -57,7 +59,7 @@ Sau vòng này: chạy toàn bộ unit, integration trên DB riêng, smoke trên
 
 ## Gate bàn giao DevOps (trước production, không đợi C)
 
-HTTPS/cookie Secure + proxy kiểm thực; backup + **thử restore DB và storage cùng nhau**; RPO/RTO; runbook (khởi động, nâng schema, rollback, sự cố hàng đợi/đĩa/DB); cảnh báo cơ bản (lỗi, RAM, đĩa, job treo); cấu hình domain public của tính năng P.
+HTTPS/cookie Secure + proxy kiểm thực; backup + **thử restore DB và storage cùng nhau**; RPO/RTO; runbook (khởi động, nâng schema, rollback, sự cố hàng đợi/đĩa/DB); cảnh báo cơ bản (lỗi, RAM, đĩa, job treo); cấu hình domain public của tính năng P (`PUBLISH_BASE_URL` + vhost ép Host + CDN — `docs/DEVOPS-NETWORK.md` §6).
 
 ## C — Chỉ mở khi có số đo hoặc yêu cầu mới
 

@@ -2,6 +2,8 @@
 // = của tôi HOẶC (ready + (public HOẶC được chủ bài mời qua presentation_shares)).
 // Không hàm nào cho phép đọc bản private của tenant khác khi chưa được mời.
 import { tenantClause, assertTenantId } from './tenantScope.js';
+import { withTransaction } from '../db/pool.js';
+import { insertBaseline } from './versionRepository.js';
 
 // Quyền của người xem trên 1 dòng đọc được: chủ bài | được mời sửa | chỉ xem (được mời xem hoặc bài công khai).
 export function accessRole(row, userId) {
@@ -21,6 +23,39 @@ function parseSpec(row) {
 
 function escapeLike(q) {
   return q.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
+
+// Ghi các trường được phép của bài (db: pool hoặc kết nối trong giao dịch). Trả số dòng đổi (0 = sai phiên bản/không thấy).
+async function applyUpdate(db, tenantId, id, fields, expectedVersion) {
+  const t = tenantClause(tenantId);
+  const sets = [];
+  const params = [];
+  if (fields.title !== undefined) {
+    sets.push('title = ?');
+    params.push(fields.title);
+  }
+  if (fields.ratio !== undefined) {
+    sets.push('ratio = ?');
+    params.push(fields.ratio);
+  }
+  if (fields.visibility !== undefined) {
+    sets.push('visibility = ?');
+    params.push(fields.visibility);
+    sets.push(fields.visibility === 'public' ? 'published_at = COALESCE(published_at, CURRENT_TIMESTAMP(3))' : 'published_at = NULL');
+  }
+  if (fields.spec !== undefined) {
+    sets.push('spec = ?', 'slide_count = ?', 'spec_version = spec_version + 1');
+    params.push(JSON.stringify(fields.spec), fields.spec.slides.length);
+  }
+  if (!sets.length) return 1;
+  let where = `id = ? AND ${t.sql}`;
+  const whereParams = [id, ...t.params];
+  if (expectedVersion !== undefined) {
+    where += ' AND spec_version = ?';
+    whereParams.push(expectedVersion);
+  }
+  const [res] = await db.execute(`UPDATE presentations SET ${sets.join(', ')} WHERE ${where}`, [...params, ...whereParams]);
+  return res.affectedRows;
 }
 
 export function createPresentationRepository(pool) {
@@ -138,36 +173,18 @@ export function createPresentationRepository(pool) {
     },
 
     // Cập nhật có khoá lạc quan khi đổi spec. Trả số dòng bị ảnh hưởng (0 = không thấy / xung đột).
-    async updateOwned(tenantId, id, fields, expectedVersion) {
-      const t = tenantClause(tenantId);
-      const sets = [];
-      const params = [];
-      if (fields.title !== undefined) {
-        sets.push('title = ?');
-        params.push(fields.title);
-      }
-      if (fields.ratio !== undefined) {
-        sets.push('ratio = ?');
-        params.push(fields.ratio);
-      }
-      if (fields.visibility !== undefined) {
-        sets.push('visibility = ?');
-        params.push(fields.visibility);
-        sets.push(fields.visibility === 'public' ? 'published_at = COALESCE(published_at, CURRENT_TIMESTAMP(3))' : 'published_at = NULL');
-      }
-      if (fields.spec !== undefined) {
-        sets.push('spec = ?', 'slide_count = ?', 'spec_version = spec_version + 1');
-        params.push(JSON.stringify(fields.spec), fields.spec.slides.length);
-      }
-      if (!sets.length) return 1;
-      let where = `id = ? AND ${t.sql}`;
-      const whereParams = [id, ...t.params];
-      if (expectedVersion !== undefined) {
-        where += ' AND spec_version = ?';
-        whereParams.push(expectedVersion);
-      }
-      const [res] = await pool.execute(`UPDATE presentations SET ${sets.join(', ')} WHERE ${where}`, [...params, ...whereParams]);
-      return res.affectedRows;
+    // baselineBy: lần bật công khai — đổi trạng thái + chụp bản gốc trong CÙNG giao dịch (khoá dòng bài), chụp lỗi thì không công khai (A06).
+    // Bản gốc là nội dung SAU yêu cầu này (kể cả khi cùng yêu cầu có sửa nội dung).
+    async updateOwned(tenantId, id, fields, expectedVersion, { baselineBy } = {}) {
+      if (!baselineBy) return applyUpdate(pool, tenantId, id, fields, expectedVersion);
+      return withTransaction(pool, async (conn) => {
+        const t = tenantClause(tenantId);
+        const [[row]] = await conn.execute(`SELECT id FROM presentations WHERE id = ? AND ${t.sql} FOR UPDATE`, [id, ...t.params]);
+        if (!row) return 0;
+        const affected = await applyUpdate(conn, tenantId, id, fields, expectedVersion);
+        if (affected) await insertBaseline(conn, id, baselineBy);
+        return affected;
+      });
     },
 
     async createCopy(tenantId, p) {
@@ -254,17 +271,24 @@ export function createPresentationRepository(pool) {
       return res.affectedRows;
     },
 
-    // Tiến trình chết giữa chừng (mất điện, redeploy): đang lập dàn ý → lỗi (tệp nguồn đã mất);
-    // đang dựng bài mà đã có dàn ý → quay về bước duyệt dàn ý để bấm dựng lại.
+    // Tiến trình chết giữa chừng (mất điện, redeploy):
+    //  - bản sao đang chép media (source_kind='copy') → lỗi, nhân bản lại từ bài gốc. KHÔNG đưa về bước dàn ý: dàn ý của bản sao
+    //    trỏ tới media chưa chép xong, "Dựng bài" sẽ cho AI dựng lại và lặng lẽ bỏ ảnh thiếu (A04). Tệp đã chép dở xoá cùng bài khi người dùng xoá;
+    //  - đang dựng bài AI mà đã có dàn ý → quay về bước duyệt dàn ý để bấm dựng lại;
+    //  - đang lập dàn ý → lỗi (tệp nguồn đã mất).
     async failStaleGenerating() {
+      const [c] = await pool.execute(
+        `UPDATE presentations SET status = 'failed', error_message = 'Sao chép bị gián đoạn do máy chủ khởi động lại. Xoá bản này rồi nhân bản lại từ bài gốc.'
+          WHERE status = 'generating' AND source_kind = 'copy'`,
+      );
       const [a] = await pool.execute(
         `UPDATE presentations SET status = 'outline', error_message = 'Quá trình dựng bị gián đoạn do máy chủ khởi động lại. Bấm "Dựng bài" để thử lại.'
-          WHERE status = 'generating' AND outline IS NOT NULL`,
+          WHERE status = 'generating' AND outline IS NOT NULL AND source_kind <> 'copy'`,
       );
       const [b] = await pool.execute(
         "UPDATE presentations SET status = 'failed', error_message = 'Quá trình tạo bị gián đoạn do máy chủ khởi động lại. Vui lòng tạo lại.' WHERE status IN ('generating', 'outlining')",
       );
-      return a.affectedRows + b.affectedRows;
+      return c.affectedRows + a.affectedRows + b.affectedRows;
     },
   };
 }

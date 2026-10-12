@@ -418,3 +418,15 @@ Chủ dự án: sơ đồ tổ chức / lộ trình dạng đơn giản thì **v
 - Đã kiểm AI thật (Docker): ảnh PNG sơ đồ tổ chức + ảnh lộ trình + ghi chú → trang `org` (3 nhánh, 10 mục đúng nguyên văn) + trang `timeline` (5 mốc), không trang ảnh thừa;
   PDF có sơ đồ tổ chức ở trang 2 → trang `org` đúng nguyên văn.
 
+## 17. Xuất bản ra web — domain công khai (2026-10-12)
+
+Giống "Xuất bản" của CMS: chủ bài bấm **Xuất bản** → link `<PUBLISH_BASE_URL>/<slug>-<mã 8 ký tự>` ai cũng xem được (kể cả ngoài MISA, không đăng nhập). Code: `services/publicationService.js`, `repositories/publicationRepository.js`, `routes/publicSiteRoutes.js`, `lib/slug.js`; giao diện `shared/PublishSection.vue` trong `SharePanel` (desktop + mobile).
+
+- **Chỉ chủ bài** xuất bản/cập nhật/gỡ (người được mời sửa/xem → 404 như các thao tác chủ khác). Admin xem danh sách trang đang công khai và gỡ khi vi phạm.
+- **Ảnh chụp tĩnh**: `presentations.renderForPublish` dựng HTML `mode:'present'` từ **bản đang lưu** (phông + 3D nhúng; ảnh/video trỏ `/m/<code>/<revision>/<asset>.<ext>` thay vì base64) trong hàng xuất (`exportQueue`, cùng trần `QUEUE_FULL`). Chỉ media spec đang dùng và có loại trình duyệt phát được (`PUBLISH_MEDIA_EXT`) được **chép** sang `tenants/<t>/presentations/<id>/published/<revision>/` cùng `index.html`. Sửa/xoá ảnh trong thư viện bài sau đó không ảnh hưởng trang công khai.
+- **Thứ tự ghi**: chép tệp vào revision mới → `publications.save` (giao dịch, `FOR UPDATE` dòng bài; `spec_version` lệch với lúc dựng → 409 `PUBLISH_STALE`; bài đã xoá → 404) → xoá revision cũ. Lỗi trước khi ghi DB → xoá thư mục mới, trang cũ nguyên vẹn. Xuất bản song song: bản commit sau thắng, mỗi bản xoá revision trước nó → còn đúng 1 revision.
+- **Mã**: sinh lần đầu (`newShortCode`, trùng → dựng lại với mã khác, tối đa 5 lần; 2 lần xuất bản đầu song song → bản sau nhận `CODE_CHANGED` và dựng lại với mã đã chốt, vì URL media trong HTML chứa mã); **giữ nguyên** qua cập nhật/gỡ/xuất bản lại. Slug = `publicSlug(title)` (bỏ dấu, `đ→d`, `[a-z0-9-]`, ≤ 80, rỗng → `bai-trinh-bay`) cập nhật mỗi lần xuất bản; slug sai/cũ → 301.
+- **Gỡ**: `status='unpublished'`, xoá tệp revision; link 404 (CDN có thể còn ≤ ~5 phút nếu không purge). Xoá bài → FK cascade + `removePrefix` thư mục bài. Khoá tài khoản chủ bài → trang ngừng hiện (truy vấn công khai đòi `users.status='active'`).
+- **"Có thay đổi chưa cập nhật"**: `publications.spec_version` ≠ `presentations.spec_version`.
+- **Tắt** khi `PUBLISH_BASE_URL` trống: `GET` trả `enabled:false`, `POST` → 503 `PUBLISH_DISABLED`; giao diện hiện "Chưa cấu hình domain công khai".
+- Phân luồng domain, CSP, CDN, noindex: `08` §Domain công khai, `04` cuối tệp, `docs/DEVOPS-NETWORK.md` §6.

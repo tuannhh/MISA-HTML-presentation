@@ -41,6 +41,8 @@ Trong `.env`: `TRUST_PROXY=1`, `APP_BASE_URL` = địa chỉ qua proxy; chạy H
 
 Ứng dụng chạy trên máy chủ MISA, chỉ IP trong `IP_ALLOWLIST` (`.env`) được truy cập; để trống = chưa giới hạn. Hướng dẫn cho DevOps (điền IP, `TRUST_PROXY`, kiểm tra, danh sách tên miền máy chủ cần gọi ra ngoài, checklist): [`docs/DEVOPS-NETWORK.md`](docs/DEVOPS-NETWORK.md).
 
+**Xuất bản ra web** (link công khai `/<ten-bai>-<8 ký tự>` ai cũng xem được): bật bằng `PUBLISH_BASE_URL` = domain công khai riêng (trống = tắt). Phân luồng theo domain, chặn lập chỉ mục, sẵn sàng cho CDN — DevOps làm theo [`docs/DEVOPS-NETWORK.md` §6](docs/DEVOPS-NETWORK.md#6-domain-công-khai-cho-tính-năng-xuất-bản-ra-web) (bắt buộc ép `Host` ở cổng Internet).
+
 ## Phát triển
 
 ```bash

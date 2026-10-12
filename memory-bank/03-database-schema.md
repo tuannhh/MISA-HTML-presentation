@@ -116,6 +116,27 @@ Chỉ mục: `(user_id, updated_at)` cho trang "Được chia sẻ với tôi". 
 
 Chỉ mục: `(presentation_id, kind, created_at)`. Tối đa 5 handoff/bài: kiểm trong transaction có `SELECT … FOR UPDATE` dòng bài (`versionRepository.createHandoff`) — không có ràng buộc DB riêng.
 
+### Bảng: `publications`
+
+Xuất bản bài ra **domain công khai** (`05` §17). Tối đa **1 dòng/bài**; gỡ xuất bản giữ dòng (và mã) để xuất bản lại dùng cùng link.
+
+| Cột | Kiểu | Ràng buộc | Ý nghĩa |
+|---|---|---|---|
+| id | CHAR(36) | PK | |
+| presentation_id | CHAR(36) | UNIQUE, FK → presentations ON DELETE CASCADE | Xoá bài → xoá bản xuất bản (tệp nằm trong thư mục bài nên `removePrefix` dọn luôn) |
+| tenant_id | CHAR(36) | FK → users ON DELETE CASCADE | Chủ bài |
+| code | CHAR(8) | UNIQUE | Mã `[a-z0-9]` riêng của bản xuất bản (khác `short_code` nội bộ) — khoá thật của URL `/<slug>-<code>` |
+| slug | VARCHAR(120) | | Tên bài không dấu lúc xuất bản gần nhất (chỉ để đọc; sai → 301) |
+| title | VARCHAR(200) | | |
+| status | ENUM('published','unpublished') | | |
+| revision | CHAR(16) | | Thư mục ảnh chụp hiện tại `tenants/<t>/presentations/<id>/published/<revision>/` (index.html + media); mỗi lần cập nhật 1 revision mới, revision cũ bị xoá |
+| csp_nonce | CHAR(24) | | Nonce của script/style trong HTML đã chụp (trang tĩnh → nonce cố định theo revision) |
+| spec_version | INT UNSIGNED | | `spec_version` của bài lúc chụp → so với bài hiện tại để báo "có thay đổi chưa cập nhật" |
+| published_by | CHAR(36) | NULL, FK → users ON DELETE SET NULL | |
+| published_at / unpublished_at | DATETIME(3) | | |
+
+Chỉ mục: `(status, published_at)` cho danh sách admin. Trang công khai chỉ hiện khi `status='published'` **và** chủ bài còn `active`.
+
 ### Bảng: `sessions`
 
 Store của express-session (`MySqlSessionStore`): `session_id` PK, `expires` (ms epoch, có index), `data` MEDIUMTEXT. Dọn phiên hết hạn mỗi 15 phút.
@@ -135,6 +156,7 @@ users 1 ──< presentations 1 ──< assets
   (xoá user → xoá bài → xoá asset trong DB; tệp trên đĩa dọn bằng storage.removePrefix khi xoá bài qua API)
 presentations 1 ──< presentation_shares >── 1 users        (xoá bài / người được mời → xoá quyền)
 presentations 1 ──< presentation_versions                   (xoá bài → xoá phiên bản; xoá người chụp → created_by NULL)
+presentations 1 ── 0..1 publications                        (xoá bài → xoá bản xuất bản; tệp ở thư mục bài)
 users 1 ──< design_templates 1 ──< template_assets
   (ảnh mẫu ⇄ ảnh bài chỉ liên hệ bằng SAO CHÉP khi lưu/áp mẫu — không có FK chéo)
 ```
@@ -146,4 +168,5 @@ users 1 ──< design_templates 1 ──< template_assets
 - 2026-10-05 (`changelog_database_20261005_170000.sql`, idempotent): trạng thái `outlining`/`outline`, cột `outline` + `outline_version`, asset kind `video`/`logo`/`poster`. Baseline `schema.sql` đã gồm sẵn.
 - 2026-10-06 (`changelog_database_20261006_090000.sql`, idempotent): cột `presentations.short_code` + backfill mã ngẫu nhiên cho bài cũ + unique key `uq_presentations_code`. Có trong `REQUIRED_CHANGELOGS` (app từ chối khởi động nếu chưa chạy). Baseline đã gồm sẵn.
 - 2026-10-06 (`changelog_database_20261006_200000.sql`, idempotent — `MODIFY` ENUM chỉ khi chưa có `'brand'`, `CREATE TABLE IF NOT EXISTS`): asset kind `brand`, bảng `design_templates` + `template_assets`. Có trong `REQUIRED_CHANGELOGS`; baseline đã gồm sẵn. Đã chạy 2 lần trên MySQL Docker để kiểm idempotent.
+- 2026-10-12 (`changelog_database_20261012_100000.sql`, idempotent — `CREATE TABLE IF NOT EXISTS`): bảng `publications` (xuất bản ra domain công khai). Có trong `REQUIRED_CHANGELOGS` + `REQUIRED_TABLES`; baseline đã gồm sẵn.
 - 2026-10-07 (`changelog_database_20261007_100000.sql`, idempotent — `CREATE TABLE IF NOT EXISTS`, seed `INSERT … WHERE NOT EXISTS`): bảng `presentation_shares` + `presentation_versions`; tạo **bản gốc** cho các bài đang công khai + ready chưa có bản gốc (để "khôi phục mặc định" dùng được ngay với bài đã chia sẻ trước đây). Có trong `REQUIRED_CHANGELOGS` + `REQUIRED_TABLES`; baseline đã gồm sẵn. Chạy 2 lần trên MySQL Docker → vẫn đúng 1 bản gốc/bài.

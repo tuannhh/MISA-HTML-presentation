@@ -114,6 +114,12 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   // Xuất HTML (nhúng base64) tốn RAM theo dung lượng media → giới hạn số lượt chạy đồng thời.
   const exportQueue = new Semaphore(config.limits.renderConcurrency);
   const thumbTimers = new Map();
+  // Vé giữ chỗ hàng tạo/dựng bài: tối đa generationConcurrency đang chạy + MAX_PENDING_JOBS chờ (tính cả yêu cầu đang ghi DB).
+  function reserveJob() {
+    const ticket = genQueue.reserve(MAX_PENDING_JOBS);
+    if (!ticket) throw unavailable('Hệ thống đang xử lý nhiều yêu cầu, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
+    return ticket;
+  }
 
   /* ---------------- bước 1: tạo dàn ý bằng AI ---------------- */
   // input.files: tệp multer trên đĩa — từ đây service chịu trách nhiệm xoá (lỗi kiểm tra → xoá ngay; job xong → xoá).
@@ -127,13 +133,15 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     let src;
     let userMedia;
     let choice;
+    let ticket = null;
     try {
       choice = parseThemeChoice(input);
       src = await precheckSource({ files: input.files, url: input.url, text: input.text }, config.limits);
       userMedia = await precheckMedia(input.media, input.posters, config.limits);
       const total = [...(input.files || []), ...(input.media || [])].reduce((n, f) => n + (f.size || 0), 0);
       if (total > config.limits.maxUploadMb * 1048576) throw tooLarge(`Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB`, 'UPLOAD_TOO_LARGE');
-      if (genQueue.pending >= MAX_PENDING_JOBS) throw unavailable('Hệ thống đang xử lý nhiều yêu cầu, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
+      // Giữ chỗ trong hàng TRƯỚC khi ghi DB (A03): nhiều yêu cầu cùng lúc không cùng lọt qua kiểm tra rồi vượt trần.
+      ticket = reserveJob();
     } catch (err) {
       await removeUploads(uploads);
       throw err;
@@ -150,13 +158,14 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       code = await withCode((c) => presentations.createForTenant(user.id, { id, code: c, title, ratio, sourceKind: src.sourceKind, sourceLabel: src.sourceLabel, instructions, status: 'outlining' }));
       await audit.record({ actorId: user.id, action: 'presentation.create', targetType: 'presentation', targetId: id, ip, meta: { source: src.sourceKind, files: src.files?.length || 0, mediaImages: userMedia.images.length, mediaVideos: userMedia.videos.length, ratio, slideCount: slideCount ?? 'auto', tone, theme: choice.theme, aiImages } });
     } catch (err) {
+      ticket.release();
       await removeUploads(uploads);
       throw err;
     }
 
     // Chạy nền; client theo dõi trạng thái bằng GET /api/presentations/:id.
     const job = { url: input.url, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages };
-    genQueue
+    ticket
       .run(() => generateOutline(user.id, id, job))
       .catch((err) => logger.error('outline_unhandled', { id, err }))
       .finally(() => removeUploads(uploads));
@@ -390,18 +399,24 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   }
 
   async function build(user, id, body, ip) {
-    let expected = body.outlineVersion;
-    if (body.outline !== undefined) expected = (await saveOutline(user, id, body)).outlineVersion;
-    else {
-      const row = await owned(user, id);
-      if (row.status !== 'outline') throw conflict('Bài trình bày không ở bước duyệt dàn ý', 'NOT_OUTLINE');
-      if (!Number.isInteger(expected)) throw badRequest('Thiếu outlineVersion', 'VERSION_REQUIRED');
+    // Giữ chỗ TRƯỚC mọi bước ghi (lưu dàn ý, chuyển trạng thái) — đầy thì từ chối khi chưa đổi gì (A03).
+    const ticket = reserveJob();
+    try {
+      let expected = body.outlineVersion;
+      if (body.outline !== undefined) expected = (await saveOutline(user, id, body)).outlineVersion;
+      else {
+        const row = await owned(user, id);
+        if (row.status !== 'outline') throw conflict('Bài trình bày không ở bước duyệt dàn ý', 'NOT_OUTLINE');
+        if (!Number.isInteger(expected)) throw badRequest('Thiếu outlineVersion', 'VERSION_REQUIRED');
+      }
+      const affected = await presentations.startBuildOwned(user.id, id, expected);
+      if (!affected) throw conflict('Dàn ý đã thay đổi hoặc bài đang được dựng. Tải lại để xem trạng thái mới nhất.', 'VERSION_CONFLICT');
+      await audit.record({ actorId: user.id, action: 'presentation.build', targetType: 'presentation', targetId: id, ip });
+    } catch (err) {
+      ticket.release();
+      throw err;
     }
-    if (genQueue.pending >= MAX_PENDING_JOBS) throw unavailable('Hệ thống đang xử lý nhiều yêu cầu, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
-    const affected = await presentations.startBuildOwned(user.id, id, expected);
-    if (!affected) throw conflict('Dàn ý đã thay đổi hoặc bài đang được dựng. Tải lại để xem trạng thái mới nhất.', 'VERSION_CONFLICT');
-    await audit.record({ actorId: user.id, action: 'presentation.build', targetType: 'presentation', targetId: id, ip });
-    genQueue.run(() => buildDeck(user.id, id)).catch((err) => logger.error('build_unhandled', { id, err }));
+    ticket.run(() => buildDeck(user.id, id)).catch((err) => logger.error('build_unhandled', { id, err }));
     return { id, status: 'generating' };
   }
 
@@ -574,13 +589,13 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       expected = body.specVersion;
     }
     // Ghi vào dòng của chủ bài (tenant của bài) — quyền đã kiểm ở editable().
-    const affected = await presentations.updateOwned(row.tenant_id, id, fields, expected);
+    // Bật công khai: lần đầu chia sẻ → chụp bản gốc (1 lần) trong CÙNG giao dịch với việc công khai (A06).
+    const baselineBy = fields.visibility === 'public' ? user.id : undefined;
+    const affected = await presentations.updateOwned(row.tenant_id, id, fields, expected, { baselineBy });
     if (!affected) throw conflict('Bài trình bày đã được sửa ở nơi khác. Tải lại để lấy bản mới nhất.', 'VERSION_CONFLICT');
     if (fields.visibility && fields.visibility !== row.visibility) {
       await audit.record({ actorId: user.id, action: 'presentation.visibility', targetType: 'presentation', targetId: id, ip, meta: { to: fields.visibility } });
     }
-    // Lần đầu chia sẻ (công khai) → chụp bản gốc để khôi phục về sau (chỉ tạo 1 lần).
-    if (fields.visibility === 'public') await versions.ensureBaseline(id, user.id);
     if (!isOwner && (fields.spec || fields.title || fields.ratio)) {
       await audit.record({ actorId: user.id, action: 'presentation.shared_edit', targetType: 'presentation', targetId: id, ip, meta: { owner: row.tenant_id } });
     }
@@ -867,6 +882,31 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     return { html, title: row.title };
   }
 
+  // Ảnh chụp HTML cho trang xuất bản công khai (chỉ chủ bài). Phông + 3D nhúng sẵn; ảnh/video KHÔNG nhúng mà trỏ tới
+  // mediaUrl(asset) trên domain công khai (CDN lưu đệm được, trang nhẹ). Trả cả danh sách media bài đang dùng để chép sang thư mục bản xuất bản.
+  // Chạy trong hàng xuất (cùng trần với xuất HTML) vì dựng bài lớn tốn CPU/RAM.
+  async function renderForPublish(user, id, { mediaUrl, nonce }) {
+    const row = await owned(user, id);
+    if (row.status !== 'ready' || !row.spec) throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
+    if (exportQueue.pending >= MAX_EXPORT_PENDING) throw unavailable('Hệ thống đang xuất nhiều bài, vui lòng thử lại sau ít phút', 'QUEUE_FULL');
+    return exportQueue.run(async () => {
+      const used = collectAssetIds(row.spec);
+      const media = (await assets.listMediaForPresentation(id)).filter((a) => used.has(a.id) && mediaUrl(a));
+      const meta = new Map(media.map((a) => [a.id, a]));
+      const html = renderDeck(row.spec, {
+        ratio: row.ratio,
+        mode: 'present',
+        embedFont: true,
+        nonce,
+        assetUrl: (aid) => (meta.has(aid) ? mediaUrl(meta.get(aid)) : null),
+        assetMeta: (aid) => (meta.has(aid) ? { width: meta.get(aid).width, height: meta.get(aid).height } : null),
+        videoEmbed: () => null,
+        embeds: [],
+      });
+      return { row, html, media };
+    });
+  }
+
   async function exportPdf(user, id, ip) {
     const row = await readable(user, id);
     if (row.status !== 'ready') throw conflict('Bài trình bày chưa sẵn sàng', 'NOT_READY');
@@ -917,6 +957,6 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     create, list, get, update, remove, duplicate, saveOutline, build, idByCode, owned, editable, restoreSnapshot, previewVersion,
     addAsset, addLogo, addBrand, cutoutLogo, addVideo, addYouTube, readAsset,
     generateImage, searchImages, importStockImage, editImage,
-    preview, exportHtml, exportPdf, makeThumbnail, recoverStale, queueStats: () => ({ pending: genQueue.pending }),
+    preview, exportHtml, exportPdf, renderForPublish, makeThumbnail, recoverStale, queueStats: () => ({ active: genQueue.active, pending: genQueue.pending, reserved: genQueue.reserved }),
   };
 }

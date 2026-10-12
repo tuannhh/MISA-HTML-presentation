@@ -154,6 +154,32 @@ CREATE TABLE IF NOT EXISTS presentation_versions (
   CONSTRAINT fk_presentation_versions_creator FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- Xuất bản ra domain công khai: tối đa 1 bản/bài, ảnh chụp HTML tĩnh trong storage (xem changelog 20261012_100000).
+CREATE TABLE IF NOT EXISTS publications (
+  id              CHAR(36)     NOT NULL,
+  presentation_id CHAR(36)     NOT NULL,
+  tenant_id       CHAR(36)     NOT NULL,
+  code            CHAR(8)      NOT NULL,
+  slug            VARCHAR(120) NOT NULL,
+  title           VARCHAR(200) NOT NULL,
+  status          ENUM('published','unpublished') NOT NULL,
+  revision        CHAR(16)     NOT NULL,
+  csp_nonce       CHAR(24)     NOT NULL,
+  spec_version    INT UNSIGNED NOT NULL,
+  published_by    CHAR(36)     NULL,
+  published_at    DATETIME(3)  NOT NULL,
+  unpublished_at  DATETIME(3)  NULL,
+  created_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at      DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_publications_presentation (presentation_id),
+  UNIQUE KEY uq_publications_code (code),
+  KEY ix_publications_status (status, published_at),
+  CONSTRAINT fk_publications_presentation FOREIGN KEY (presentation_id) REFERENCES presentations (id) ON DELETE CASCADE,
+  CONSTRAINT fk_publications_tenant FOREIGN KEY (tenant_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT fk_publications_publisher FOREIGN KEY (published_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS sessions (
   session_id  VARCHAR(128) NOT NULL,
   expires     BIGINT UNSIGNED NOT NULL,
@@ -190,3 +216,4 @@ INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261005_
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261006_090000.sql');
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261006_200000.sql');
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261007_100000.sql');
+INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261012_100000.sql');

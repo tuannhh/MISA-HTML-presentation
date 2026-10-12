@@ -81,6 +81,14 @@ Tên tệp tải về: `Content-Disposition` có `filename` ASCII + `filename*` 
 | GET | `/:id/versions/:versionId/preview` | *sửa* | HTML trình chiếu của phiên bản (cùng CSP sandbox như `/preview`) |
 | POST | `/:id/restore` | *chủ* | Body `{ versionId?, specVersion }`. Không gửi `versionId` → **bản gốc** (chưa có → 409 `NO_BASELINE`). Thay `spec` + `title` + `ratio` của bài (khoá lạc quan theo `specVersion` → 409 nếu có người vừa lưu); asset không còn thuộc bài bị gỡ khỏi spec. → DTO bài. Audit `presentation.restore` |
 
+### Xuất bản ra web (domain công khai, `05` §17)
+
+| Method | Path | Quyền | Mô tả |
+|---|---|---|---|
+| GET | `/:id/publication` | *chủ* | `{ enabled, published, url, publishedAt, outdated }` — `enabled=false` khi chưa đặt `PUBLISH_BASE_URL`; `outdated` = bài đã sửa sau lần xuất bản |
+| POST | `/:id/publication` | *chủ*, bài `ready` | Xuất bản lần đầu hoặc **cập nhật** ảnh chụp theo bản đang lưu (giữ mã/link). Chưa cấu hình → 503 `PUBLISH_DISABLED`; bài bị lưu trong lúc dựng → 409 `PUBLISH_STALE`; hàng xuất đầy → 503 `QUEUE_FULL`. Rate-limit `publish` 30/10 phút. Audit `presentation.publish`/`republish` |
+| DELETE | `/:id/publication` | *chủ* | Gỡ (idempotent) → trạng thái. Audit `presentation.unpublish` |
+
 DTO bài trình bày: `{ id, code, title, ratio, visibility, status, sourceKind, sourceLabel, specVersion, outlineVersion, slideCount, thumbnailUrl, errorMessage, isOwner, access:'owner'|'editor'|'viewer', shareRole:'viewer'|'editor'|null, authorName, createdAt, updatedAt, publishedAt, spec?, assets? }` — `shareRole` = quyền được mời (null: bài của mình hoặc chỉ xem nhờ công khai).
 
 ## Mẫu thiết kế / thương hiệu — `/api/templates` (yêu cầu đăng nhập)
@@ -111,5 +119,19 @@ Trả tệp nếu **(a)** query `exp` + `sig` là chữ ký HMAC hợp lệ (dù
 | POST | `/users` | `email, displayName, role` | 201 `{ user, temporaryPassword }` — mật khẩu tạm chỉ trả **một lần**, `must_change_password=1`. **Không** áp giới hạn domain |
 | PATCH | `/users/:id` | `role`, `status` | Không tự hạ quyền / tự khoá chính mình; không bỏ admin cuối cùng. Khoá → tăng `session_version` |
 | POST | `/users/:id/reset-password` | — | `{ temporaryPassword }`, bắt buộc đổi ở lần đăng nhập tới, vô hiệu phiên cũ |
+
+| GET | `/publications?q=&page=` | — | Trang **đang xuất bản công khai** (tìm theo tiêu đề/email chủ): `{ presentationId, title, url, publishedAt, owner:{ email, displayName, status } }` |
+| DELETE | `/publications/:presentationId` | — | Gỡ xuất bản (vi phạm) → 204; không đang xuất bản → 404. Audit `admin.unpublish` |
+
+## Domain công khai (`PUBLISH_BASE_URL`) — không thuộc `/api`
+
+Phân luồng theo `Host` (`src/routes/publicSiteRoutes.js`, mount trước `IP_ALLOWLIST`), không phiên/cookie, mọi phản hồi `X-Robots-Tag: noindex, …`:
+
+| Path | Kết quả |
+|---|---|
+| `/<slug>-<code>` | HTML ảnh chụp; CSP nonce (`default-src 'none'`, media/img `'self'`, `frame-src` YouTube nocookie, `connect-src 'none'`, `frame-ancestors 'none'`); `Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=60`; `ETag` = revision (304). Slug sai → 301 |
+| `/m/<code>/<revision>/<asset>.<ext>` | Media của revision **đang** công khai (revision cũ → 404); `immutable` 1 năm; `Range`; `CSP: default-src 'none'; sandbox` |
+| `/robots.txt` | `Disallow: /` |
+| còn lại | 404 HTML ngắn (`max-age=30, s-maxage=60`) |
 
 > Admin **không** có endpoint nào đọc bài private của tenant khác — đây là chủ đích thiết kế.

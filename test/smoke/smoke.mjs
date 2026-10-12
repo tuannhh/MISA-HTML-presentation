@@ -2,11 +2,13 @@
 // duyệt/sửa dàn ý + gắn media (logo tách nền, video tải lên, YouTube) + thiết kế → dựng bài, cách ly tenant, công khai,
 // sửa có khoá phiên bản, phát video theo Range, xem trước, xuất HTML (nhúng video, phông)/PDF,
 // chia sẻ theo người (chỉ xem / chỉnh sửa), handoff tối đa 5 bản (kể cả gửi song song), khôi phục về bản gốc / bản handoff.
-// Dùng: BASE=http://localhost:3000 node test/smoke/smoke.mjs
+// Dùng: BASE=http://localhost:8088 SMOKE_BOOTSTRAP=1 node test/smoke/smoke.mjs   (Docker local dành cho test)
+//       BASE=… SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… node test/smoke/smoke.mjs (admin có sẵn) — xem provision.mjs
 import assert from 'node:assert/strict';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import sharp from 'sharp';
 import { createProvisioner } from './provision.mjs';
+import { smokeEmail } from '../../scripts/lib/smokeAccounts.js';
 
 const BASE = process.env.BASE || 'http://localhost:3000';
 const stamp = Date.now().toString(36);
@@ -35,16 +37,21 @@ function client() {
   return { req, init: () => req('GET', '/api/auth/csrf') };
 }
 
-const signUp = createProvisioner(client, stamp); // admin cấp tài khoản (không có đăng ký — xem provision.mjs)
+// Admin cấp tài khoản (không có đăng ký); kiểm môi trường trước khi ghi, dọn tài khoản trong finally — xem provision.mjs.
+const provisioner = createProvisioner(client, stamp, { base: BASE });
+const signUp = (c, role, name) => provisioner.signUp(c, role, name);
+const emailOf = (role) => smokeEmail(role, stamp);
+// Không thụt lề phần thân để giữ nguyên các chuỗi nhiều dòng; finally ở cuối tệp.
+try {
 const a = client();
 const b = client();
 await a.init();
 await b.init();
 
-let r = await signUp(a, `a-${stamp}@misa.com.vn`, 'Người Dùng Á');
+let r = await signUp(a, 'a', 'Người Dùng Á');
 assert.equal(r.status, 201, JSON.stringify(r.json));
 assert.equal(r.json.data.user.displayName, 'Người Dùng Á');
-r = await signUp(b, `b-${stamp}@misa.com.vn`, 'Người Dùng B');
+r = await signUp(b, 'b', 'Người Dùng B');
 assert.equal(r.status, 201);
 console.log('✓ đăng ký 2 tenant, tiếng Việt giữ nguyên');
 
@@ -238,18 +245,18 @@ console.log('✓ chuyển lại private → B mất quyền xem');
 /* ---------------- Chia sẻ theo người + handoff + khôi phục ---------------- */
 const c = client();
 await c.init();
-r = await signUp(c, `c-${stamp}@misa.com.vn`, 'Người Dùng C');
+r = await signUp(c, 'c', 'Người Dùng C');
 assert.equal(r.status, 201);
 const shareUrl = `/api/presentations/${id}/shares`;
-r = await b.req('POST', shareUrl, { email: `c-${stamp}@misa.com.vn`, role: 'viewer' });
+r = await b.req('POST', shareUrl, { email: emailOf('c'), role: 'viewer' });
 assert.equal(r.status, 404, 'người ngoài không quản lý chia sẻ');
-r = await a.req('POST', shareUrl, { email: `khong-co-${stamp}@misa.com.vn`, role: 'viewer' });
+r = await a.req('POST', shareUrl, { email: emailOf('ghost'), role: 'viewer' });
 assert.equal(r.json.error.code, 'USER_NOT_FOUND');
-r = await a.req('POST', shareUrl, { email: `A-${stamp}@MISA.com.vn`, role: 'viewer' });
+r = await a.req('POST', shareUrl, { email: emailOf('a').toUpperCase(), role: 'viewer' });
 assert.equal(r.json.error.code, 'SELF_SHARE');
-r = await a.req('POST', shareUrl, { email: `b-${stamp}@misa.com.vn`, role: 'owner' });
+r = await a.req('POST', shareUrl, { email: emailOf('b'), role: 'owner' });
 assert.equal(r.json.error.code, 'INVALID_ROLE');
-r = await a.req('POST', shareUrl, { email: ` B-${stamp}@MISA.com.vn `, role: 'viewer' });
+r = await a.req('POST', shareUrl, { email: ` ${emailOf('b').toUpperCase()} `, role: 'viewer' });
 assert.equal(r.status, 201, JSON.stringify(r.json));
 const bId = r.json.data.share.userId;
 r = await a.req('GET', shareUrl);
@@ -383,3 +390,6 @@ r = await b.req('GET', '/api/presentations?scope=shared');
 assert.ok(!r.json.data.some((d) => d.id === id));
 console.log('✓ gỡ chia sẻ → B không còn thấy bài');
 console.log('TẤT CẢ ĐẠT');
+} finally {
+  await provisioner.cleanup();
+}

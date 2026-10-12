@@ -94,3 +94,108 @@ test('F02: không gõ gì trong lúc lưu → nhận bản máy chủ như cũ',
   assert.equal(a.dirty.value, false);
   assert.equal(a.deck.value.specVersion, 2);
 });
+
+/* ---------------- A02: không mất chữ đang gõ khi đổi tỷ lệ/chia sẻ, khi lưu dàn ý, khi phản hồi về ngược thứ tự ---------------- */
+const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
+
+// Máy chủ giữ phản hồi PATCH tới khi test gọi release() — mô phỏng mạng chậm.
+function gatedServer() {
+  const db = server();
+  const inner = globalThis.__fakeApi;
+  const gates = [];
+  globalThis.__fakeApi = async (method, path, body) => {
+    if (method !== 'PATCH') return inner(method, path, body);
+    const res = await inner(method, path, body); // máy chủ đã ghi
+    await new Promise((r) => gates.push(r)); // phản hồi còn trên đường về
+    return res;
+  };
+  return { db, release: () => gates.shift()?.(), releaseLast: () => gates.pop()?.(), pending: () => gates.length };
+}
+
+for (const dirtyAtStart of [false, true]) {
+  test(`A02: đổi tỷ lệ khi nháp ${dirtyAtStart ? 'đang sửa' : 'sạch'}, gõ thêm lúc chờ phản hồi → chữ vừa gõ còn nguyên, lưu sau thành công`, async () => {
+    const { db, release } = gatedServer();
+    const a = useEditor('D1');
+    await a.load();
+    if (dirtyAtStart) a.draft.value.spec.slides[0].title = 'Trước khi đổi tỷ lệ';
+    const meta = a.updateMeta({ ratio: '4:3' });
+    await tick();
+    a.draft.value.spec.slides[0].title = 'Gõ trong lúc đổi tỷ lệ';
+    release();
+    await meta;
+    assert.equal(a.deck.value.ratio, '4:3');
+    assert.equal(a.draft.value.spec.slides[0].title, 'Gõ trong lúc đổi tỷ lệ');
+    assert.equal(a.dirty.value, true);
+    const saving = a.save();
+    await tick();
+    release();
+    assert.equal(await saving, true, 'không ai sửa khác → không 409');
+    assert.equal(db.spec.slides[0].title, 'Gõ trong lúc đổi tỷ lệ');
+  });
+}
+
+test('A02: lưu và đổi tỷ lệ chạy xen kẽ, gõ thêm ở giữa → không mất chữ, phiên bản lưu tiếp đúng', async () => {
+  const { db, release, releaseLast, pending } = gatedServer();
+  const a = useEditor('D1');
+  await a.load();
+  a.draft.value.spec.slides[0].title = 'Bản lưu';
+  const saving = a.save();
+  await tick();
+  const meta = a.updateMeta({ ratio: '1:1' });
+  await tick();
+  a.draft.value.spec.slides[0].title = 'Bản lưu + gõ thêm';
+  // Thả phản hồi theo thứ tự ngược (cái gửi sau về trước) nếu cả hai đang bay.
+  while (pending() === 0) await tick();
+  if (pending() === 2) {
+    releaseLast();
+    await tick();
+    release();
+  } else {
+    release();
+    while (pending() === 0) await tick();
+    release();
+  }
+  assert.equal(await saving, true);
+  await meta;
+  assert.equal(db.spec.slides[0].title, 'Bản lưu');
+  assert.equal(db.ratio, '1:1');
+  assert.equal(a.draft.value.spec.slides[0].title, 'Bản lưu + gõ thêm');
+  const again = a.save();
+  await tick();
+  release();
+  assert.equal(await again, true, 'lần lưu tiếp mang đúng phiên bản (không 409)');
+  assert.equal(db.spec.slides[0].title, 'Bản lưu + gõ thêm');
+  assert.equal(db.specVersion, 3);
+});
+
+test('A02: lưu dàn ý, gõ thêm lúc chờ phản hồi → chữ còn nguyên, vẫn "chưa lưu", lưu tiếp thành công', async () => {
+  const { useOutline } = await import('../../frontend/src/composables/useOutline.js');
+  const db = { id: 'O1', title: 'T', status: 'outline', isOwner: true, assets: [], outlineVersion: 1, outline: { title: 'T', footer: '', design: {}, slides: [{ id: 's1', layout: 'bullets', title: 'Gốc', subtitle: '', notes: '', points: ['P'], images: [], video: null }] } };
+  const gates = [];
+  globalThis.__fakeApi = async (method, path, body) => {
+    if (method === 'PUT') {
+      if (body.outlineVersion !== db.outlineVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'xung đột');
+      db.outline = clone(body.outline);
+      db.outlineVersion += 1;
+      await new Promise((r) => gates.push(r));
+    }
+    return { data: clone(db) };
+  };
+  const o = useOutline('O1');
+  await o.load();
+  o.draft.value.slides[0].title = 'Trước khi lưu';
+  const saving = o.save();
+  await tick();
+  o.draft.value.slides[0].title = 'Gõ trong lúc lưu dàn ý';
+  gates.shift()();
+  assert.equal(await saving, true);
+  assert.equal(db.outline.slides[0].title, 'Trước khi lưu');
+  assert.equal(o.draft.value.slides[0].title, 'Gõ trong lúc lưu dàn ý');
+  assert.equal(o.dirty.value, true);
+  const again = o.save();
+  await tick();
+  gates.shift()();
+  assert.equal(await again, true);
+  assert.equal(db.outline.slides[0].title, 'Gõ trong lúc lưu dàn ý');
+  assert.equal(o.dirty.value, false);
+});

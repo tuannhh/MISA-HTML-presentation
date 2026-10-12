@@ -11,6 +11,7 @@ const call = (method) => (path, body) => globalThis.__fakeApi(method, path, body
 export const get = call('GET');
 export const post = call('POST');
 export const patch = call('PATCH');
+export const put = call('PUT');
 export const del = call('DELETE');
 export const postForm = call('POST');
 export const uploadForm = call('POST');

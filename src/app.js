@@ -17,6 +17,7 @@ import { assetRoutes } from './routes/assetRoutes.js';
 import { templateRoutes } from './routes/templateRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { imageRoutes } from './routes/imageRoutes.js';
+import { publicSiteRoutes, isPublishHost } from './routes/publicSiteRoutes.js';
 import { deckFontBuffer, deckFontFile, deck3dBuffer, DECK_FONT_PATH, DECK3D_PATH } from './services/renderService.js';
 import { ok } from './lib/validate.js';
 
@@ -45,6 +46,12 @@ export function createApp({ config, pool, repos, services }) {
   });
 
   app.use(securityHeaders());
+  // Domain công khai (PUBLISH_BASE_URL): phân luồng theo Host — chỉ phục vụ trang đã xuất bản rồi KẾT THÚC tại đó,
+  // trước IP_ALLOWLIST (người ngoài MISA xem được) và không bao giờ chạm phiên/API/giao diện nội bộ.
+  if (config.publish?.host && services.publications) {
+    const site = publicSiteRoutes({ publications: services.publications });
+    app.use((req, res, next) => (isPublishHost(config, req) ? site(req, res, next) : next()));
+  }
   // Chỉ IP trong IP_ALLOWLIST (mạng MISA) mới vào được — đặt trước mọi route, kể cả giao diện tĩnh.
   app.use(ipAllowlist(config.ipAllowlist));
 
@@ -99,10 +106,10 @@ export function createApp({ config, pool, repos, services }) {
   api.use(limits.api);
   api.use(csrfProtection(config));
   api.use('/auth', authRoutes({ auth: services.auth, users: repos.users, limits }));
-  api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, sharing: services.sharing, config, limits }));
+  api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, sharing: services.sharing, publications: services.publications, config, limits }));
   api.use('/templates', templateRoutes({ service: services.templates, limits }));
   api.use('/assets', assetRoutes({ service: services.presentations }));
-  api.use('/admin', adminRoutes({ auth: services.auth }));
+  api.use('/admin', adminRoutes({ auth: services.auth, publications: services.publications }));
   api.use('/images', imageRoutes({ service: services.presentations, limits }));
   api.use(notFoundApi);
   app.use('/api', api);
