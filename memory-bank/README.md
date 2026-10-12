@@ -32,4 +32,5 @@ Thư mục này chứa **toàn bộ tri thức về dự án MISA Presentation**
 
 ## Audit và bàn giao mới nhất
 
+- [Kế hoạch tiếp theo (`docs/ROADMAP.md`)](../docs/ROADMAP.md): A bổ sung A01–A06 → Publish HTML ra domain công khai → B → gate DevOps → C.
 - [Hồ sơ Codex 12/10/2026 — đọc trước khi tiếp tục trên máy khác](../docs/audits/2026-10-12-codex/README.md). Có audit gốc, phản hồi Claude, review commit `233d348`, log và probe tái hiện. Sáu finding A01–A06 còn mở; không hiểu việc lưu hồ sơ là đã sửa lỗi hoặc đã được duyệt sửa.

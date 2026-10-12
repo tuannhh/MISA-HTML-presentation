@@ -13,7 +13,7 @@ Tính năng chính:
 - **Trình soạn thảo**: sửa chữ, đổi/tải ảnh, đổi bố cục, thêm/xoá/sắp xếp/nhân bản trang, đổi giao diện & chân trang → bấm **Lưu** → server chuẩn hoá và render lại, khung xem trước tải lại.
 - **Xuất**: HTML một tệp (giữ chuyển động, ảnh + phông + video tải lên nhúng base64, mở offline được) và PDF (không chuyển động, mỗi trang 1 slide đúng tỷ lệ).
 - **Đa tenant**: mỗi người dùng là 1 tenant độc lập; bài **Riêng tư** chỉ chủ sở hữu thấy (kể cả admin không xem được). Bài **Công khai**: mọi người dùng của hệ thống xem/trình chiếu/tải/nhân bản được, nhưng không sửa được.
-- Đăng nhập: tự đăng ký **giới hạn theo tên miền email** (mặc định `misa.com.vn`) + admin cấp tài khoản (mật khẩu tạm, bắt buộc đổi ở lần đăng nhập đầu).
+- Đăng nhập: **không có đăng ký** — chỉ admin cấp tài khoản (mật khẩu tạm, bắt buộc đổi ở lần đăng nhập đầu). Bản MISA sẽ dùng đăng nhập bảo mật của MISA do DevOps cài.
 - Giao diện theo **MISA Design System 2.0**, có composition **desktop** và **mobile mini-app** riêng cho mọi route.
 
 ## Người phụ trách dự án
@@ -36,12 +36,12 @@ Tính năng chính:
 
 | Vai trò | Phạm vi | Ghi chú |
 |---|---|---|
-| `user` | Bài của chính mình + bài công khai của người khác (chỉ đọc) | Mặc định khi tự đăng ký |
+| `user` | Bài của chính mình + bài công khai của người khác (chỉ đọc) | Mặc định khi admin cấp tài khoản |
 | `admin` | Như `user` + quản trị tài khoản (tạo, đổi vai trò, khoá/mở, đặt lại mật khẩu) | **Không** xem được bài riêng tư của người khác |
 
 ## Quy trình làm việc điển hình
 
-1. Đăng nhập (hoặc đăng ký bằng email công ty).
+1. Đăng nhập bằng tài khoản được admin cấp.
 2. **Tạo bài** → chọn nguồn (tệp/link/văn bản) → chọn tỷ lệ, tông màu, số trang mong muốn, yêu cầu thêm → **Lập dàn ý bằng AI** (30 giây – vài phút; có thể rời trang).
 3. **Duyệt dàn ý**: sửa tiêu đề/từng dòng nội dung, thêm/bớt/sắp xếp trang, gắn ảnh/video/YouTube, chọn màu – nền – phông – logo → **Dựng bài** (1–3 phút).
 4. Tự chuyển sang trình soạn thảo: xem trước có chuyển động, tinh chỉnh từng trang/thiết kế → **Lưu**.

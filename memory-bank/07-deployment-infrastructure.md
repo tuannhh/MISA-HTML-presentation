@@ -17,9 +17,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `SESSION_SECRET` | ✅ | | ≥ 32 ký tự ngẫu nhiên; cũng là khoá HMAC ký URL ảnh |
 | `SESSION_COOKIE_SECURE` | | true khi production | `true` khi chạy HTTPS. Production **không khởi động** nếu lệch `APP_BASE_URL`: https mà `false`, hoặc http mà `true` |
 | `SESSION_MAX_AGE_HOURS` | | 12 | |
-| `RATE_LIMIT_USER_PER_MIN` | | 600 | Hạn mức API/phút **theo người dùng** đã đăng nhập (nhân viên MISA chung IP nên không tính theo IP) |
-| `RATE_LIMIT_ANON_PER_MIN` | | 1200 | API/phút theo IP cho yêu cầu CHƯA đăng nhập (sáng đầu giờ nhiều người đăng nhập cùng IP) |
-| `RATE_LIMIT_IP_PER_MIN` | | 30000 | Chốt chặn lụt theo IP đặt trước phiên/DB; phải lớn hơn tổng lưu lượng hợp lệ của cả văn phòng |
+| `RATE_LIMIT_USER_PER_MIN` | | 600 | Hạn mức API/phút **theo người dùng** đã đăng nhập. Không có hạn mức theo IP (đã bỏ `RATE_LIMIT_IP_PER_MIN`, `RATE_LIMIT_ANON_PER_MIN` ngày 12/10/2026 — còn trong `.env` cũ thì bị bỏ qua) |
 | `DB_HOST/PORT/NAME/USER/PASSWORD` | ✅ | | MySQL |
 | `MYSQL_ROOT_PASSWORD` | ✅ (compose) | | Root MySQL container |
 | `DB_POOL_SIZE` | | 10 | |
@@ -33,8 +31,6 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `AI_IMAGES_PER_DECK` / `AI_IMAGES_CONCURRENCY` | | 6 / 3 | Số ảnh AI tự tạo tối đa khi dựng 1 bài / số ảnh tạo song song |
 | `PIXABAY_API_KEY` | (để tìm ảnh) | | Khoá Pixabay — **không commit/log**; thiếu → tìm ảnh trả 503 |
 | `PIXABAY_BASE_URL` | | `https://pixabay.com/api/` | |
-| `SELF_REGISTRATION` | | true | |
-| `ALLOWED_EMAIL_DOMAINS` | | `misa.com.vn` | Phân tách dấu phẩy; trống = mọi domain |
 | `BCRYPT_ROUNDS` | | 12 | |
 | `STORAGE_DIR` | | `./data/storage` (dev) / `/data/storage` (Docker) | |
 | `TEMP_TTL_MINUTES` | | 60 | Dọn tệp tạm quá hạn |
@@ -122,7 +118,7 @@ Tệp nguồn nằm tạm ở `STORAGE_DIR/uploads` (volume) — khởi động 
 | Lệnh | Nội dung |
 |---|---|
 | `npm test` | Unit (node:test): SSRF, magic bytes, tenantScope, URL ký, chuẩn hoá spec, chống XSS renderer (13 test) |
-| `BASE=http://localhost:8088 node test/smoke/smoke.mjs` | Smoke end-to-end trên server đang chạy: đăng ký, CSRF, tạo bài (Gemini thật), cách ly tenant, public/duplicate, lưu + 409, xuất HTML/PDF, admin. In "TẤT CẢ ĐẠT" |
+| `BASE=http://localhost:8088 node test/smoke/smoke.mjs` | Smoke end-to-end trên server đang chạy: admin cấp tài khoản, CSRF, tạo bài (Gemini thật), cách ly tenant, public/duplicate, lưu + 409, xuất HTML/PDF, admin. In "TẤT CẢ ĐẠT" |
 | `npm run render:sample` | Render `test/fixtures/sample-spec.json` (14 layout) ra ảnh để soát giao diện |
 
 ## Sao lưu (khuyến nghị — chưa tự động hoá)

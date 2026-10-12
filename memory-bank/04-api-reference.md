@@ -9,7 +9,7 @@ Tiền tố chung `/api`. Mọi response thành công: `{ "data": ..., "meta": {
 - **Phân trang:** `?page=1&pageSize=24` → `meta: { page, pageSize, total, hasNext }`.
 - **Input:** chỉ nhận các trường trong allowlist (`pick`) — trường lạ bị bỏ qua, không lỗi.
 - **Mã lỗi thường gặp:** 400 `VALIDATION_ERROR` / `INVALID_*` (`INVALID_THEME`, `INVALID_COLOR`, `INVALID_YOUTUBE_URL`, `VERSION_REQUIRED`, `INVALID_ROLE`, `INVALID_EMAIL`, `SELF_SHARE`, `NOTE_TOO_LONG`, `BASELINE_LOCKED`), 401 `UNAUTHORIZED`, 403 `FORBIDDEN` / `MUST_CHANGE_PASSWORD` / `ADMIN_ONLY` / `VIEW_ONLY` (được xem nhưng không được sửa) / `OWNER_ONLY` (người được mời sửa đổi công khai) / `NOT_VERSION_OWNER`, 404 `NOT_FOUND` / `USER_NOT_FOUND` / `SHARE_NOT_FOUND`, 409 `VERSION_CONFLICT` / `NOT_READY` / `NOT_OUTLINE` / `EMAIL_TAKEN` / `HANDOFF_EXISTS` / `HANDOFF_LIMIT` / `NO_BASELINE`, 413 tệp quá lớn, 422 `SOURCE_EMPTY` / `AI_EMPTY` / `BAD_ARCHIVE` / `UNSUPPORTED_FILE` / `INVALID_VIDEO` / `INVALID_MEDIA` / `FOREIGN_ASSET` / `TOO_MANY_ASSETS` / `YOUTUBE_NOT_FOUND` / `YOUTUBE_NOT_EMBEDDABLE`, 429 `*_RATE_LIMITED`, 503 `QUEUE_FULL` / `NOT_READY`.
-- **Giới hạn tần suất:** toàn API **600 req/phút/người dùng** đã đăng nhập (chưa đăng nhập: 1200/phút/IP; chốt chặn lụt 30000/phút/IP — cấu hình `RATE_LIMIT_*`, vì nhân viên MISA chung IP); đăng nhập 10 lần/15 phút theo IP+email; đăng ký 10/giờ/IP; tạo bài 30/giờ/người; dựng bài 60/giờ/người; thêm media (video, YouTube, tách nền) **và handoff** 120/10 phút/người; mời người chia sẻ 60/10 phút/người (`share` — chặn dò email hàng loạt); xuất PDF 20/10 phút/người.
+- **Giới hạn tần suất:** toàn API **600 req/phút/người dùng** đã đăng nhập (`RATE_LIMIT_USER_PER_MIN`); yêu cầu chưa đăng nhập **không** bị đếm; **không có hạn mức nào theo IP** (mọi người vào qua mạng/VPN MISA chung 1 IP); đăng nhập 10 lần/15 phút theo email; tạo bài 30/giờ/người; dựng bài 60/giờ/người; thêm media (video, YouTube, tách nền) **và handoff** 120/10 phút/người; mời người chia sẻ 60/10 phút/người (`share` — chặn dò email hàng loạt); xuất PDF 20/10 phút/người.
 
 ## Hệ thống
 
@@ -27,10 +27,8 @@ Khi `IP_ALLOWLIST` có giá trị: mọi đường dẫn (trừ 2 route health) 
 
 | Method | Path | Quyền | Body | Kết quả |
 |---|---|---|---|---|
-| GET | `/config` | Công khai | — | `{ selfRegistration, allowedEmailDomains[] }` |
 | GET | `/csrf` | Công khai | — | `{ token }` |
 | GET | `/me` | Công khai | — | `{ user \| null, csrfToken }` |
-| POST | `/register` (mặc định TẮT, không có giao diện) | Khách | `email, password, displayName` | 201 `{ user, csrfToken }` — tạo phiên luôn. 403 nếu tắt đăng ký hoặc domain không cho phép |
 | POST | `/login` | Khách | `email, password` | `{ user, csrfToken }`. Sai → 401 chung "Email hoặc mật khẩu không đúng" |
 | POST | `/logout` | — | — | Huỷ phiên, xoá cookie |
 | POST | `/change-password` | Đăng nhập (cho phép cả khi `mustChangePassword`) | `currentPassword, newPassword` | Tăng `session_version` → mọi phiên khác bị đăng xuất; phiên hiện tại được cấp lại |

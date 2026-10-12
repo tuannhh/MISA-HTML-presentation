@@ -27,12 +27,6 @@ function bool(name, fallback) {
   return ['1', 'true', 'yes', 'on'].includes(String(raw).toLowerCase());
 }
 
-function list(name, fallback = []) {
-  const raw = str(name);
-  if (!raw) return fallback;
-  return raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-}
-
 export function loadConfig() {
   const env = str('NODE_ENV', 'development');
   const isProd = env === 'production';
@@ -88,8 +82,6 @@ export function loadConfig() {
       apiKey: str('GOOGLE_API_KEY'),
     }),
     auth: Object.freeze({
-      selfRegistration: bool('SELF_REGISTRATION', false),
-      allowedEmailDomains: list('ALLOWED_EMAIL_DOMAINS', ['misa.com.vn']),
       bcryptRounds: int('BCRYPT_ROUNDS', 12, { min: 4, max: 15 }),
     }),
     storage: Object.freeze({
@@ -133,11 +125,9 @@ export function loadConfig() {
     chromePath: str('CHROME_PATH', ''),
     // Trong container chạy user không đặc quyền, sandbox của Chromium cần user namespace → tắt có kiểm soát (chỉ nạp HTML nội bộ, chặn mạng).
     chromeNoSandbox: bool('CHROME_NO_SANDBOX', false),
-    // Giới hạn tần suất API (mỗi phút). Nhân viên MISA chung IP (NAT/proxy) → hạn mức chính theo người dùng; IP chỉ là chốt chặn lụt.
+    // Giới hạn tần suất API (mỗi phút) theo người dùng đã đăng nhập. Không giới hạn theo IP: mọi người vào qua mạng/VPN MISA chung 1 IP.
     rate: Object.freeze({
-      ipPerMin: int('RATE_LIMIT_IP_PER_MIN', 30000, { min: 100, max: 1000000 }),
       userPerMin: int('RATE_LIMIT_USER_PER_MIN', 600, { min: 30, max: 100000 }),
-      anonPerMin: int('RATE_LIMIT_ANON_PER_MIN', 1200, { min: 30, max: 1000000 }),
     }),
     ratios: RATIOS,
   });

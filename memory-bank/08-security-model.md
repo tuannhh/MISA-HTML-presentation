@@ -3,12 +3,12 @@
 ## Xác thực & phiên
 
 - Mật khẩu băm **bcrypt** (`BCRYPT_ROUNDS`, mặc định 12). Chính sách: 10–128 ký tự, có chữ và số; mật khẩu mới phải khác mật khẩu cũ.
-- Phiên express-session lưu MySQL (`sessions`), cookie `mp.sid` httpOnly + SameSite=Lax (+ Secure ở production). `regenerate()` khi đăng nhập/đăng ký/đổi mật khẩu (chống session fixation).
+- Phiên express-session lưu MySQL (`sessions`), cookie `mp.sid` httpOnly + SameSite=Lax (+ Secure ở production). `regenerate()` khi đăng nhập/đổi mật khẩu (chống session fixation).
 - **Thu hồi phiên:** phiên lưu `sv = users.session_version`; `loadUser` so sánh mỗi request. Đổi mật khẩu, đặt lại mật khẩu, khoá tài khoản → tăng version → mọi phiên cũ mất hiệu lực ngay.
 - Mật khẩu mới ≤ 72 byte (bcrypt cắt lặng lẽ phần sau byte thứ 72; tiếng Việt có dấu 2–3 byte/ký tự).
 - Tài khoản đang phải đổi mật khẩu tạm không đọc được asset qua đường đăng nhập (`readAsset`) — giống `requireAuth`.
 - Công cụ ngoài xử lý tệp người dùng (LibreOffice, pdftoppm) chạy với **môi trường tối thiểu** (`toolEnv`), không kế thừa khoá/bí mật của tiến trình.
-- Đăng nhập sai: thông điệp chung (không lộ email có tồn tại hay không); rate-limit 10 lần/15 phút theo IP+email.
+- Đăng nhập sai: thông điệp chung (không lộ email có tồn tại hay không); rate-limit 10 lần/15 phút theo email (không theo IP — đổi IP không né được).
 - Mật khẩu tạm do admin cấp sinh bằng `crypto.randomBytes`, trả về **một lần**, không lưu dạng rõ, `must_change_password=1` → API chặn mọi thao tác khác (`MUST_CHANGE_PASSWORD`).
 
 ## CSRF & header
@@ -77,9 +77,9 @@
 
 ## Rate limit
 
-**Hạn mức API chung tính theo người dùng** (2026-10-11, F04): MISA dùng chung IP (NAT/proxy) nên giới hạn theo IP làm cả văn phòng chặn nhau. Hai tầng: `apiIp` (chốt chặn lụt theo IP, trước phiên/DB, trần cao) + `api` (sau `loadUser`: đã đăng nhập → khoá `u:<userId>` 600/phút; chưa đăng nhập → khoá IP 1200/phút). Cấu hình `RATE_LIMIT_*` (xem `07`). Các hạn mức nghiệp vụ (tạo bài, ảnh AI, PDF, chia sẻ…) vốn đã theo người dùng.
+**Hạn mức không dựa vào IP** (2026-10-11 F04; 2026-10-12 bỏ hẳn tầng IP theo chủ dự án): người dùng buộc phải ở trong mạng MISA hoặc VPN MISA nên chung 1 IP, và lớp mạng/VPN MISA đã kiểm soát truy cập → không giới hạn theo IP. `api` (sau `loadUser`) chỉ đếm người đã đăng nhập, khoá `u:<userId>` 600/phút (`RATE_LIMIT_USER_PER_MIN`); yêu cầu chưa đăng nhập không đếm. Đăng nhập: 10 lần/15 phút theo email. Các hạn mức nghiệp vụ (tạo bài, ảnh AI, PDF, chia sẻ…) theo `req.user.id`, đều đặt sau `auth`. `IP_ALLOWLIST` là tuỳ chọn kiểm soát truy cập riêng, không phải hạn mức — giữ, mặc định trống.
 
-Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube; handoff dùng chung bucket này), mời người chia sẻ (`share` — chống dò email), xuất PDF (bảo vệ CPU Chromium). Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503. Ảnh AI: `aiImage` 40 lượt/10 phút/người + hàng đợi `AI_IMAGES_CONCURRENCY`, quá 12 chờ → 503; tìm ảnh: `imageSearch` 40/phút.
+Xem `04-api-reference.md` — API chung, đăng nhập, tạo bài + dựng bài (bảo vệ hạn mức Gemini), thêm media (video/YouTube/tách nền — bảo vệ đĩa, CPU, gọi ra YouTube; handoff dùng chung bucket này), mời người chia sẻ (`share` — chống dò email), xuất PDF (bảo vệ CPU Chromium). Thêm giới hạn hàng đợi `MAX_PENDING_JOBS = 20` → 503. Ảnh AI: `aiImage` 40 lượt/10 phút/người + hàng đợi `AI_IMAGES_CONCURRENCY`, quá 12 chờ → 503; tìm ảnh: `imageSearch` 40/phút.
 
 ## Nguồn bên ngoài (ảnh Internet)
 
@@ -88,7 +88,7 @@ Xem `04-api-reference.md` — API chung, đăng nhập, đăng ký, tạo bài +
 
 ## Kiểm toán
 
-`audit_logs` ghi: đăng ký, đăng nhập (thành công/thất bại), đổi mật khẩu, tạo/dựng (`presentation.build`)/xoá/nhân bản bài, đổi chế độ chia sẻ, mời/đổi quyền/gỡ người (`presentation.share_*`), người được mời sửa lưu bài (`presentation.shared_edit`, meta `owner`), handoff/xoá handoff/khôi phục, xuất HTML/PDF, mọi thao tác admin.
+`audit_logs` ghi: đăng nhập (thành công/thất bại), đổi mật khẩu, tạo/dựng (`presentation.build`)/xoá/nhân bản bài, đổi chế độ chia sẻ, mời/đổi quyền/gỡ người (`presentation.share_*`), người được mời sửa lưu bài (`presentation.shared_edit`, meta `owner`), handoff/xoá handoff/khôi phục, xuất HTML/PDF, mọi thao tác admin.
 
 ## Trình chiếu từng ý / 3D (2026-10-06)
 - Tin `deck:step`/`deck:cmd` vào khung chỉ mang hướng (`±1`) hoặc lệnh trong allowlist (`black`, `esc`) — engine bỏ qua giá trị khác. `deck:slide` gửi ra thêm `step/steps` là số nguyên.

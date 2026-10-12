@@ -21,18 +21,9 @@ function establishSession(req, user) {
 export function authRoutes({ auth, users, limits }) {
   const r = Router();
 
-  r.get('/config', (_req, res) => ok(res, auth.publicConfig()));
-
   r.get('/csrf', (req, res) => ok(res, { token: ensureCsrfToken(req) }));
 
   r.get('/me', (req, res) => ok(res, req.user ? { user: publicUser(req.user), csrfToken: ensureCsrfToken(req) } : { user: null, csrfToken: ensureCsrfToken(req) }));
-
-  r.post('/register', limits.register, async (req, res) => {
-    const body = pick(req.body, ['email', 'password', 'displayName']);
-    const user = await auth.register(body, req.ip);
-    await establishSession(req, user);
-    ok(res, { user: publicUser(user), csrfToken: req.session.csrf }, null, 201);
-  });
 
   r.post('/login', limits.login, async (req, res) => {
     const body = pick(req.body, ['email', 'password']);

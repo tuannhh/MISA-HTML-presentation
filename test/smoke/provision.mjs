@@ -1,8 +1,7 @@
-// Cấp tài khoản cho smoke test KHÔNG cần bật đăng ký tự do (mặc định production đóng đăng ký):
-//  1. Thử đăng ký tự do (nếu máy chủ đang mở) → xong.
-//  2. Đóng → cần quản trị viên: dùng SMOKE_ADMIN_EMAIL + SMOKE_ADMIN_PASSWORD (tài khoản admin ĐÃ đổi mật khẩu), hoặc tự tạo admin tạm
+// Cấp tài khoản cho smoke test (hệ thống không có đăng ký — tài khoản do quản trị viên cấp):
+//  1. Cần quản trị viên: dùng SMOKE_ADMIN_EMAIL + SMOKE_ADMIN_PASSWORD (tài khoản admin ĐÃ đổi mật khẩu), hoặc tự tạo admin tạm
 //     qua `docker compose exec app node scripts/create-admin.js` (chỉ khi chạy trên Docker local; mật khẩu tạm đọc từ đầu ra, không ghi ra đâu).
-//  3. Admin tạo người dùng → đăng nhập bằng mật khẩu tạm → đổi sang mật khẩu thử (bắt buộc đổi).
+//  2. Admin tạo người dùng → đăng nhập bằng mật khẩu tạm → đổi sang mật khẩu thử (bắt buộc đổi).
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
@@ -29,12 +28,10 @@ async function adminClient(makeClient, stamp) {
   return admin;
 }
 
-/** Trả hàm signUp(client, email, displayName) → response như /auth/register (status 201 khi thành công). */
+/** Trả hàm signUp(client, email, displayName) → { status: 201, json } khi đã cấp + đăng nhập xong. */
 export function createProvisioner(makeClient, stamp) {
   let admin = null;
   return async function signUp(c, email, displayName) {
-    const reg = await c.req('POST', '/api/auth/register', { email, password: TEST_PASSWORD, displayName });
-    if (reg.status !== 403 || reg.json?.error?.code !== 'REGISTRATION_CLOSED') return reg;
     admin ||= await adminClient(makeClient, stamp);
     const made = await admin.req('POST', '/api/admin/users', { email, displayName, role: 'user' });
     assert.equal(made.status, 201, JSON.stringify(made.json));

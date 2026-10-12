@@ -46,13 +46,6 @@ export function createAuthService({ config, repos, audit }) {
   const { users } = repos;
   const rounds = config.auth.bcryptRounds;
 
-  function domainAllowed(email) {
-    const domains = config.auth.allowedEmailDomains;
-    if (!domains.length) return true;
-    const d = email.split('@')[1] || '';
-    return domains.includes(d);
-  }
-
   function validateEmail(email) {
     if (!EMAIL_RE.test(email) || email.length > 190) throw badRequest('Email không hợp lệ', 'INVALID_EMAIL');
   }
@@ -64,30 +57,6 @@ export function createAuthService({ config, repos, audit }) {
   }
 
   return {
-    publicConfig() {
-      return { selfRegistration: config.auth.selfRegistration, allowedEmailDomains: config.auth.allowedEmailDomains };
-    },
-
-    async register({ email, password, displayName }, ip) {
-      if (!config.auth.selfRegistration) throw forbidden('Hệ thống không mở đăng ký tự do. Liên hệ quản trị viên để được cấp tài khoản.', 'REGISTRATION_CLOSED');
-      const e = normalizeEmail(email);
-      validateEmail(e);
-      if (!domainAllowed(e)) throw forbidden(`Chỉ chấp nhận email thuộc: ${config.auth.allowedEmailDomains.map((d) => `@${d}`).join(', ')}`, 'EMAIL_DOMAIN_NOT_ALLOWED');
-      const name = validateName(displayName);
-      const policy = checkPasswordPolicy(password);
-      if (policy) throw badRequest(policy, 'WEAK_PASSWORD');
-      if (await users.findByEmailWithHash(e)) throw conflict('Email này đã được đăng ký', 'EMAIL_TAKEN');
-      const id = randomUUID();
-      try {
-        await users.create({ id, email: e, displayName: name, passwordHash: await bcrypt.hash(password, rounds) });
-      } catch (err) {
-        if (err.code === 'ER_DUP_ENTRY') throw conflict('Email này đã được đăng ký', 'EMAIL_TAKEN');
-        throw err;
-      }
-      await audit.record({ actorId: id, action: 'auth.register', targetType: 'user', targetId: id, ip });
-      return users.findById(id);
-    },
-
     async login({ email, password }, ip) {
       const e = normalizeEmail(email);
       const u = e ? await users.findByEmailWithHash(e) : null;

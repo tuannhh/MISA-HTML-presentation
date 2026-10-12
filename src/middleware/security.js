@@ -2,7 +2,7 @@
 // header bảo mật (helmet) và giới hạn tần suất.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import helmet from 'helmet';
-import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
+import { rateLimit } from 'express-rate-limit';
 import { forbidden, HttpError } from '../lib/httpError.js';
 
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -79,38 +79,39 @@ export function deckCsp(nonce, origin) {
 
 const limitHandler = (message, code) => (_req, _res, next) => next(new HttpError(429, code, message));
 
-// rate: { ipPerMin, userPerMin, anonPerMin } (config.rate). Nhân viên MISA dùng chung IP (NAT/proxy) nên hạn mức chính tính THEO NGƯỜI DÙNG:
-//  - apiIp   : chốt chặn lụt theo IP, đặt TRƯỚC phiên/DB (trần cao hơn nhiều so với tổng lưu lượng hợp lệ của cả văn phòng);
-//  - api     : đặt SAU loadUser — đã đăng nhập tính theo user.id (userPerMin), chưa đăng nhập tính theo IP (anonPerMin).
-export function rateLimits(rate = { ipPerMin: 30000, userPerMin: 600, anonPerMin: 1200 }) {
+// rate: { userPerMin } (config.rate). KHÔNG giới hạn theo IP: người dùng vào qua mạng/VPN MISA nên chung 1 IP,
+// kiểm soát truy cập mạng do lớp mạng/VPN MISA đảm nhận (IP_ALLOWLIST là tuỳ chọn riêng, không phải hạn mức).
+//  - api   : đặt SAU loadUser — chỉ đếm người đã đăng nhập, theo user.id. Yêu cầu chưa đăng nhập không đếm
+//            (đăng nhập có hạn mức riêng bên dưới).
+//  - login : đếm theo email (chống dò mật khẩu 1 tài khoản; đổi IP không né được).
+//  - Các hạn mức nghiệp vụ đều đặt sau auth → luôn có req.user, khoá theo user.id.
+export function rateLimits(rate = { userPerMin: 600 }) {
   const base = { standardHeaders: 'draft-7', legacyHeaders: false };
-  const tooFast = limitHandler('Bạn thao tác quá nhanh, vui lòng thử lại sau', 'RATE_LIMITED');
+  const byUser = { keyGenerator: (req) => `u:${req.user.id}`, skip: (req) => !req.user };
   return {
-    apiIp: rateLimit({ ...base, windowMs: 60_000, limit: rate.ipPerMin, handler: tooFast }),
     api: rateLimit({
       ...base,
+      ...byUser,
       windowMs: 60_000,
-      limit: (req) => (req.user ? rate.userPerMin : rate.anonPerMin),
-      keyGenerator: (req) => (req.user ? `u:${req.user.id}` : `ip:${ipKeyGenerator(req.ip)}`),
-      handler: tooFast,
+      limit: rate.userPerMin,
+      handler: limitHandler('Bạn thao tác quá nhanh, vui lòng thử lại sau', 'RATE_LIMITED'),
     }),
     login: rateLimit({
       ...base,
       windowMs: 15 * 60_000,
       limit: 10,
-      keyGenerator: (req) => `${ipKeyGenerator(req.ip)}|${String(req.body?.email || '').toLowerCase().slice(0, 190)}`,
+      keyGenerator: (req) => `e:${String(req.body?.email || '').trim().toLowerCase().slice(0, 190)}`,
       handler: limitHandler('Đăng nhập sai quá nhiều lần, thử lại sau 15 phút', 'LOGIN_RATE_LIMITED'),
     }),
-    register: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 10, handler: limitHandler('Quá nhiều lượt đăng ký, thử lại sau', 'RATE_LIMITED') }),
-    generate: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 30, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã tạo quá nhiều bài trong 1 giờ, vui lòng thử lại sau', 'GENERATE_RATE_LIMITED') }),
-    build: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 60, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn đã dựng bài quá nhiều lần trong 1 giờ, vui lòng thử lại sau', 'BUILD_RATE_LIMITED') }),
+    generate: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 30, ...byUser, handler: limitHandler('Bạn đã tạo quá nhiều bài trong 1 giờ, vui lòng thử lại sau', 'GENERATE_RATE_LIMITED') }),
+    build: rateLimit({ ...base, windowMs: 60 * 60_000, limit: 60, ...byUser, handler: limitHandler('Bạn đã dựng bài quá nhiều lần trong 1 giờ, vui lòng thử lại sau', 'BUILD_RATE_LIMITED') }),
     // Tải video, đọc link YouTube, tách nền logo — tốn băng thông/CPU hơn thao tác thường.
     // Mời người theo email: chặn dò email hàng loạt.
-    share: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 60, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn chia sẻ quá nhanh, vui lòng thử lại sau ít phút', 'SHARE_RATE_LIMITED') }),
-    media: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 120, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn thêm media quá nhanh, vui lòng thử lại sau ít phút', 'MEDIA_RATE_LIMITED') }),
+    share: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 60, ...byUser, handler: limitHandler('Bạn chia sẻ quá nhanh, vui lòng thử lại sau ít phút', 'SHARE_RATE_LIMITED') }),
+    media: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 120, ...byUser, handler: limitHandler('Bạn thêm media quá nhanh, vui lòng thử lại sau ít phút', 'MEDIA_RATE_LIMITED') }),
     // Tạo ảnh AI tốn chi phí model → hạn mức riêng; tìm ảnh Pixabay (API giới hạn ~100 lượt/phút/khoá).
-    aiImage: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 40, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn tạo ảnh AI quá nhanh, vui lòng thử lại sau ít phút', 'AI_IMAGE_RATE_LIMITED') }),
-    imageSearch: rateLimit({ ...base, windowMs: 60_000, limit: 40, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn tìm ảnh quá nhanh, vui lòng thử lại sau', 'SEARCH_RATE_LIMITED') }),
-    exportPdf: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 20, keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip), handler: limitHandler('Bạn xuất PDF quá nhiều lần, thử lại sau ít phút', 'EXPORT_RATE_LIMITED') }),
+    aiImage: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 40, ...byUser, handler: limitHandler('Bạn tạo ảnh AI quá nhanh, vui lòng thử lại sau ít phút', 'AI_IMAGE_RATE_LIMITED') }),
+    imageSearch: rateLimit({ ...base, windowMs: 60_000, limit: 40, ...byUser, handler: limitHandler('Bạn tìm ảnh quá nhanh, vui lòng thử lại sau', 'SEARCH_RATE_LIMITED') }),
+    exportPdf: rateLimit({ ...base, windowMs: 10 * 60_000, limit: 20, ...byUser, handler: limitHandler('Bạn xuất PDF quá nhiều lần, thử lại sau ít phút', 'EXPORT_RATE_LIMITED') }),
   };
 }

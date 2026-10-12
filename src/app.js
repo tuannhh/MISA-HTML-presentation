@@ -82,7 +82,6 @@ export function createApp({ config, pool, repos, services }) {
 
   const limits = rateLimits(config.rate);
   const api = express.Router();
-  api.use(limits.apiIp);
   api.use(express.json({ limit: '2mb' }));
   api.use(
     session({

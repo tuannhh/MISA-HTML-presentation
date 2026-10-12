@@ -1,6 +1,6 @@
 # 11 — Quy tắc code (bắt buộc)
 
-Áp dụng cùng bộ chuẩn MISA Backend Standard (`~/.claude/skills/misa-backend-standard`, nguồn `/Users/tuanbui/BackEnd.SKILL`) và MDS 2.0 (`~/.claude/skills/misa-design-system`). Ứng dụng chạy độc lập trên máy chủ MISA, không nằm trong AMIS Platform → bỏ các nút chức năng chờ tích hợp (9 chấm, AVA, chat, thông báo); bản rút gọn tương đương `~/.claude/skills/xoan-design-system`. Phần dưới là quy tắc **riêng** của dự án — đọc trước khi sửa bất cứ thứ gì.
+Áp dụng cùng bộ chuẩn MISA Backend Standard (`~/.claude/skills/misa-backend-standard`, nguồn `/Users/tuanbui/BackEnd.SKILL`; máy chưa cài bản MISA → dùng `xoan-backend-standard`, nội dung giống hệt) và MDS 2.0 (`~/.claude/skills/misa-design-system`). Ứng dụng chạy độc lập trên máy chủ MISA, không nằm trong AMIS Platform → bỏ các nút chức năng chờ tích hợp (9 chấm, AVA, chat, thông báo); bản rút gọn tương đương `~/.claude/skills/xoan-design-system`. Phần dưới là quy tắc **riêng** của dự án — đọc trước khi sửa bất cứ thứ gì.
 
 ## Backend
 

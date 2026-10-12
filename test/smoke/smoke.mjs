@@ -35,7 +35,7 @@ function client() {
   return { req, init: () => req('GET', '/api/auth/csrf') };
 }
 
-const signUp = createProvisioner(client, stamp); // đăng ký tự do nếu mở, nếu đóng thì admin cấp tài khoản (xem provision.mjs)
+const signUp = createProvisioner(client, stamp); // admin cấp tài khoản (không có đăng ký — xem provision.mjs)
 const a = client();
 const b = client();
 await a.init();

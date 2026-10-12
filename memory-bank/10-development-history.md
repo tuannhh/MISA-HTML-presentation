@@ -1,5 +1,16 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-12 — Bỏ mọi hạn mức tần suất theo IP
+
+- Chủ dự án chốt: người dùng buộc phải ở trong mạng MISA hoặc VPN MISA nên chung 1 IP; lớp mạng/VPN MISA đã kiểm soát truy cập → bỏ giới hạn theo IP. Trả lời luôn điểm Codex nêu (09 §4: 500 người × 60 req/phút chạm trần IP 30000).
+- `middleware/security.js`: bỏ `apiIp` (chốt chặn lụt 30000/phút/IP) và hạn mức chưa đăng nhập theo IP (1200/phút); `api` chỉ đếm người đã đăng nhập (`byUser`: khoá `u:<id>`, `skip` khi chưa đăng nhập); đăng nhập khoá theo email (trước: IP+email); hạn mức nghiệp vụ bỏ nhánh dự phòng `ipKeyGenerator`. `app.js` bỏ `limits.apiIp`; `config.rate` chỉ còn `userPerMin` (bỏ `RATE_LIMIT_IP_PER_MIN`, `RATE_LIMIT_ANON_PER_MIN`).
+- **Giữ** `IP_ALLOWLIST` (tuỳ chọn kiểm soát truy cập, mặc định trống) — chủ dự án chọn giữ.
+- Test `rate-limit.test.js` viết lại (đỏ 3/4 ở code cũ → xanh): chưa đăng nhập không bị đếm, không còn `apiIp`, đăng nhập sai đổi IP không né được và không chặn lây email khác. `npm test`: 169 pass, 1 skip (máy Windows thiếu `pdftoppm`).
+- **Gỡ hẳn đăng ký** (chủ dự án đã chốt bỏ từ 11/10, trước đó mới gỡ giao diện): bỏ `POST /auth/register`, `GET /auth/config`, `authService.register/publicConfig/domainAllowed`, limiter `register`, cấu hình `SELF_REGISTRATION`/`ALLOWED_EMAIL_DOMAINS` (+ hàm `list` trong config), `session.config` và `domainProblem` (code chết) ở frontend. Smoke `provision.mjs` luôn cấp tài khoản qua admin. Biến cũ còn trong `.env` bị bỏ qua.
+- Tạo bài/dựng bài vốn chỉ dành cho người đã đăng nhập (route đặt sau `auth`) — không đổi.
+- Thêm `docs/ROADMAP.md`: kế hoạch tiếp theo (A bổ sung A01–A06 → tính năng Publish HTML ra domain công khai → B → gate DevOps → C).
+- Máy Windows này dùng `~/.claude/skills/xoan-backend-standard` thay cho MISA Backend Standard (chủ dự án xác nhận 2 bộ giống nhau, chỉ khác tên MISA).
+
 ## 2026-10-12 — Lưu audit Codex và bằng chứng để chuyển máy
 
 - Theo yêu cầu chủ dự án, đưa hồ sơ audit vào `docs/audits/2026-10-12-codex/`, gồm audit gốc, phản hồi Claude, review chặng A, log kiểm thử và probe tái hiện. Đọc README trong thư mục trước khi đóng gói hoặc tiếp tục ở máy mới.

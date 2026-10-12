@@ -32,7 +32,7 @@ Một tiến trình Node duy nhất phục vụ cả API lẫn SPA tĩnh (`dist/
 | Express | 5.2 | HTTP | Lỗi async tự chuyển về error handler |
 | mysql2 | 3.24 | Kết nối MySQL | Pool, prepared statements |
 | express-session | 1.19 | Phiên đăng nhập | Store tự viết `MySqlSessionStore` |
-| express-rate-limit | 8.7 | Giới hạn tần suất | Dùng named import `{ rateLimit, ipKeyGenerator }` |
+| express-rate-limit | 8.7 | Giới hạn tần suất | Dùng named import `{ rateLimit }`; không khoá theo IP (xem 08 §Hạn mức) |
 | helmet | 8.3 | Header bảo mật/CSP | CSP riêng cho trang xem trước |
 | bcryptjs | 3.0 | Băm mật khẩu | 12 rounds mặc định |
 | multer | 2.4 | Upload multipart | memoryStorage cho ảnh; **diskStorage** cho tư liệu lớn và video |

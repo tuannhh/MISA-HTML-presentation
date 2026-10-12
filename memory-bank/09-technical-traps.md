@@ -259,4 +259,4 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - Chạy với `toolEnv()` (PATH, LANG, fontconfig, TMPDIR + HOME riêng + proxy chết). Thiếu biến cần cho phông chữ → render sai chữ; thêm tên biến vào `TOOL_ENV_KEYS` thay vì kế thừa toàn bộ.
 
 ### Giới hạn API khi dùng chung IP
-- Không dùng IP làm khoá hạn mức chính (cả văn phòng chung 1 IP). `api` đặt SAU `loadUser`; thao tác chưa đăng nhập vẫn theo IP nhưng trần cao (sáng đầu giờ). Thêm route ghi tốn tài nguyên → thêm limiter theo `req.user.id` như `share`/`media`.
+- **Không dùng IP làm khoá hạn mức** (mạng/VPN MISA → mọi người chung 1 IP; chủ dự án chốt bỏ hẳn 12/10/2026). `api` đặt SAU `loadUser`, chỉ đếm người đã đăng nhập. Thêm route ghi tốn tài nguyên → đặt sau `auth` và dùng limiter `byUser` (khoá `req.user.id`) như `share`/`media`; không thêm `ipKeyGenerator`.

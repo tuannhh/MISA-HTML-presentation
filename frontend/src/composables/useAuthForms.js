@@ -1,7 +1,7 @@
 // Form đăng nhập / đổi mật khẩu — validate phía giao diện khớp chính sách server (10–128 ký tự, có chữ và số).
 import { reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { session, login, changePassword } from '@/lib/session.js';
+import { login, changePassword } from '@/lib/session.js';
 import { safeNext } from '@/router.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -12,13 +12,6 @@ export function passwordProblem(p) {
   if (p.length > 128) return 'Mật khẩu tối đa 128 ký tự';
   if (!/[A-Za-zÀ-ỹ]/.test(p) || !/\d/.test(p)) return 'Mật khẩu cần có cả chữ và số';
   return '';
-}
-
-function domainProblem(email) {
-  const domains = session.config.allowedEmailDomains || [];
-  if (!domains.length) return '';
-  const d = email.split('@')[1]?.toLowerCase();
-  return domains.includes(d) ? '' : `Chỉ chấp nhận email thuộc: ${domains.map((x) => '@' + x).join(', ')}`;
 }
 
 function clear(errors) {

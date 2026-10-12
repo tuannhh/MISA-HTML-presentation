@@ -2,13 +2,12 @@
 import { reactive } from 'vue';
 import { get, post, setCsrf } from './api.js';
 
-export const session = reactive({ loaded: false, user: null, config: { allowedEmailDomains: [] } });
+export const session = reactive({ loaded: false, user: null });
 
 export async function loadSession() {
-  const [me, cfg] = await Promise.all([get('/api/auth/me'), get('/api/auth/config').catch(() => null)]);
+  const me = await get('/api/auth/me');
   setCsrf(me.data.csrfToken);
   session.user = me.data.user;
-  if (cfg) session.config = cfg.data;
   session.loaded = true;
 }
 
