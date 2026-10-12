@@ -74,7 +74,7 @@ onMounted(ensureDeckFonts)
     <DeckBgCanvas v-if="design.background !== 'none' && !brandBg" :name="design.background" :colors="c" animate class="absolute inset-0 opacity-90" :logical-width="Math.round(dims[0] / 2)" :logical-height="Math.round(dims[1] / 2)" :boost="2" />
     <div class="absolute inset-y-0 left-[6%] flex w-[62%] flex-col justify-center gap-[4%]">
       <span class="block h-[3px] w-[10%] rounded-full" :style="{ background: c.a }" aria-hidden="true" />
-      <p class="line-clamp-2 text-[clamp(14px,5.2cqw,30px)] font-extrabold leading-[1.1]" :style="{ fontFamily: head, color: ink }">
+      <p class="line-clamp-2 text-[clamp(14px,5.2cqw,30px)] font-extrabold leading-[1.1]" :class="design.font?.titleCase === 'upper' ? 'uppercase' : ''" :style="{ fontFamily: head, color: ink }">
         {{ titleWords.a }} <span :style="{ color: c.a }">{{ titleWords.b }}</span>
       </p>
       <p class="line-clamp-2 text-[clamp(10px,2.4cqw,14px)] leading-snug opacity-80" :style="{ fontFamily: body, color: ink }">{{ plainText(subtitle) || 'Nội dung trình bày dùng phông chữ đã chọn' }}</p>

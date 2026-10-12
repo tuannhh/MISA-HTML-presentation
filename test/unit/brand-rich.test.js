@@ -20,7 +20,7 @@ const XSS = '<img src=x onerror=alert(1)>"\'&';
 test('rich: tách/ghép đoạn, chữ thuần, thẻ sai cú pháp thành chữ thường, gộp đoạn cùng định dạng', () => {
   const s = 'Hỏi đáp ⟦accent,b⟧song song⟦/⟧ và AI';
   assert.equal(plainText(s), 'Hỏi đáp song song và AI');
-  assert.deepEqual(parseRich(s)[1], { t: 'song song', c: 'accent', b: true, n: false });
+  assert.deepEqual(parseRich(s)[1], { t: 'song song', c: 'accent', b: true, n: false, h: null });
   assert.equal(serializeRich(parseRich(s)), s);
   // Thuộc tính lạ (CSS chèn), màu không hợp lệ, dấu ⟦ lẻ → chữ thường (bỏ dấu ngoặc), không thành định dạng.
   assert.equal(plainText('⟦red;background:url(x)⟧a⟦/⟧ ⟦b'), 'red;background:url(x)a/ b');

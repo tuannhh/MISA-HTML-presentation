@@ -280,3 +280,16 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - Engine trình chiếu ở trang công khai chạy top-level (`EMBED=false`) → video/YouTube mở lớp phủ riêng, cần `media-src 'self'` và `frame-src` YouTube; YouTube cần Referer (`Referrer-Policy: strict-origin-when-cross-origin`).
 - `fetch` (undici) bỏ header `Host` tự đặt → test phân luồng dùng `node:http` (`test/unit/publish-site.test.js`).
 - Test tích hợp/smoke **không** chạy vào stack Docker đang có dữ liệu (`misa-presentation-*`); dùng MySQL tạm (`mp-it-mysql`) hoặc compose project riêng.
+
+### Liên kết + trang Liên hệ / Ưu đãi (2026-10-12)
+- Quy tắc chung `svg * { transform-box: fill-box; transform-origin: center }` (theme.css) làm lệch hình có thuộc tính `transform` vẽ theo toạ độ SVG gốc (logo Gọi/Viber) → `.bico *` đặt lại `view-box` + `0 0`. SVG nhúng ngoài deck (form `ContactFields`) cũng phải đặt lại.
+- `href=` phải đứng CUỐI thuộc tính `⟦…⟧` (URL có dấu phẩy). Regex thẻ cho thuộc tính dài tới 600 ký tự; trần chuỗi thô trừ phần `href=` (`hrefWeight`) — sửa ở `specService.str` thì sửa cả `editPaths.cutR`.
+- Dàn ý chứa `[nhãn](URL)` → mọi chỗ đưa chữ dàn ý cho AI dựng bài / so độ dài phải `stripLinks` (đã làm ở `outlineForModel`, `composeDeckFromOutline`, `OutlineSlideCard`).
+- `pdftotext` thiếu trên máy dev Windows → `collectSourceFacts` chỉ log cảnh báo; đối chiếu số điện thoại trong PDF chỉ đủ khi có poppler (Docker có).
+- Công cụ chụp màn hình của khung trình duyệt trong app không vẽ nội dung iframe sandbox (cả cấu hình cũ) — kiểm tra khung sửa bằng cách mở thẳng `/api/presentations/<mã>/preview?edit=1`.
+
+### Kiểu chữ tiêu đề (2026-10-12)
+- Đổi hoa/thường trên chữ có thẻ `⟦…⟧`: KHÔNG dùng `repaintRich` (khớp theo nội dung → lệch định dạng khi chữ chỉ đổi hoa/thường, vd. `⟦accent⟧Chương trình ưu đ⟦/⟧ãi`). Dùng `parseRich` → cắt chuỗi mới theo độ dài từng đoạn → `serializeRich`.
+- "ai" là đại từ tiếng Việt → không tự ép thành "AI"; chỉ ép MISA/AMIS/ASP/JETPAY.
+- Dòng tư liệu đang Viết Hoa Từng Chữ (tiêu đề, banner) không được dùng làm bằng chứng tên riêng, nếu không "Ngân Hàng", "Kế Toán" sẽ bị giữ hoa.
+- `toLocaleLowerCase('vi')` cho chữ có dấu tiếng Việt; tách từ bằng `\p{L}[\p{L}\p{M}\p{N}]*` (chữ tổ hợp dấu rời).

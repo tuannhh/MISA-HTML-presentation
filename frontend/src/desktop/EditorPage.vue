@@ -315,7 +315,7 @@ onMounted(ed.load)
                 :key="previewUrl"
                 :src="previewUrl"
                 title="Xem trước và sửa trực tiếp bài trình bày"
-                sandbox="allow-scripts allow-popups"
+                sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                 allow="fullscreen"
                 class="absolute inset-0 h-full w-full border-0"
               />

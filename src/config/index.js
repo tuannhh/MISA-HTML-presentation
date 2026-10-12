@@ -131,6 +131,8 @@ export function loadConfig() {
     visuals: Object.freeze({
       enabled: bool('PDF_UI_SHOTS', true),
       bin: str('PDFTOPPM_PATH', 'pdftoppm'),
+      // Chữ trong PDF để đối chiếu kết quả AI (liên kết, thông tin liên hệ phải có trong nguồn — sourceFacts.js).
+      pdftotext: str('PDFTOTEXT_PATH', 'pdftotext'),
       office: bool('OFFICE_VISUALS', true),
       soffice: str('SOFFICE_PATH', 'soffice'),
       officeTimeoutMs: int('OFFICE_RENDER_TIMEOUT_MS', 120000, { min: 10000, max: 600000 }),

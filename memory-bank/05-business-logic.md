@@ -40,6 +40,7 @@ Giới hạn độ dài/số lượng: `shared/deck/limits.js` (`SPEC_LIMITS`) �
 **Chữ có định dạng** (2026-10-06, `shared/deck/rich.js`, §13): mọi trường văn bản (trừ ô số liệu `stats.value/prefix/suffix` và chân trang) có thể chứa
 `⟦thuộc tính⟧đoạn chữ⟦/⟧` — thuộc tính = token màu theo theme (`RICH_COLORS`: text, accent, accent-2, amber, mint, coral, violet, muted, white, dark) | `#RRGGBB` | `b` (đậm) | `n` (giữ liền, không ngắt dòng) — và `\n` = xuống dòng.
 Giới hạn độ dài tính theo **chữ hiển thị** (`plainText`); chuỗi thô dài quá `max*4+400` thì bỏ định dạng. Thẻ sai cú pháp → chữ thường (bỏ dấu ⟦ ⟧).
+Thuộc tính **`href=<URL>`** (liên kết, 2026-10-12, §18) luôn đứng **cuối** danh sách thuộc tính (URL có thể chứa dấu phẩy); phần `href=…` không tính vào trần chuỗi thô (`hrefWeight`; tối đa ~8 liên kết dài mỗi ô).
 
 ### Chuẩn hoá (`specService.normalizeSpec`)
 
@@ -430,3 +431,31 @@ Giống "Xuất bản" của CMS: chủ bài bấm **Xuất bản** → link `<P
 - **"Có thay đổi chưa cập nhật"**: `publications.spec_version` ≠ `presentations.spec_version`.
 - **Tắt** khi `PUBLISH_BASE_URL` trống: `GET` trả `enabled:false`, `POST` → 503 `PUBLISH_DISABLED`; giao diện hiện "Chưa cấu hình domain công khai".
 - Phân luồng domain, CSP, CDN, noindex: `08` §Domain công khai, `04` cuối tệp, `docs/DEVOPS-NETWORK.md` §6.
+
+## 18. Liên kết (hyperlink) + trang "Thông tin liên hệ" / "Chương trình ưu đãi" (2026-10-12)
+
+### Liên kết trong chữ
+- Lưu trong chữ có định dạng: `⟦href=https://…⟧nhãn⟦/⟧` (kết hợp được màu/đậm: `⟦accent,b,href=…⟧`). URL qua `safeHref` (`shared/deck/rich.js`): chỉ `http(s)://` có tên miền có dấu chấm (không tài khoản `u:p@`, không localhost, ≤ 500 ký tự, không ký tự lạ), `mailto:` email hợp lệ, `tel:` số. URL xấu → thẻ bỏ, giữ chữ.
+- Renderer: `<a class="rl" href target="_blank" rel="noopener noreferrer">`. Trình chiếu/HTML xuất/trang công khai: bấm mở **tab mới**, engine không chuyển trang; Enter/Space trên link không bị chặn. Khung sửa: bấm = sửa chữ (engine chặn mở link).
+- Chèn trên khung sửa: bôi chữ → nút **Liên kết** (hoặc Ctrl/Cmd+K) trên `#rtb` → ô nhập URL (gõ tắt `amis.misa.vn` → `https://`, email → `mailto:`, số → `tel:`), *Gỡ liên kết*. Con trỏ trong 1 liên kết (không bôi) → mở để sửa/gỡ cả liên kết. Chữ gõ thêm chỉ thừa hưởng liên kết khi nằm GIỮA liên kết.
+- **Từ tư liệu nguồn**: bộ đọc chèn `[nhãn](URL)` vào chữ (DOCX `w:hyperlink`, PPTX `a:hlinkClick`, HTML `<a>` → URL tuyệt đối theo trang, bỏ `#…`/`javascript:`; Office tách 1 link nhiều run → `mergeLinks`). `sourceFacts.collectSourceFacts` gom **corpus** (chữ mọi tư liệu + chữ PDF qua poppler `pdftotext`, + bản chuyển thể) và **links** (`[nhãn](URL)`, URL trần, `/URI` trong PDF; ≤ 60) → gửi AI danh sách "LIÊN KẾT TRONG TƯ LIỆU". Dàn ý dùng cú pháp `[nhãn](URL)` ngay trong dòng (người dùng đọc/sửa được; `shared/deck/mdLinks.js`); độ dài dòng tính theo nhãn.
+- **Chống bịa** (`outlineService.verifyOutlineFacts`, chạy sau `normalizeOutline` ở bước 1): liên kết có URL không có trong nguồn → bỏ (giữ nhãn). Bước dựng bài: AI chỉ thấy nhãn (`outlineForModel` bỏ URL); sau `normalizeSpec`, `applyOutlineLinks` gắn lại URL vào ô chữ đầu tiên của trang có nguyên văn nhãn (`linkPhrase`, ≤ 8 liên kết/ô). Log: `outline_ready.sourceLinks/linksDropped`, `build_ready.links`.
+
+### Bố cục `contact` (Thông tin liên hệ) và `offer` (Chương trình ưu đãi)
+- Dữ liệu `slide.contact` (`shared/deck/contact.js`, chuẩn hoá `specService.cleanContact`): `phones` ≤ 3 `{number, label, channels ⊂ call|zalo|viber|telegram|imessage}` (mặc định `['call']`), `emails` ≤ 2, `addresses` ≤ 2, `website`, `cta` (chữ có định dạng ≤ 120), `qr {asset | link, caption}`. Lưu (strict) báo lỗi số/email/website/link QR sai; kết quả AI (lenient) bỏ mục sai. Không còn gì → không lưu trường. **Giữ khi đổi bố cục** (chỉ hiển thị ở contact/offer). Không lưu sẵn thông tin liên hệ mặc định — nhập theo từng trang (chốt 12/10).
+- Liên kết dựng từ dữ liệu đã kiểm: Gọi `tel:<số>`, Zalo `https://zalo.me/<0…>`, Viber `viber://chat?number=%2B84…`, Telegram `https://t.me/+84…`, iMessage `sms:+84…`, email `mailto:`, địa chỉ → Google Maps search, website `https://`. Logo kênh: SVG màu `shared/deck/brands.js`.
+- Mã QR: ảnh tải lên (`contact.qr.asset`, hiển thị trọn khung trên nền trắng) **hoặc** link → hệ thống tự vẽ SVG vector (`shared/deck/qr.js`, lõi `qrcode`, mức sửa lỗi M, vùng trắng 4 ô) — nét ở mọi cỡ, PDF quét được. Có cả hai → dùng ảnh. `collectAssetIds`/`dropForeignAssets`/`remapAssetIds`/`assertMedia` gồm `contact.qr.asset` (phải là ảnh).
+- Hiển thị: **contact** — tiêu đề + danh sách liên hệ (icon tròn) + CTA nổi bật + ghi chú (`caption`), mã QR lớn bên phải (~600px ở khung 1920). **offer** — nửa trái: tiêu đề, quyền lợi (`items` ≤ 6, icon check/…), thời hạn (`caption`, icon đồng hồ), CTA, liên hệ; nửa phải: mã QR **chiếm 1/2 trang** (container query). Trang contact không có thông tin nào → hạ về `closing`; offer không có quyền lợi/liên hệ → hạ bố cục.
+- **AI tự phát hiện**: prompt dàn ý có 2 bố cục, cách viết dòng ("Hotline: …", "Điện thoại: 0912 345 678 (Zalo, Viber)", "Email:", "Website:", "Địa chỉ:"/"Văn phòng …:", "Kêu gọi:", "QR:", "Chú thích QR:"); chỉ dùng khi nguồn có nguyên văn. Ảnh loại **`qr`** (AI phân loại) chỉ gắn vào trang contact/offer (ảnh đầu = mã QR); QR thừa → trang liên hệ chưa có ảnh. `verifyOutlineFacts` bỏ dòng có số điện thoại (so theo chữ số, `0…` ≡ `+84…`)/email/website/link QR **không có trong nguồn**; trang contact không còn gì → `auto`. Bước dựng: `parseContactPoints` (dòng → contact, phần còn lại → quyền lợi/ghi chú) — AI chỉ góp kicker/tiêu đề/icon. Prompt cũ 1 bước không dùng 2 bố cục này.
+
+## 19. Kiểu chữ tiêu đề trang: viết hoa đầu câu (mặc định) / VIẾT HOA TOÀN BỘ (2026-10-12)
+
+- Yêu cầu: tiêu đề AI hay "Viết Hoa Từng Chữ" (kiểu tiếng Anh) là sai. Hai kiểu: **viết hoa đầu câu** (mặc định) và **viết hoa toàn bộ**. Luôn viết hoa MISA, AMIS, ASP, AI (trí tuệ nhân tạo), JETPAY.
+- **Viết hoa đầu câu = chữ lưu trong bài** (`shared/deck/textCase.js`, hàm thuần dùng chung server + giao diện):
+  - Chỉ đổi chuỗi ĐANG Viết Hoa Từng Chữ (`isTitleCased`: sau chữ đầu có ≥ 1 chữ viết hoa đầu và 0 chữ thường, hoặc ≥ 2 và chữ thường ≤ 20%). Chuỗi đã viết kiểu câu giữ nguyên, chỉ ép MISA/AMIS/ASP/JETPAY.
+  - Tên riêng không đoán bừa: chữ viết hoa giữa câu chỉ được giữ khi có **bằng chứng** trong tư liệu (`buildCaseIndex`): xuất hiện viết hoa giữa câu ở dòng không Viết Hoa Từng Chữ, và (không bao giờ viết thường, hoặc đúng cặp "chữ trước + chữ này" — vd. "AMIS Kế toán"). Từ viết tắt (≥ 2 chữ cái hoa) giữ nguyên.
+  - "AI" chỉ giữ khi đã viết hoa — "ai" tiếng Việt là đại từ nên không tự ép.
+  - Giữ thẻ định dạng `⟦…⟧` (đổi hoa/thường không đổi độ dài → chia lại theo đúng đoạn); cụm nhấn mạnh (`highlight`) lấy lại theo tiêu đề mới; dàn ý không đụng URL `[nhãn](URL)`, dòng "Nhãn: diễn giải" chỉ đổi phần nhãn.
+  - Áp dụng: (1) bước dàn ý — sau `verifyOutlineFacts`, bằng chứng = corpus tư liệu (log `outline_ready.recased`); (2) bước dựng — sau `applyOutlineLinks`, bằng chứng = chữ dàn ý (log `build_ready.recased`): tiêu đề, mô tả, kicker, ô gốc, tiêu đề mục/bước/cột, nhãn, CTA. Prompt (dàn ý, dựng bài, 1 bước) có `CASE_RULE`.
+  - Bài cũ: nút "Sửa tiêu đề đang Viết Hoa Từng Chữ" ở tab Phông chữ (trình soạn thảo) chạy `sentenceCaseSpec` trên bản nháp, toast số chỗ đã sửa, người dùng Lưu như mọi thay đổi.
+- **Viết hoa toàn bộ = tuỳ chọn hiển thị** `design.font.titleCase = 'upper'` (không lưu khi mặc định; strict báo lỗi giá trị lạ). Renderer gắn `data-tcase` lên `<html>` (engine cập nhật khi xem trước), CSS `text-transform: uppercase` cho `.title, .cv-title, .sec-t, .cl-t`. Chữ gốc không đổi → chuyển qua lại không mất dữ liệu; HTML/PDF xuất cùng kiểu.

@@ -290,7 +290,7 @@ onMounted(ed.load)
     <template v-else-if="draft">
       <div class="bg-[#05070F] p-2">
         <div class="relative w-full overflow-hidden rounded" :style="{ aspectRatio: ratioCss(deck.ratio) }">
-          <iframe v-if="previewUrl" ref="frame" data-deck-frame :key="previewUrl" :src="previewUrl" title="Xem trước và sửa trực tiếp bài trình bày" sandbox="allow-scripts allow-popups" class="absolute inset-0 h-full w-full border-0" />
+          <iframe v-if="previewUrl" ref="frame" data-deck-frame :key="previewUrl" :src="previewUrl" title="Xem trước và sửa trực tiếp bài trình bày" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" class="absolute inset-0 h-full w-full border-0" />
           <div v-if="!live.ready.value" class="absolute inset-0 grid place-items-center"><MSpinner :size="32" /></div>
         </div>
       </div>

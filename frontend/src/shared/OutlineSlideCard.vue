@@ -9,7 +9,8 @@ import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import MDropdownMenu from '@/components/mds/MDropdownMenu.vue'
 import OutlineMedia from './OutlineMedia.vue'
-import { OUTLINE_LAYOUTS, OUTLINE_LAYOUT_LABEL, POINT_HINT } from '@/composables/useOutline.js'
+import { OUTLINE_LAYOUTS, OUTLINE_LAYOUT_LABEL, POINT_HINT, LINK_HINT } from '@/composables/useOutline.js'
+import { stripLinks } from '@shared/deck/mdLinks.js'
 import { SPEC_LIMITS as L } from '@/lib/slideModel.js'
 
 const props = defineProps({
@@ -27,7 +28,8 @@ const showNotes = ref(!!props.slide.notes)
 const showMedia = ref(!!props.slide.video || props.slide.images.length > 0)
 const mediaCount = computed(() => (s.value.video ? 1 : s.value.images.length))
 const hint = computed(() => POINT_HINT[s.value.layout] || 'Mỗi dòng là 1 ý sẽ hiển thị trên trang — “Tiêu đề ngắn: diễn giải”')
-const tooLong = (v, max) => (String(v ?? '').length > max ? `Tối đa ${max} ký tự` : '')
+// Độ dài tính theo chữ hiển thị — liên kết "[nhãn](URL)" chỉ tính nhãn (khớp outlineService).
+const tooLong = (v, max) => (stripLinks(v).length > max ? `Tối đa ${max} ký tự` : '')
 
 const menu = computed(() => [
   { key: 'up', label: 'Chuyển lên', icon: 'arrow-up', disabled: props.index === 0 },
@@ -95,14 +97,14 @@ function movePoint(i, dir) {
     </header>
 
     <MInput v-model="s.title" :placeholder="index === 0 ? 'Tên bài / tiêu đề trang bìa' : 'Tiêu đề trang'" :aria-label="`Tiêu đề trang ${index + 1}`" :error="tooLong(s.title, L.title)" class="text-[15px] font-semibold" />
-    <MTextarea v-model="s.subtitle" :rows="compact ? 2 : 1" placeholder="Mô tả ngắn (tuỳ chọn)" :maxlength="L.subtitle" :aria-label="`Mô tả trang ${index + 1}`" />
+    <MTextarea v-model="s.subtitle" :rows="compact ? 2 : 1" placeholder="Mô tả ngắn (tuỳ chọn)" :error="tooLong(s.subtitle, L.subtitle)" :aria-label="`Mô tả trang ${index + 1}`" />
 
     <!-- Các dòng nội dung sẽ hiển thị -->
     <div class="flex flex-col gap-1.5">
       <div class="flex items-center justify-between gap-2">
         <span class="text-[13px] font-medium">Nội dung hiển thị <span class="font-normal text-[var(--mds-text-secondary)]">({{ s.points.filter((p) => p.trim()).length }}/{{ L.outlinePoints }})</span></span>
       </div>
-      <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">{{ hint }}</p>
+      <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">{{ hint }} · {{ LINK_HINT }}</p>
       <ol class="flex flex-col gap-1.5">
         <li v-for="(p, i) in s.points" :key="i" class="flex items-start gap-1.5">
           <span class="mt-[7px] w-5 shrink-0 text-right text-[12px] tabular-nums text-[var(--mds-text-secondary)]" aria-hidden="true">{{ i + 1 }}.</span>

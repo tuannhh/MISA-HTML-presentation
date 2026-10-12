@@ -2,10 +2,13 @@
 // người dùng duyệt/sửa, gắn media (ảnh, video, YouTube), chọn thiết kế → bước 2 AI dựng bài theo đúng dàn ý.
 // Hàm thuần (không DB/HTTP): chuẩn hoá dàn ý, gắn media vào slide, dựng slide dự phòng khi AI thiếu trang.
 import { randomUUID } from 'node:crypto';
-import { AI_LAYOUTS as LAYOUTS, MEDIA_LAYOUTS } from '../../shared/deck/render.js';
+import { AI_LAYOUTS as LAYOUTS, MEDIA_LAYOUTS, CONTACT_LAYOUTS } from '../../shared/deck/render.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
+import { linkPhrase, richLinks, safeHref } from '../../shared/deck/rich.js';
+import { validPhone, validEmail, phoneDigits, webHref, CONTACT_LIMITS as CL } from '../../shared/deck/contact.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { cleanDesign, cleanVideo } from './specService.js';
+import { stripLinks, linksIn, cleanLinks, hasLinks } from '../../shared/deck/mdLinks.js';
 
 export const OUTLINE_LAYOUTS = Object.freeze(['auto', ...LAYOUTS]);
 const ID_RE = /^[a-z0-9-]{1,40}$/i;
@@ -44,6 +47,25 @@ function makeCtx(strict) {
   };
 }
 
+// Chữ dàn ý có liên kết "[nhãn](URL)": giới hạn tính theo chữ HIỂN THỊ (URL không tính, tối đa ~8 liên kết × 500 ký tự);
+// URL hỏng → chỉ giữ nhãn.
+function linkedStr(c, v, max, path) {
+  const raw = c.str(v, max + 4200, path);
+  if (!hasLinks(raw)) {
+    if (raw.length > max) {
+      if (c.strict) c.errors.push(`${path}: tối đa ${max} ký tự`);
+      return raw.slice(0, max).trim();
+    }
+    return raw;
+  }
+  const s = cleanLinks(raw);
+  if (stripLinks(s).length > max) {
+    if (c.strict) c.errors.push(`${path}: tối đa ${max} ký tự`);
+    return stripLinks(s).slice(0, max).trim();
+  }
+  return s;
+}
+
 function cleanOutlineSlide(c, v, i, seen) {
   const o = c.obj(v);
   const p = `slides[${i}]`;
@@ -73,11 +95,11 @@ function cleanOutlineSlide(c, v, i, seen) {
   const slide = {
     id,
     layout,
-    title: c.str(o.title, SPEC_LIMITS.title, `${p}.title`),
-    subtitle: c.str(o.subtitle, SPEC_LIMITS.subtitle, `${p}.subtitle`),
+    title: linkedStr(c, o.title, SPEC_LIMITS.title, `${p}.title`),
+    subtitle: linkedStr(c, o.subtitle, SPEC_LIMITS.subtitle, `${p}.subtitle`),
     points: c
       .arr(o.points, SPEC_LIMITS.outlinePoints, `${p}.points`)
-      .map((pt, k) => c.str(pt, SPEC_LIMITS.outlinePoint, `${p}.points[${k}]`))
+      .map((pt, k) => linkedStr(c, pt, SPEC_LIMITS.outlinePoint, `${p}.points[${k}]`))
       .filter(Boolean),
     notes: c.str(o.notes, SPEC_LIMITS.notes, `${p}.notes`),
     images,
@@ -472,6 +494,17 @@ function contentAsItems(s) {
 export function applyOutlineMedia(slide, os) {
   const imgs = os.images || [];
   if (!Array.isArray(slide.items)) slide.items = [];
+  // Trang Liên hệ / Ưu đãi: ảnh gắn ở dàn ý là MÃ QR (ảnh đầu tiên); không có ô ảnh/video.
+  if (CONTACT_LAYOUTS.includes(slide.layout)) {
+    if (imgs[0]) {
+      slide.contact = slide.contact || { phones: [], emails: [], addresses: [], website: '', cta: '', qr: { asset: null, link: '', caption: '' } };
+      slide.contact.qr = { ...(slide.contact.qr || {}), asset: imgs[0].asset };
+    }
+    slide.image = null;
+    slide.images = [];
+    slide.video = null;
+    return slide;
+  }
   if (os.video) {
     slide.video = { ...os.video };
     slide.image = null;
@@ -524,10 +557,12 @@ export function composeDeckFromOutline(outline, modelSlides = []) {
   }
   // AI bỏ ref nhưng trả đúng số trang → ghép theo thứ tự.
   if (!byRef.size && modelSlides.length === n) modelSlides.forEach((m, i) => byRef.set(i, m));
-  const slides = outline.slides.map((os, i) => {
+  const slides = outline.slides.map((os0, i) => {
+    // Liên kết "[nhãn](URL)" gắn lại sau khi chuẩn hoá spec (applyOutlineLinks) — ở đây chỉ dùng nhãn.
+    const os = { ...os0, title: stripLinks(os0.title), subtitle: stripLinks(os0.subtitle), points: os0.points.map(stripLinks) };
     let m = byRef.get(i);
     if (m && os.layout !== 'auto' && m.layout !== os.layout) {
-      const mediaOk = (MEDIA_ONE(os) && !MEDIA_LAYOUTS.includes(os.layout) && MEDIA_LAYOUTS.includes(m.layout)) || (os.images.length >= 2 && m.layout === 'gallery');
+      const mediaOk = !CONTACT_LAYOUTS.includes(os.layout) && ((MEDIA_ONE(os) && !MEDIA_LAYOUTS.includes(os.layout) && MEDIA_LAYOUTS.includes(m.layout)) || (os.images.length >= 2 && m.layout === 'gallery'));
       if (!mediaOk) m = null;
     }
     const s = m ? { ...m, id: os.id } : outlineSlideToSpec(os, i, n);
@@ -541,10 +576,212 @@ export function composeDeckFromOutline(outline, modelSlides = []) {
         s.columns = org.columns.map((c, k) => (icons[k] ? { ...c, icon: icons[k] } : c));
       }
     }
+    // Trang Liên hệ / Ưu đãi: thông tin liên hệ + quyền lợi lấy đúng từ dàn ý (AI chỉ góp tiêu đề, icon).
+    if (CONTACT_LAYOUTS.includes(s.layout)) fillContact(s, os0, m);
     if (os.title) s.title = os.title;
     if (os.subtitle) s.subtitle = os.subtitle;
     s.notes = os.notes || s.notes || '';
     return applyOutlineMedia(s, os);
   });
   return { title: outline.title, footer: outline.footer, ...outline.design, slides };
+}
+
+/* ---------------- trang Liên hệ / Ưu đãi: dòng dàn ý → slide.contact ---------------- */
+// Cách viết dòng (AI lập dàn ý và người dùng sửa theo cùng quy ước):
+//   "Điện thoại: 0912 345 678 (Zalo, Viber)" · "Hotline: 1900 8677" · "Zalo: 0912 345 678" · "Email: sales@misa.com.vn"
+//   "Địa chỉ: …" · "Văn phòng Hà Nội: …" · "Website: amis.misa.vn" · "Kêu gọi: Liên hệ để được tư vấn miễn phí"
+//   "QR: https://…" (hệ thống tự tạo mã QR) · "Chú thích QR: Quét để đăng ký". Dòng khác: trang Ưu đãi = quyền lợi, trang Liên hệ = ghi chú.
+const KEY_RE = /^\s*([^:：]{1,40}?)\s*[:：]\s*(.+)$/;
+const APPS = ['zalo', 'viber', 'telegram', 'imessage'];
+const GENERIC_PHONE = /^(điện thoại|số điện thoại|đt|sđt|đtdđ|di động|phone|tel|mobile|liên hệ|số liên hệ)$/i;
+const PHONE_KEY = /(điện thoại|đt|sđt|hotline|tổng đài|di động|phone|tel|mobile|liên hệ|zalo|viber|telegram|imessage)/i;
+const NUM_RE = /\+?\d[\d .()-]{4,20}\d/g;
+const lc = (v) => v.toLocaleLowerCase('vi');
+
+function phonesOf(line, key, keyRaw) {
+  const out = [];
+  const low = lc(line);
+  const msgs = APPS.filter((a) => low.includes(a));
+  const app = APPS.find((a) => lc(key) === a);
+  const channels = app ? [...new Set([app, ...msgs])] : ['call', ...msgs];
+  const label = app || GENERIC_PHONE.test(key) || !key ? '' : keyRaw.slice(0, CL.phoneLabel);
+  // Nhiều số trên 1 dòng: "0912 345 678 - 0987 654 321", "… hoặc …", "…, …"
+  for (const part of line.split(/[,;/]|\s[-–—]\s|\bhoặc\b/)) {
+    for (const n of part.match(NUM_RE) || []) {
+      const number = n.trim().replace(/\s+/g, ' ');
+      if (validPhone(number) && out.length < CL.phones) out.push({ number, label, channels });
+    }
+  }
+  return out;
+}
+
+/** Dòng dàn ý → { contact, rest } (rest = dòng không phải thông tin liên hệ). Liên kết "[nhãn](URL)" dùng URL. */
+export function parseContactPoints(points) {
+  const ct = { phones: [], emails: [], addresses: [], website: '', cta: '', qr: { asset: null, link: '', caption: '' } };
+  const rest = [];
+  for (const raw of points || []) {
+    const urls = linksIn(raw);
+    const line = stripLinks(raw).trim();
+    if (!line) continue;
+    const m = KEY_RE.exec(line);
+    // "https://…" có dấu ":" nhưng không phải nhãn.
+    const keyed = m && !/^(https?|mailto|tel)$/i.test(m[1].trim());
+    const keyRaw = keyed ? m[1].trim() : '';
+    const key = lc(keyRaw);
+    const val = keyed ? m[2].trim() : line;
+    if (/^(kêu gọi|lời kêu gọi|cta|kêu gọi hành động)$/.test(key)) {
+      ct.cta = val.slice(0, CL.cta);
+      continue;
+    }
+    if (/^(qr|mã qr|qr code|link qr)$/.test(key)) {
+      ct.qr.link = (urls[0]?.url || val).slice(0, CL.qrLink);
+      continue;
+    }
+    if (/^(chú thích qr|ghi chú qr)$/.test(key)) {
+      ct.qr.caption = val.slice(0, CL.qrCaption);
+      continue;
+    }
+    const emails = (val.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}/g) || []).filter(validEmail);
+    if (/^(email|e-mail|thư điện tử|mail)$/.test(key) || (!keyed && emails.length && emails.join(' ') === val)) {
+      for (const e of emails) if (ct.emails.length < CL.emails && !ct.emails.includes(e)) ct.emails.push(e);
+      continue;
+    }
+    if (/^(website|web|trang web|trang chủ|trang thông tin)$/.test(key) || (!keyed && /^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(val))) {
+      const w = webHref(urls[0]?.url || val);
+      if (w && !ct.website) {
+        ct.website = w;
+        continue;
+      }
+    }
+    if (/^(địa chỉ|văn phòng|trụ sở|chi nhánh|showroom|cửa hàng|nhà máy)/.test(key)) {
+      if (ct.addresses.length < CL.addresses) ct.addresses.push((key === 'địa chỉ' ? val : line).slice(0, CL.address));
+      continue;
+    }
+    if (PHONE_KEY.test(key) || (!keyed && /^\+?[\d .()-]{6,30}(\(.*\))?$/.test(val))) {
+      const found = phonesOf(val, key, keyRaw);
+      if (found.length) {
+        for (const ph of found) if (ct.phones.length < CL.phones && !ct.phones.some((x) => phoneDigits(x.number) === phoneDigits(ph.number))) ct.phones.push(ph);
+        continue;
+      }
+    }
+    rest.push(raw);
+  }
+  return { contact: ct, rest };
+}
+
+// Điền slide Liên hệ / Ưu đãi từ dòng dàn ý (os0 = dàn ý gốc, còn cú pháp liên kết); m = trang AI (icon từng quyền lợi).
+function fillContact(s, os0, m) {
+  const { contact, rest } = parseContactPoints(os0.points);
+  s.contact = contact;
+  if (s.layout === 'offer') {
+    const icons = (Array.isArray(m?.items) ? m.items : []).map((x) => x?.icon);
+    s.items = rest.slice(0, 6).map((pt, k) => ({ ...ITEM(splitPoint(stripLinks(pt))), icon: icons[k] || 'check' }));
+  } else {
+    s.items = [];
+    s.caption = rest.map(stripLinks).join(' · ').slice(0, SPEC_LIMITS.caption);
+  }
+}
+
+/* ---------------- đối chiếu dàn ý AI với tư liệu nguồn (chống bịa thông tin liên hệ / liên kết) ---------------- */
+// So khớp số điện thoại theo chữ số (0xxx ≡ +84xxx), bỏ dấu cách/chấm/gạch.
+const normPhone = (d) => {
+  const x = phoneDigits(d).replace('+', '');
+  return x.startsWith('84') && x.length >= 11 ? `0${x.slice(2)}` : x;
+};
+
+/**
+ * Bỏ khỏi dàn ý AI những gì KHÔNG có trong tư liệu nguồn: liên kết có URL lạ; trên trang Liên hệ / Ưu đãi, dòng có số điện thoại,
+ * email, website, link QR không xuất hiện trong nguồn. Trang Liên hệ không còn thông tin liên hệ nào → bố cục 'auto'.
+ * @param {object} outline  dàn ý đã normalizeOutline (lenient)
+ * @param {{ corpus: string, links: Array<{label:string,url:string}> }} facts  chữ toàn bộ tư liệu + liên kết trong tư liệu
+ * @returns {{ links: number, contacts: number }} số liên kết / dòng liên hệ đã bỏ
+ */
+export function verifyOutlineFacts(outline, facts) {
+  const text = String(facts?.corpus || '');
+  const low = lc(text);
+  const urls = new Set((facts?.links || []).map((l) => safeHref(l.url)).filter(Boolean));
+  for (const u of text.match(/https?:\/\/[^\s<>"'()[\]]+/gi) || []) {
+    const h = safeHref(u.replace(/[.,;:!?]+$/, ''));
+    if (h) urls.add(h);
+  }
+  const phones = new Set((text.match(NUM_RE) || []).map(normPhone).filter((d) => d.length >= 6));
+  const hostOf = (h) => {
+    try {
+      return new URL(h).hostname.replace(/^www\./, '');
+    } catch {
+      return '';
+    }
+  };
+  const urlOk = (h) => urls.has(h) || (h.startsWith('mailto:') && low.includes(lc(h.slice(7)))) || (h.startsWith('tel:') && phones.has(normPhone(h.slice(4))));
+  const webOk = (h) => urlOk(h) || (!!hostOf(h) && low.includes(hostOf(h)));
+  let links = 0;
+  let contacts = 0;
+  const clean = (t) => {
+    const out = cleanLinks(t, urlOk);
+    if (out !== t) links += linksIn(t).length - linksIn(out).length;
+    return out;
+  };
+  for (const sl of outline.slides || []) {
+    sl.title = clean(sl.title);
+    sl.subtitle = clean(sl.subtitle);
+    sl.points = sl.points.map(clean);
+    if (!CONTACT_LAYOUTS.includes(sl.layout)) continue;
+    sl.points = sl.points.filter((pt) => {
+      const { contact: c } = parseContactPoints([pt]);
+      const ok =
+        c.phones.every((ph) => phones.has(normPhone(ph.number))) &&
+        c.emails.every((e) => low.includes(lc(e))) &&
+        (!c.website || webOk(c.website)) &&
+        (!c.qr.link || (safeHref(c.qr.link) && webOk(safeHref(c.qr.link))));
+      if (!ok) contacts += 1;
+      return ok;
+    });
+    const { contact: left } = parseContactPoints(sl.points);
+    const any = left.phones.length || left.emails.length || left.addresses.length || left.website || left.qr.link || (sl.images || []).length;
+    if (sl.layout === 'contact' && !any) sl.layout = 'auto';
+  }
+  return { links, contacts };
+}
+
+/* ---------------- liên kết của dàn ý → chữ có định dạng của bài ---------------- */
+// Thứ tự ô chữ tìm nhãn liên kết trên 1 trang (ô đầu tiên chứa nguyên văn nhãn được gắn).
+function* textSlots(s) {
+  const at = (obj, key) => ({ get: () => obj[key], set: (v) => (obj[key] = v) });
+  for (const k of ['title', 'subtitle', 'kicker', 'caption', 'root']) if (typeof s[k] === 'string') yield at(s, k);
+  for (const key of ['items', 'steps']) for (const it of s[key] || []) for (const k of ['title', 'text', 'value']) if (typeof it[k] === 'string') yield at(it, k);
+  for (const st of s.stats || []) if (typeof st.label === 'string') yield at(st, 'label');
+  for (const col of s.columns || []) {
+    if (typeof col.title === 'string') yield at(col, 'title');
+    for (let i = 0; i < (col.points || []).length; i += 1) yield at(col.points, i);
+  }
+  if (s.quote && typeof s.quote.text === 'string') yield at(s.quote, 'text');
+  for (let i = 0; i < (s.tags || []).length; i += 1) yield at(s.tags, i);
+  if (s.contact && typeof s.contact.cta === 'string') yield at(s.contact, 'cta');
+}
+
+/**
+ * Gắn liên kết "[nhãn](URL)" của dàn ý vào ô chữ có nguyên văn nhãn trên trang tương ứng (theo id trang). Mỗi ô ≤ 8 liên kết.
+ * @returns {number} số liên kết đã gắn
+ */
+export function applyOutlineLinks(spec, outline) {
+  const byId = new Map((spec.slides || []).map((s) => [s.id, s]));
+  let applied = 0;
+  for (const os of outline?.slides || []) {
+    const s = byId.get(os.id);
+    if (!s) continue;
+    const links = [os.title, os.subtitle, ...(os.points || [])].flatMap(linksIn);
+    for (const { label, url } of links) {
+      for (const slot of textSlots(s)) {
+        const cur = slot.get();
+        if (richLinks(cur).length >= 8) continue;
+        const next = linkPhrase(cur, label, url);
+        if (next) {
+          slot.set(next);
+          applied += 1;
+          break;
+        }
+      }
+    }
+  }
+  return applied;
 }

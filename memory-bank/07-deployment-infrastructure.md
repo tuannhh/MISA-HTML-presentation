@@ -46,6 +46,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `PDF_UI_SHOT_PAGES` | | 40 | Tổng số trang tư liệu (PDF + PPTX/DOCX đã render) được xem để tìm hình |
 | `PDF_UI_SHOTS_MAX` | | 24 | Số hình (sơ đồ + giao diện) tối đa cắt mỗi lần tạo |
 | `PDFTOPPM_PATH` | | pdftoppm | Đường dẫn poppler `pdftoppm` (Docker cài `poppler-utils`; thiếu → bỏ qua bước cắt ảnh) |
+| `PDFTOTEXT_PATH` | | pdftotext | Poppler `pdftotext` (cùng gói `poppler-utils`): chữ PDF để đối chiếu liên kết/thông tin liên hệ AI đưa vào bài với nguồn. Thiếu → chỉ đối chiếu với chữ không phải PDF + liên kết `/URI` trong PDF (log `source_pdf_text_failed`) |
 | `OFFICE_VISUALS` | | true | Render PPTX/DOCX/ODP/ODT bằng LibreOffice để nhận diện hình như PDF; false → chỉ PDF |
 | `SOFFICE_PATH` | | soffice | Đường dẫn LibreOffice (Docker cài `libreoffice-*-nogui`; thiếu → bỏ qua tệp Office, log `soffice_missing`) |
 | `OFFICE_RENDER_TIMEOUT_MS` | | 120000 | Thời gian tối đa chuyển 1 tệp Office → PDF (10 000–600 000) |

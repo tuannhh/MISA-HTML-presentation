@@ -13,6 +13,7 @@ import VideoPicker from './VideoPicker.vue'
 import MTabs from '@/components/mds/MTabs.vue'
 import IconPicker from './IconPicker.vue'
 import DecorPanel from './DecorPanel.vue'
+import ContactFields from './ContactFields.vue'
 import { shiftMoves } from '@/lib/editPaths.js'
 import { LAYOUTS, LAYOUT_FIELDS, TONE_OPTIONS, VARIANT_LABELS, ITEM_IMAGE_LAYOUTS, BUILD_OPTIONS, BUILD_LAYOUTS, ratioNum, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
 import { VARIANTS, fits, resolveVariant } from '@shared/deck/variants.js'
@@ -65,6 +66,8 @@ const rx = (obj, key) => ({
   },
 })
 const layoutOptions = LAYOUTS.map((l) => ({ label: l.label, value: l.value }))
+const CAPTION_LABEL = { image: 'Chú thích ảnh', offer: 'Thời hạn / điều kiện', contact: 'Ghi chú' }
+const CAPTION_HINT = { cover: 'Ví dụ: người trình bày · ngày', offer: 'Ví dụ: Áp dụng đến hết 31/12/2026', contact: 'Dòng nhỏ dưới lời kêu gọi (tuỳ chọn)' }
 
 // Kiểu trình bày (biến thể) — chỉ bật kiểu còn hợp nội dung hiện có (số mục, số liệu %, có ảnh…).
 const ratioN = computed(() => ratioNum(props.ratio))
@@ -89,7 +92,9 @@ function clearItemImage(it) {
   delete it.image
 }
 
-const itemLabel = computed(() => ({ agenda: 'Mục', bullets: 'Ý', cards: 'Thẻ', stats: 'Ý bổ sung', image: 'Ý bên cạnh ảnh' }[s.value.layout] || 'Mục'))
+const itemLabel = computed(() => ({ agenda: 'Mục', bullets: 'Ý', cards: 'Thẻ', stats: 'Ý bổ sung', image: 'Ý bên cạnh ảnh', offer: 'Quyền lợi' }[s.value.layout] || 'Mục'))
+// Trang Ưu đãi hiển thị tối đa 6 quyền lợi.
+const itemMax = computed(() => (s.value.layout === 'offer' ? Math.min(6, L.items) : L.items))
 const stepLabel = computed(() => (s.value.layout === 'timeline' ? 'Mốc' : 'Bước'))
 // Sơ đồ tổ chức dùng lại `columns` làm các nhánh (≤ 6, có icon riêng), cột so sánh ≤ 3.
 const isOrg = computed(() => s.value.layout === 'org')
@@ -180,7 +185,7 @@ function setGalleryImage(i, v) {
     <FormField v-if="has('subtitle')" label="Mô tả ngắn">
       <MTextarea v-bind="rx(s, 'subtitle')" :rows="2" :maxlength="L.subtitle" />
     </FormField>
-    <FormField v-if="has('caption')" :label="s.layout === 'image' ? 'Chú thích ảnh' : 'Dòng thông tin'" :hint="s.layout === 'cover' ? 'Ví dụ: người trình bày · ngày' : ''">
+    <FormField v-if="has('caption')" :label="CAPTION_LABEL[s.layout] || 'Dòng thông tin'" :hint="CAPTION_HINT[s.layout] || ''">
       <MInput v-bind="rx(s, 'caption')" :error="tooLong(s.caption, L.caption)" />
     </FormField>
     <FormField v-if="has('tags')" label="Nhãn (phân tách bằng dấu phẩy)" :hint="`Tối đa ${L.tags} nhãn`">
@@ -228,7 +233,7 @@ function setGalleryImage(i, v) {
 
     <!-- Mục / ý / thẻ -->
     <section v-if="has('items')" class="flex flex-col gap-2">
-      <h3 class="text-[14px] font-semibold">{{ itemLabel }} ({{ s.items.length }}/{{ L.items }})</h3>
+      <h3 class="text-[14px] font-semibold">{{ itemLabel }} ({{ s.items.length }}/{{ itemMax }})</h3>
       <div v-for="(it, i) in s.items" :key="i" class="flex flex-col gap-2 rounded-lg border border-[var(--mds-border)] p-3">
         <div class="flex items-center justify-between gap-2">
           <span class="text-[12px] font-semibold text-[var(--mds-text-secondary)]">{{ itemLabel }} {{ i + 1 }}</span>
@@ -253,7 +258,7 @@ function setGalleryImage(i, v) {
           <MInput v-bind="rx(it, 'value')" placeholder="Nhãn ngắn" :error="tooLong(it.value, L.itemValue)" />
         </template>
       </div>
-      <MButton v-if="s.items.length < L.items" variant="outline" @click="s.items.push(emptyItem())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm {{ itemLabel.toLowerCase() }}</MButton>
+      <MButton v-if="s.items.length < itemMax" variant="outline" @click="s.items.push(s.layout === 'offer' ? { ...emptyItem(), icon: 'check' } : emptyItem())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm {{ itemLabel.toLowerCase() }}</MButton>
     </section>
 
     <!-- Bước / mốc -->
@@ -299,6 +304,9 @@ function setGalleryImage(i, v) {
       </div>
       <MButton v-if="s.columns.length < colMax" variant="outline" @click="s.columns.push(emptyColumn())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm {{ colLabel.one.toLowerCase() }}</MButton>
     </section>
+
+    <!-- Thông tin liên hệ (trang Liên hệ / Ưu đãi) -->
+    <ContactFields v-if="has('contact') && s.contact" :contact="s.contact" :assets="assets" :upload="upload" :studio="studio" :offer="s.layout === 'offer'" @media="(m) => emit('media', m)" />
 
     <!-- Ảnh hoặc video (1 ô media) -->
     <FormField v-if="has('image')" :label="media ? 'Ảnh / video' : 'Ảnh'" group :hint="media ? 'Video hiển thị ảnh bìa 16:9; khi trình chiếu bấm vào sẽ tự phát toàn màn hình' : ''">

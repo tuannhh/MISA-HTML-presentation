@@ -29,6 +29,7 @@ export function useSlideMedia(draft, selected) {
     if (!target.value) return '';
     const n = target.value.index + 1;
     if (/^items\.\d+\.image$/.test(target.value.path || '')) return `Ảnh / logo thay biểu tượng — trang ${n}`;
+    if (target.value.path === 'contact.qr') return `Ảnh mã QR — trang ${n}`;
     return target.value.kind === 'video' ? `Video — trang ${n}` : `Ảnh — trang ${n}`;
   });
   // Ô có thể đổi giữa ảnh ↔ video: ô media chính của trang (không áp dụng cho bộ sưu tập / phần tử ảnh).
@@ -40,7 +41,9 @@ export function useSlideMedia(draft, selected) {
     const t = mediaTarget(slideOf({ index }), path);
     if (!t) return;
     const k = t.kind === 'element-video' || (t.kind === 'slot' && t.video) ? 'video' : t.kind === 'element-image' ? 'image' : kind;
-    target.value = { index, path, kind: k, aspect: Number.isFinite(a) && a > 0 ? a : 16 / 9 };
+    // Mã QR luôn vuông.
+    const ar = path === 'contact.qr' ? 1 : Number.isFinite(a) && a > 0 ? a : 16 / 9;
+    target.value = { index, path, kind: k, aspect: ar };
   }
   function switchTo(kind) {
     if (target.value) target.value = { ...target.value, kind };

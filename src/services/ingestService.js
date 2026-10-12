@@ -10,6 +10,7 @@ import JSZip from 'jszip';
 import { sniff, sniffVideo, decodeText, IMAGE_TYPES, AUDIO_TYPES, AUDIO_MIME } from '../lib/fileType.js';
 import { safeFetch, assertPublicUrl } from '../lib/safeFetch.js';
 import { badRequest, tooLarge, unprocessable, HttpError } from '../lib/httpError.js';
+import { safeHref } from '../../shared/deck/rich.js';
 
 const MAX_ZIP_ENTRIES = 5000;
 const MAX_ZIP_UNCOMPRESSED = 400 * 1048576;
@@ -54,6 +55,30 @@ function paragraphs(xml, pTag, tTag) {
   return out;
 }
 
+/* ---------------- liên kết trong tư liệu → "[nhãn](URL)" ngay trong chữ (AI thấy và giữ lại; xem src/lib/mdLinks.js) ---------------- */
+const xmlEsc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Bảng Id → URL ngoài (chỉ http(s)/mailto/tel hợp lệ) từ tệp .rels của Office.
+function externalRels(relXml) {
+  const map = new Map();
+  for (const m of String(relXml || '').matchAll(/<Relationship\b[^>]*>/g)) {
+    if (!/TargetMode="External"/.test(m[0])) continue;
+    const id = attr(m[0], 'Id');
+    const url = safeHref(attr(m[0], 'Target'));
+    if (id && url) map.set(id, url);
+  }
+  return map;
+}
+// Ghép các đoạn liền nhau cùng URL ("[MI](u)[SA](u)" → "[MISA](u)") — Office hay tách 1 liên kết thành nhiều run.
+export const mergeLinks = (text) => {
+  let out = text;
+  for (let i = 0; i < 20; i += 1) {
+    const next = out.replace(/\[([^[\]\n]*)\]\(([^()\s]+)\)\[([^[\]\n]*)\]\(\2\)/g, '[$1$3]($2)');
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+};
+
 async function openZip(buffer) {
   let zip;
   try {
@@ -77,8 +102,17 @@ async function readPptx(zip) {
   const images = [];
   const used = new Set();
   for (const [i, name] of slideNames.entries()) {
-    const xml = await zip.file(name).async('string');
-    const lines = paragraphs(xml, 'a:p', 'a:t').map((p) => p.text);
+    let xml = await zip.file(name).async('string');
+    const relFile = zip.file(`ppt/slides/_rels/slide${numOf(name)}.xml.rels`);
+    const links = externalRels(relFile ? await relFile.async('string') : '');
+    if (links.size) {
+      xml = xml.replace(/<a:r>([\s\S]*?)<\/a:r>/g, (run, inner) => {
+        const id = (inner.match(/<a:hlinkClick\b[^>]*\br:id="([^"]+)"/) || [])[1];
+        const url = id && links.get(id);
+        return url ? run.replace(/<a:t>([\s\S]*?)<\/a:t>/, (_t, txt) => (txt.trim() ? `<a:t>[${txt}](${xmlEsc(url)})</a:t>` : _t)) : run;
+      });
+    }
+    const lines = paragraphs(xml, 'a:p', 'a:t').map((p) => mergeLinks(p.text));
     const notesName = `ppt/notesSlides/notesSlide${numOf(name)}.xml`;
     let notes = '';
     if (zip.file(notesName)) notes = paragraphs(await zip.file(notesName).async('string'), 'a:p', 'a:t').map((p) => p.text).filter((t) => !/^\d+$/.test(t)).join(' ');
@@ -112,7 +146,14 @@ function docxTable(xml) {
 }
 
 async function readDocx(zip) {
-  const xml = await zip.file('word/document.xml').async('string');
+  let xml = await zip.file('word/document.xml').async('string');
+  const links = externalRels(await zip.file('word/_rels/document.xml.rels')?.async('string'));
+  if (links.size) {
+    xml = xml.replace(/<w:hyperlink\b([^>]*)>([\s\S]*?)<\/w:hyperlink>/g, (all, attrs, inner) => {
+      const url = links.get((attrs.match(/\br:id="([^"]+)"/) || [])[1]);
+      return url && /<w:t\b/.test(inner) ? `<w:r><w:t>[</w:t></w:r>${inner}<w:r><w:t>](${xmlEsc(url)})</w:t></w:r>` : all;
+    });
+  }
   const lines = [];
   for (const block of xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>|<w:p[\s>][\s\S]*?<\/w:p>/g) || []) {
     if (block.startsWith('<w:tbl>')) {
@@ -250,10 +291,22 @@ async function readOdf(zip) {
   return { text: lines.join('\n'), images };
 }
 
-export function htmlToText(html) {
+export function htmlToText(html, baseUrl) {
   const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
   const body = html
     .replace(/<(script|style|noscript|svg|template)[\s\S]*?<\/\1>/gi, ' ')
+    // Liên kết có nhãn chữ → "[nhãn](URL)" (đường dẫn tương đối tính theo trang); bỏ liên kết nội bộ (#…), javascript:…
+    .replace(/<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi, (all, h1, h2, inner) => {
+      const label = decodeXml(inner.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim().replace(/[[\]]/g, '');
+      const href = decodeXml(h1 ?? h2 ?? '').trim();
+      let url = null;
+      try {
+        url = href.startsWith('#') ? null : safeHref(new URL(href, baseUrl || undefined).href);
+      } catch {
+        url = null;
+      }
+      return label && url && label.length <= 160 ? ` [${label.replace(/&/g, '&amp;').replace(/</g, '&lt;')}](${url.replace(/&/g, '&amp;')}) ` : inner;
+    })
     .replace(/<\/(p|div|h[1-6]|li|tr|section|article|br)>/gi, '\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<[^>]+>/g, ' ');
@@ -388,7 +441,7 @@ async function fetchDocument(url, limits, googleApiKey) {
         continue;
       }
       if (ct.includes('text/html')) {
-        const { title, text } = htmlToText(res.body.toString('utf8'));
+        const { title, text } = htmlToText(res.body.toString('utf8'), candidate);
         if (text.length < 40) throw unprocessable('Trang web không có đủ nội dung văn bản để tạo bài trình bày', 'SOURCE_EMPTY');
         return { pieces: [{ label: title || url, text: clip(text, limits.maxTextChars) }], media: [], images: [] };
       }

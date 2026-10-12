@@ -100,6 +100,7 @@ function moveImage(i, dir) {
       @dragleave.self="dragging = false"
       @drop.prevent="onDrop"
     >
+      <p v-if="s.layout === 'contact' || s.layout === 'offer'" class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Trang liên hệ / ưu đãi: ảnh đầu tiên được dùng làm ảnh mã QR (hiển thị lớn để dễ quét).</p>
       <div v-if="s.images.length" class="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <div v-for="(im, i) in s.images" :key="im.asset" class="flex min-w-0 flex-col gap-1">
           <div class="group relative aspect-video overflow-hidden rounded-lg border border-[var(--mds-border)] bg-[var(--mds-bg-page)]">

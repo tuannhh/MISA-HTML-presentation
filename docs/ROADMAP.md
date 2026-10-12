@@ -3,7 +3,7 @@
 Cập nhật: 12/10/2026. Phạm vi đã chốt: **1 máy chủ, 1 instance, cao điểm ~500 người dùng cùng lúc**; người dùng vào qua mạng/VPN MISA (không giới hạn theo IP); không có đăng ký (admin cấp tài khoản).
 Nguồn: review chặng A của Codex ([09-review-chang-a-codex.md](audits/2026-10-12-codex/09-review-chang-a-codex.md) §5) + yêu cầu mới của chủ dự án.
 
-Thứ tự: **A bổ sung → P (Publish) → B → Gate DevOps → C (khi có số đo)**. Mỗi sửa lỗi theo đỏ → xanh: test tái hiện trước, xác nhận đỏ, sửa, xác nhận xanh.
+Thứ tự: **A bổ sung ✅ → P (Publish) ✅ → H + L (hyperlink, trang Liên hệ / Ưu đãi — đề xuất 12/10) → B → Gate DevOps → C (khi có số đo)**. Mỗi sửa lỗi theo đỏ → xanh: test tái hiện trước, xác nhận đỏ, sửa, xác nhận xanh.
 
 ## A bổ sung — sửa 6 điểm Codex chỉ ra (A01–A06) — ✅ xong 12/10/2026
 
@@ -50,6 +50,36 @@ Sau vòng này: chạy toàn bộ unit, integration trên DB riêng, smoke trên
 - Snapshot thủ công ("Cập nhật bản xuất bản"); gỡ rồi xuất bản lại giữ link. Hết hạn link / mật khẩu xem / đếm lượt xem / "Đổi link": để sau.
 - Hướng dẫn DevOps: `docs/DEVOPS-NETWORK.md` §6 (bắt buộc **ép Host** ở cổng Internet, header CDN, purge khi gỡ gấp).
 - Còn: màn admin cho danh sách xuất bản (API `GET/DELETE /api/admin/publications` đã có); đo tải trang công khai qua CDN.
+
+## H — Hyperlink trong bài — ✅ xong 12/10/2026 (chi tiết `memory-bank/05` §18)
+
+- **Chèn liên kết**: bôi chữ trên khung sửa → nút "Liên kết" (Ctrl/Cmd+K) trên thanh định dạng nổi: nhập URL, sửa, gỡ. Lưu như định dạng chữ hiện có (thuộc tính `href` trong `⟦…⟧`), nên đi theo nội dung khi sao chép/đổi bố cục/xuất bản.
+- **An toàn**: chỉ nhận `http(s)://`, `mailto:`, `tel:`; chuẩn hoá + kiểm ở `specService` (strict báo lỗi, lenient bỏ link); renderer `<a target="_blank" rel="noopener noreferrer">`, URL qua `esc()`.
+- **Hành vi**: trình chiếu / HTML xuất / trang xuất bản → bấm mở **tab mới**, không chuyển trang slide; PDF giữ link bấm được; khung sửa → bấm để sửa chữ (không mở link). Khung xem trước cần thêm `allow-popups-to-escape-sandbox` để trang mở ra không bị sandbox.
+- **Lấy từ nguồn**: bước đọc tư liệu giữ lại liên kết (DOCX/PPTX hyperlink, link trong PDF, thẻ `<a>` của trang web/Google Docs, URL trong văn bản) → đưa AI danh sách "nhãn → URL"; AI gắn link vào chữ tương ứng; **máy chủ chỉ giữ URL có thật trong nguồn** (chống AI bịa link).
+
+## T — Kiểu chữ tiêu đề trang — ✅ xong 12/10/2026 (chi tiết `memory-bank/05` §19)
+
+- Mặc định **viết hoa đầu câu** (sửa lỗi AI "Viết Hoa Từng Chữ"; giữ tên riêng có trong tư liệu); tuỳ chọn **VIẾT HOA TOÀN BỘ** ở tab Phông chữ. Luôn viết hoa MISA, AMIS, ASP, AI, JETPAY. Bài cũ: nút "Sửa tiêu đề đang Viết Hoa Từng Chữ".
+
+## L — Trang "Liên hệ" và "Ưu đãi" — ✅ xong 12/10/2026 (chi tiết `memory-bank/05` §18)
+
+Hai bố cục mới dùng chung bộ trường liên hệ, dành cho mọi nhóm (kinh doanh, CSKH, tuyển dụng, đào tạo…):
+
+| Trường | Chi tiết |
+|---|---|
+| Số điện thoại (tối đa 3) | Ô nhập số + chọn kênh: Gọi, Zalo, Viber, Telegram, iMessage (icon tương ứng). Bấm → `tel:`, `zalo.me/<số>`, `viber://chat?number=`, `t.me/+<số>`, `sms:` |
+| Email (tối đa 2) | Icon thư + ô nhập → `mailto:` |
+| Địa chỉ (tối đa 2) | Icon vị trí/nhà + ô nhập → mở Google Maps |
+| CTA | "Liên hệ để tư vấn miễn phí", "Liên hệ để tư vấn ngay"… (gợi ý sẵn, sửa tự do) |
+| Mã QR | Tải ảnh QR (lưu không nén mất chi tiết, giữ nét để quét). **Liên hệ**: QR lớn (~40% chiều cao trang). **Ưu đãi**: QR chiếm **1/2 trang** |
+
+- **Ưu đãi** thêm: tên chương trình, mức ưu đãi nổi bật (vd. "Giảm 30%"), các ý chi tiết, thời hạn.
+- **Thêm trang**: mẫu "Liên hệ" / "Ưu đãi" trong hộp Thêm trang (cả bước dàn ý và trình soạn thảo, desktop + mobile).
+- **AI tự phát hiện**: tư liệu có số điện thoại / email / địa chỉ / chương trình ưu đãi → AI dùng bố cục tương ứng, chỉ điền dữ liệu **có trong nguồn** (máy chủ đối chiếu), không bịa.
+- **Chốt 12/10**: không lưu thông tin liên hệ mặc định — nhập theo từng trang (AI tự điền từ nguồn hoặc người dùng nhập). QR: **tải ảnh lên hoặc nhập link để hệ thống tự tạo QR**. Làm H + L trước B.
+- Icon Zalo/Viber/Telegram/iMessage: logo màu riêng `shared/deck/brands.js` (không trộn vào bộ icon nét của slide).
+- Đã làm khác đề xuất: không thêm trường "mức ưu đãi nổi bật" riêng — tiêu đề + quyền lợi (`items`) + thời hạn (`caption`) đủ diễn đạt; mẫu trang nằm trong danh sách bố cục của "Thêm trang" (tự liệt kê). Còn mở: trang công khai/PDF chưa kiểm tay trên điện thoại thật (quét QR in ra).
 
 ## B — Lưới kiểm thử luồng chính + đo tải
 

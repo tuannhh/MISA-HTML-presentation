@@ -565,8 +565,8 @@
     addEventListener('keydown', function (e) {
       var k = e.key;
       if (ov) { if (k === 'Escape') closeVideo(); return; }
-      // Enter/Space trên nút phát video → để nút nhận lệnh bấm, không chuyển trang.
-      if ((k === 'Enter' || k === ' ') && e.target && e.target.closest && e.target.closest('.vplay')) return;
+      // Enter/Space trên nút phát video / liên kết → để phần tử nhận lệnh bấm, không chuyển trang.
+      if ((k === 'Enter' || k === ' ') && e.target && e.target.closest && e.target.closest('.vplay, a[href]')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Màn đen (bút trình chiếu: phím "." hoặc B) — bấm phím bất kỳ để quay lại.
       if (document.body.classList.contains('black')) { e.preventDefault(); toggleBlack(); return; }
@@ -591,6 +591,8 @@
     if ((b = document.getElementById('fs'))) b.addEventListener('click', function (e) { e.stopPropagation(); toggleFs(); });
     document.getElementById('stage').addEventListener('click', function (e) {
       if (document.body.classList.contains('black')) { toggleBlack(); return; }
+      // Liên kết (chữ có liên kết, số điện thoại, email, Zalo…): trình duyệt mở tab mới (target=_blank) — không chuyển trang/phóng to.
+      if (e.target && e.target.closest && e.target.closest('a[href]')) { e.stopPropagation(); return; }
       var fig = e.target && e.target.closest ? e.target.closest('.vid') : null;
       if (fig) { e.stopPropagation(); playVideo(fig); return; }
       // Bấm vào khối nội dung → phóng to; đang phóng → bấm khối khác chuyển sang khối đó, bấm chỗ khác thu về.
@@ -644,13 +646,34 @@
     return t.replace(/\n$/, '');
   }
 
-  /* ---- chữ có định dạng (cùng cú pháp với shared/deck/rich.js): ⟦màu,b,n⟧chữ⟦/⟧, xuống dòng = \n ---- */
-  // Mô hình = mảng ký tự {t, c, b, n}; đọc từ DOM, sửa theo vị trí, dựng lại DOM (chỉ text node, span, br — không innerHTML).
+  /* ---- chữ có định dạng (cùng cú pháp với shared/deck/rich.js): ⟦màu,b,n,href=URL⟧chữ⟦/⟧, xuống dòng = \n ---- */
+  // Mô hình = mảng ký tự {t, c, b, n, h}; đọc từ DOM, sửa theo vị trí, dựng lại DOM (chỉ text node, span, a, br — không innerHTML).
   var RC = { text: 'var(--text)', accent: 'var(--accent)', 'accent-2': 'var(--accent-2)', amber: 'var(--amber)', mint: 'var(--mint)', coral: 'var(--coral)', violet: 'var(--violet)', muted: 'var(--muted)', white: '#FFFFFF', dark: '#111111' };
   var HEXC = /^#[0-9a-f]{6}$/i;
   function okColor(c) { return c && (Object.prototype.hasOwnProperty.call(RC, c) || HEXC.test(c)) ? c : null; }
+  // Cùng quy tắc safeHref (shared/deck/rich.js): chỉ http(s)://tên-miền, mailto:email, tel:số; trả dạng chuẩn hoá hoặc null.
+  var BADU = /[\s⟦⟧<>"`\\]/;
+  function okHref(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s || s.length > 500 || BADU.test(s)) return null;
+    if (/^mailto:/i.test(s)) return /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,24}$/.test(s.slice(7)) ? 'mailto:' + s.slice(7) : null;
+    if (/^tel:/i.test(s)) return /^\+?\d{3,15}$/.test(s.slice(4)) ? 'tel:' + s.slice(4) : null;
+    if (!/^https?:\/\//i.test(s)) return null;
+    var u; try { u = new URL(s); } catch (e) { return null; }
+    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || u.hostname.indexOf('.') < 0 || u.username || u.password) return null;
+    return u.href.length <= 500 && !BADU.test(u.href) ? u.href : null;
+  }
+  // Người dùng gõ tắt: "amis.misa.vn" → https://…, "a@b.vn" → mailto:, "0912 345 678" → tel:.
+  function guessHref(v) {
+    var s = String(v || '').trim();
+    if (!s) return null;
+    if (/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(s)) s = 'mailto:' + s;
+    else if (/^\+?[\d\s.()-]{6,20}$/.test(s)) s = 'tel:' + s.replace(/[^\d+]/g, '');
+    else if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
+    return okHref(s);
+  }
   function isRich(el) { return !!el && !el.hasAttribute('data-pl'); }
-  var NOFMT = { c: null, b: false, n: false };
+  var NOFMT = { c: null, b: false, n: false, h: null };
   // Đọc DOM → ký tự. Khối (div/p do trình duyệt chèn) = xuống dòng trước nó; <br> = xuống dòng.
   function domChars(root) {
     var out = [];
@@ -658,13 +681,14 @@
       Array.prototype.forEach.call(node.childNodes, function (n, i) {
         if (n.nodeType === 3) {
           var t = n.nodeValue.replace(/ /g, ' ').replace(/\r/g, '').replace(/[⟦⟧]/g, '');
-          for (var k = 0; k < t.length; k++) out.push({ t: t[k], c: f.c, b: f.b, n: f.n && t[k] !== '\n' });
+          for (var k = 0; k < t.length; k++) out.push({ t: t[k], c: f.c, b: f.b, n: f.n && t[k] !== '\n', h: f.h });
         } else if (n.nodeType === 1) {
-          if (n.tagName === 'BR') { out.push({ t: '\n', c: null, b: false, n: false }); return; }
+          if (n.tagName === 'BR') { out.push({ t: '\n', c: null, b: false, n: false, h: null }); return; }
           if (n.classList && n.classList.contains('fe-h')) return;
           var block = /^(DIV|P)$/.test(n.tagName);
-          if (block && i > 0 && out.length && out[out.length - 1].t !== '\n') out.push({ t: '\n', c: null, b: false, n: false });
-          var g = { c: f.c, b: f.b, n: f.n };
+          if (block && i > 0 && out.length && out[out.length - 1].t !== '\n') out.push({ t: '\n', c: null, b: false, n: false, h: null });
+          var g = { c: f.c, b: f.b, n: f.n, h: f.h };
+          if (n.tagName === 'A' && n.classList && n.classList.contains('rl')) g.h = okHref(n.getAttribute('href')) || f.h;
           if (n.classList && n.classList.contains('rt')) {
             g.c = okColor(n.getAttribute('data-rc')) || f.c;
             if (n.hasAttribute('data-rb')) g.b = true;
@@ -677,7 +701,8 @@
     return out;
   }
   function trimTail(chars) { if (chars.length && chars[chars.length - 1].t === '\n') chars.pop(); return chars; }
-  function keyOf(x) { return [x.c || '', x.b ? 'b' : '', x.n ? 'n' : ''].filter(Boolean).join(','); }
+  // href đứng cuối (URL có thể chứa dấu phẩy) — khớp attrKey của rich.js.
+  function keyOf(x) { return [x.c || '', x.b ? 'b' : '', x.n ? 'n' : '', x.h ? 'href=' + x.h : ''].filter(Boolean).join(','); }
   function serialize(chars) {
     var out = '', run = '', buf = '';
     function flush() { if (!buf) return; out += run ? '⟦' + run + '⟧' + buf + '⟦/⟧' : buf; buf = ''; }
@@ -692,14 +717,19 @@
     while (i < chars.length) {
       var k = keyOf(chars[i]), j = i;
       while (j < chars.length && keyOf(chars[j]) === k) j++;
-      var host = el;
-      if (k) {
-        var x = chars[i], sp = document.createElement('span');
+      var host = el, x = chars[i];
+      if (x.h) {
+        var a = document.createElement('a');
+        a.className = 'rl'; a.setAttribute('href', x.h); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer');
+        el.appendChild(a); host = a;
+      }
+      if (x.c || x.b || x.n) {
+        var sp = document.createElement('span');
         sp.className = 'rt';
         if (x.c) { sp.setAttribute('data-rc', x.c); sp.style.color = RC[x.c] || x.c; }
         if (x.b) { sp.setAttribute('data-rb', ''); sp.style.fontWeight = '800'; }
         if (x.n) { sp.setAttribute('data-rn', ''); sp.style.whiteSpace = 'nowrap'; }
-        el.appendChild(sp); host = sp;
+        host.appendChild(sp); host = sp;
       }
       var txt = '';
       for (var m = i; m < j; m++) {
@@ -762,7 +792,9 @@
     if (!text && r.e === r.s) return;
     var f = chars[r.s - 1] || chars[r.e] || NOFMT;
     if (f.t === '\n') f = NOFMT;
-    var add = text.split('').map(function (t) { return { t: t, c: f.c, b: f.b, n: f.n && t !== '\n' }; });
+    // Chữ chèn thêm chỉ thuộc liên kết khi nằm giữa liên kết (gõ nối sau cuối liên kết là chữ thường).
+    var lh = chars[r.s - 1] && chars[r.e] && chars[r.s - 1].h === chars[r.e].h ? chars[r.s - 1].h : null;
+    var add = text.split('').map(function (t) { return { t: t, c: f.c, b: f.b, n: f.n && t !== '\n', h: lh }; });
     chars.splice.apply(chars, [r.s, r.e - r.s].concat(add));
     buildDom(el, chars);
     setSel(el, r.s + add.length);
@@ -772,7 +804,8 @@
   }
 
   /* ---- thanh định dạng nổi (chỉ ở trường chữ có định dạng đang sửa) ---- */
-  var tb = null, tbEl = null, tbSel = null, tbInp = null;
+  var tb = null, tbEl = null, tbSel = null, tbInp = null, lkRow = null, lkInp = null, lkMsg = null, lkR = null;
+  var LINK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M11 6l.5-.5a4.2 4.2 0 0 1 6 6L17 12"/><path d="M13 18l-.5.5a4.2 4.2 0 0 1-6-6L7 12"/></svg>';
   var TB_COLORS = ['text', 'accent', 'accent-2', 'amber', 'mint', 'coral', 'muted', 'white', 'dark'];
   var TB_NAMES = { text: 'Màu chữ mặc định', accent: 'Màu nhấn', 'accent-2': 'Màu nhấn phụ', amber: 'Màu pha', mint: 'Xanh lá', coral: 'Đỏ', muted: 'Xám', white: 'Trắng', dark: 'Đen' };
   function tbBtn(label, title, cmd, cls) {
@@ -809,14 +842,33 @@
     tb.appendChild(tbBtn('Aa', 'Viết Hoa Đầu Mỗi Từ', 'u:title'));
     tb.appendChild(sep());
     tb.appendChild(tbBtn('⟷', 'Giữ liền cụm từ (không ngắt xuống dòng giữa cụm)', 'n'));
+    var lb = tbBtn('', 'Chèn liên kết (Ctrl+K) — khi trình chiếu, bấm vào sẽ mở ở tab mới', 'link', 'tb-link');
+    lb.innerHTML = LINK_ICON;
+    tb.appendChild(lb);
     tb.appendChild(tbBtn('⌫', 'Xoá định dạng', 'clear'));
     var hint = document.createElement('span'); hint.className = 'tb-hint'; hint.textContent = 'Bôi chữ để áp riêng · Enter xuống dòng';
     tb.appendChild(hint);
+    // Hàng nhập liên kết (ẩn tới khi bấm nút Liên kết).
+    lkRow = document.createElement('div'); lkRow.className = 'tb-lk';
+    lkInp = document.createElement('input');
+    lkInp.type = 'text'; lkInp.className = 'tb-lkin'; lkInp.placeholder = 'https://… , email hoặc số điện thoại'; lkInp.setAttribute('aria-label', 'Địa chỉ liên kết');
+    lkInp.spellcheck = false; lkInp.autocomplete = 'off';
+    lkInp.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeLink(true); }
+    });
+    lkRow.appendChild(lkInp);
+    lkRow.appendChild(tbBtn('Gắn', 'Gắn liên kết cho đoạn chữ đã bôi', 'lk:ok', 'tb-lkb'));
+    lkRow.appendChild(tbBtn('Gỡ', 'Gỡ liên kết', 'lk:rm', 'tb-lkb'));
+    lkMsg = document.createElement('span'); lkMsg.className = 'tb-hint tb-lkmsg'; lkMsg.setAttribute('role', 'status');
+    lkRow.appendChild(lkMsg);
+    tb.appendChild(lkRow);
     // Giữ vùng chọn trong ô đang sửa khi bấm thanh công cụ (nút không lấy focus) — trừ ô chọn màu (cần mở bảng màu).
     tb.addEventListener('pointerdown', function (e) {
       if (!tbEl) return;
       tbSel = selRange(tbEl) || tbSel;
-      if (!e.target.closest('.tb-pick')) e.preventDefault();
+      if (!e.target.closest('.tb-pick, .tb-lkin')) e.preventDefault();
     });
     tb.addEventListener('click', function (e) {
       var b = e.target.closest('[data-cmd]');
@@ -828,6 +880,9 @@
       else if (cmd === 'n') applyFmt({ n: 'toggle' });
       else if (cmd.indexOf('u:') === 0) applyFmt({ upper: cmd.slice(2) });
       else if (cmd === 'clear') applyFmt({ c: null, b: false, n: false });
+      else if (cmd === 'link') openLink();
+      else if (cmd === 'lk:ok') applyLink();
+      else if (cmd === 'lk:rm') applyLink(true);
     });
     document.body.appendChild(tb);
     paintSwatches();
@@ -843,6 +898,7 @@
     if (p.n === 'toggle') p.n = !seg.every(function (x) { return x.n; });
     for (var i = r.s; i < r.e; i++) {
       var x = chars[i], prev = i === 0 ? ' ' : chars[i - 1].t;
+      if ('h' in p) x.h = p.h ? okHref(p.h) : null;
       if ('c' in p) x.c = okColor(p.c);
       if ('b' in p) x.b = !!p.b;
       if ('n' in p) x.n = !!p.n && x.t !== '\n';
@@ -872,7 +928,51 @@
     else paintSwatches();
     tbEl = el; tbSel = null; tb.classList.add('on'); placeToolbar();
   }
-  function hideToolbar() { tbEl = null; tbSel = null; if (tb) tb.classList.remove('on'); }
+  function hideToolbar() { closeLink(false); tbEl = null; tbSel = null; if (tb) tb.classList.remove('on'); }
+
+  // Liên kết: bôi chữ → nút Liên kết (Ctrl+K) → nhập URL. Con trỏ đứng trong liên kết có sẵn (không bôi) → sửa/gỡ cả liên kết đó.
+  function openLink() {
+    if (!tbEl || !tb) return;
+    var chars = trimTail(domChars(tbEl));
+    var r = tbSel || selRange(tbEl);
+    if (r && r.e === r.s) {
+      var at = chars[r.s] && chars[r.s].h ? r.s : chars[r.s - 1] && chars[r.s - 1].h ? r.s - 1 : -1;
+      if (at >= 0) {
+        var h = chars[at].h, a = at, b = at + 1;
+        while (a > 0 && chars[a - 1].h === h) a--;
+        while (b < chars.length && chars[b].h === h) b++;
+        r = { s: a, e: b };
+      }
+    }
+    tb.classList.add('lk');
+    if (!r || r.e <= r.s) {
+      lkR = null; lkInp.value = ''; lkMsg.textContent = 'Bôi đoạn chữ cần gắn liên kết trước';
+      placeToolbar(); return;
+    }
+    lkR = { s: r.s, e: Math.min(r.e, chars.length) };
+    var cur0 = chars[lkR.s] && chars[lkR.s].h;
+    lkInp.value = cur0 && chars.slice(lkR.s, lkR.e).every(function (x) { return x.h === cur0; }) ? cur0 : '';
+    lkMsg.textContent = '';
+    placeToolbar();
+    lkInp.focus(); lkInp.select();
+  }
+  function closeLink(refocus) {
+    if (!tb) return;
+    tb.classList.remove('lk');
+    if (lkMsg) lkMsg.textContent = '';
+    var r = lkR; lkR = null;
+    if (refocus && tbEl) { tbEl.focus(); if (r) { setSel(tbEl, r.s, r.e); tbSel = r; } }
+    placeToolbar();
+  }
+  function applyLink(remove) {
+    if (!tbEl || !lkR) { if (lkMsg) lkMsg.textContent = 'Bôi đoạn chữ cần gắn liên kết trước'; return; }
+    var h = remove ? null : guessHref(lkInp.value);
+    if (!remove && !h) { lkMsg.textContent = 'Liên kết chưa hợp lệ — dùng https://…, email hoặc số điện thoại'; lkInp.focus(); return; }
+    tbSel = lkR;
+    applyFmt({ h: h });
+    tb.classList.remove('lk'); lkMsg.textContent = ''; lkR = null;
+    placeToolbar();
+  }
 
   function caretAt(x, y) {
     var r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
@@ -1190,6 +1290,7 @@
       if (d.attrs.tone) root.setAttribute('data-tone', String(d.attrs.tone));
       if (d.attrs.font) root.setAttribute('data-font', String(d.attrs.font));
       if (d.attrs.style) root.setAttribute('data-style', String(d.attrs.style));
+      root.setAttribute('data-tcase', d.attrs.tcase === 'upper' ? 'upper' : 'sentence');
       if (d.attrs.bg) deck.setAttribute('data-bg', String(d.attrs.bg));
     }
     if (bgBefore !== deck.getAttribute('data-bg') + '|' + root.getAttribute('data-deck-theme') + '|' + lastCss.length) { setupPainter(); drawBg(0); }
@@ -1311,6 +1412,7 @@
           // Trường nhiều dòng: Enter = xuống dòng; trường 1 dòng (nhãn, số liệu…): Enter = xong.
           if (el.hasAttribute('data-ml')) insertText(el, '\n'); else el.blur();
         } else if ((e.key === 'b' || e.key === 'B') && (e.metaKey || e.ctrlKey) && tbEl === el) { e.preventDefault(); tbSel = selRange(el); applyFmt({ b: 'toggle' }); }
+        else if ((e.key === 'k' || e.key === 'K') && (e.metaKey || e.ctrlKey) && tbEl === el) { e.preventDefault(); tbSel = selRange(el); openLink(); }
         return;
       }
       if (!selFe) return;
@@ -1325,6 +1427,7 @@
         e.preventDefault(); post({ type: 'deck:el', action: 'duplicate', index: slideIndex(selFe), id: selFe.getAttribute('data-el') });
       } else if (k === 'Escape') selectFe(null, true);
     });
+    document.addEventListener('click', function (e) { if (e.target && e.target.closest && e.target.closest('#deck a[href]')) e.preventDefault(); }, true);
     deck.addEventListener('pointerdown', onDown);
     addEventListener('pointermove', onMove);
     addEventListener('pointerup', onUp);

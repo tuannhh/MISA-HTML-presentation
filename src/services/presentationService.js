@@ -15,11 +15,13 @@ import { Semaphore } from '../lib/semaphore.js';
 import { badRequest, conflict, forbidden, notFound, tooLarge, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
 import { sniffVideo, VIDEO_MIME } from '../lib/fileType.js';
 import { normalizeSpec, collectAssetIds, dropForeignAssets, remapAssetIds, themeForTone, cleanImageEdit, SPEC_LIMITS } from './specService.js';
-import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia, placeDiagrams, applyRedraws, redrawPoints } from './outlineService.js';
+import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia, placeDiagrams, applyRedraws, redrawPoints, verifyOutlineFacts, applyOutlineLinks } from './outlineService.js';
+import { collectSourceFacts } from './sourceFacts.js';
+import { buildCaseIndex, deckTexts, sentenceCaseOutline, sentenceCaseSpec } from '../../shared/deck/textCase.js';
 import { precheckSource, precheckMedia, ingestSource, fitPieces } from './ingestService.js';
 import { prepareMedia } from './mediaService.js';
 import { extractVisuals, mergeEmbedded } from './visualService.js';
-import { TONE_THEMES } from '../../shared/deck/render.js';
+import { TONE_THEMES, CONTACT_LAYOUTS } from '../../shared/deck/render.js';
 import { THEME_PRESETS, CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
 import { DEFAULT_FONT } from '../../shared/deck/fonts.js';
 import { normalizeImage, normalizeExtractedImages, previewForModel, imageTraits, looksLikePhoto, looksLikeGraphic, applyImageEdit } from './imageService.js';
@@ -263,11 +265,14 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       }
       // PDF/ghi âm: đính kèm trực tiếp hoặc chuyển thành văn bản trước (tư liệu lớn) — xem mediaService.
       const media = await prepareMedia(source.media, { gemini });
+      // Dữ kiện nguồn để đối chiếu: liên kết (AI chỉ được gắn liên kết có trong tư liệu) + chữ toàn bộ tư liệu (thông tin liên hệ).
+      let facts;
       let raw;
       try {
+        facts = await collectSourceFacts(source, { pdftotext: V.pdftotext, tempDir: config.storage.tempDir, extraTexts: media.pieces.map((p) => p.text) });
         const text = fitPieces([...source.pieces, ...media.pieces], config.limits.maxSourceChars);
         raw = await gemini.generateOutline({
-          text, media: media.direct, images: modelImages, userImages: user.images, userVideos: user.videos, redraws,
+          text, media: media.direct, images: modelImages, userImages: user.images, userVideos: user.videos, redraws, links: facts.links,
           slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: AUTO_MAX_SLIDES,
           tone: input.tone, instructions: input.instructions, ratio: input.ratio, sourceLabel: input.sourceLabel,
         });
@@ -336,9 +341,24 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         return { asset: u.asset, fit: (kind && kind !== 'photo') || looksLikeGraphic(u.traits) ? 'contain' : 'cover' };
       });
       const userImageIds = new Set(required.map((u) => u.asset));
-      const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid) || ui.has(aid) || diagrams.has(aid) || userImageIds.has(aid));
+      // Mã QR trong tư liệu (AI đã xem, phân loại 'qr'): chỉ gắn vào trang Liên hệ / Ưu đãi (ảnh trang đó = mã QR), không làm ảnh minh hoạ.
+      const qrs = new Set(assetIds.filter((aid, i) => modelImages[i].preview && kindOf.get(aid) === 'qr'));
+      for (const sl of draft.slides) {
+        const isContact = CONTACT_LAYOUTS.includes(sl.layout);
+        sl.images = sl.images.filter((im) => (isContact ? qrs.has(im.asset) || userImageIds.has(im.asset) : !qrs.has(im.asset)));
+        if (isContact) sl.images = sl.images.slice(0, 1).map((im) => ({ ...im, fit: 'contain' }));
+      }
+      const droppedImages = keepPhotoImages(draft.slides, (aid) => photo.has(aid) || ui.has(aid) || diagrams.has(aid) || userImageIds.has(aid) || qrs.has(aid));
+      const qrLeft = [...qrs].filter((aid) => !draft.slides.some((sl) => sl.images.some((im) => im.asset === aid)));
+      for (const sl of draft.slides) {
+        if (CONTACT_LAYOUTS.includes(sl.layout) && !sl.images.length && !sl.video && qrLeft.length) sl.images = [{ asset: qrLeft.shift(), caption: '', fit: 'contain' }];
+      }
       const { outline } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: input.autoSlides, slideCount: input.slideCount, aiImages: !!input.aiImages } });
       if (!outline.slides.length) throw unprocessable('AI không lập được dàn ý từ tài liệu này', 'AI_EMPTY');
+      // Chống bịa: liên kết có URL không có trong tư liệu → bỏ (giữ nhãn); số điện thoại/email/website không có trong tư liệu → bỏ dòng.
+      const verified = verifyOutlineFacts(outline, facts);
+      // Tiêu đề AI hay "Viết Hoa Từng Chữ" → viết hoa đầu câu (giữ tên riêng có bằng chứng trong tư liệu, MISA/AMIS/…).
+      const recased = sentenceCaseOutline(outline, buildCaseIndex(facts.corpus));
       // Mã DRn AI ghi ở từng trang (ghép theo chỉ số TRƯỚC capOutline — sau đó bám theo đối tượng trang).
       const drRefs = new Map();
       outline.slides.forEach((sl, i) => {
@@ -358,7 +378,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       await presentations.setOutlineResult(tenantId, id, { outline, title: input.title ? null : outline.title });
       const kinds = {};
       for (const k of kindOf.values()) if (k) kinds[k] = (kinds[k] || 0) + 1;
-      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, visualShots: shots.length, embeddedMerged: merged, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, diagrams: diagrams.size, diagramsPlaced: dgPlaced.placed, diagramsAdded: dgPlaced.added, redraws: redraws.length, redrawApplied: rd.applied, redrawAdded: rd.added, redrawConverted: rd.converted, droppedImages, kinds, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
+      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, visualShots: shots.length, embeddedMerged: merged, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, diagrams: diagrams.size, diagramsPlaced: dgPlaced.placed, diagramsAdded: dgPlaced.added, redraws: redraws.length, redrawApplied: rd.applied, redrawAdded: rd.added, redrawConverted: rd.converted, droppedImages, kinds, qrImages: qrs.size, sourceLinks: facts.links.length, linksDropped: verified.links, contactLinesDropped: verified.contacts, recased, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi lập dàn ý. Vui lòng thử lại.';
       if (!(err instanceof HttpError)) logger.error('outline_failed', { id, err });
@@ -376,7 +396,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const imgRef = (im) => !im || (img(im.asset) && img(im.src));
     const vidOk = (v) => !v || (img(v.poster) && (v.provider !== 'file' || kind.get(v.asset) === 'video'));
     for (const s of doc.slides) {
-      if (!imgRef(s.image) || !(s.images || []).every(imgRef) || !(s.items || []).every((it) => imgRef(it.image)) || !(s.elements || []).every((e) => imgRef(e.image))) throw unprocessable('Ô ảnh chỉ nhận tệp ảnh', 'INVALID_MEDIA');
+      if (!imgRef(s.image) || !(s.images || []).every(imgRef) || !(s.items || []).every((it) => imgRef(it.image)) || !(s.elements || []).every((e) => imgRef(e.image)) || !img(s.contact?.qr?.asset)) throw unprocessable('Ô ảnh chỉ nhận tệp ảnh', 'INVALID_MEDIA');
       if (!vidOk(s.video) || !(s.elements || []).every((e) => vidOk(e.video))) throw unprocessable('Video không hợp lệ', 'INVALID_MEDIA');
     }
     const lg = doc.logo || doc.design?.logo;
@@ -432,13 +452,17 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const prompts = composed.slides.map((sl) => (typeof sl.imagePrompt === 'string' ? sl.imagePrompt : ''));
       const { spec } = normalizeSpec(composed);
       if (!spec.slides.length) throw unprocessable('AI không dựng được trang nào', 'AI_EMPTY');
+      // Liên kết "[nhãn](URL)" của dàn ý → liên kết trên chữ của bài (mở tab mới khi trình chiếu).
+      const linked = applyOutlineLinks(spec, row.outline);
+      // Chữ AI dựng bài viết thêm (nhãn chủ đề, tiêu đề mục…) cũng về viết hoa đầu câu; bằng chứng tên riêng = nội dung dàn ý.
+      const recased = sentenceCaseSpec(spec, buildCaseIndex(deckTexts(row.outline)));
       const illustrated = aiImages ? await illustrate(tenantId, id, spec, prompts, row.outline.options?.tone) : 0;
       // Phong cách + biến thể từng trang chọn ngầm theo nội dung; hạt giống ngẫu nhiên → mỗi lần dựng một diện mạo khác.
       const [rw, rh] = String(row.ratio || '16:9').split(':').map(Number);
       artDirect(spec, { seed: randomUUID(), ratio: rw / rh || 16 / 9 });
       dropForeignAssets(spec, new Set((await assets.listMediaForPresentation(id)).map((a) => a.id)));
       await presentations.setGenerationResult(tenantId, id, { status: 'ready', spec, title: null });
-      logger.info('build_ready', { id, slides: spec.slides.length, style: spec.style, aiImages: illustrated, ms: Date.now() - started });
+      logger.info('build_ready', { id, slides: spec.slides.length, style: spec.style, aiImages: illustrated, links: linked, recased, ms: Date.now() - started });
       scheduleThumbnail(tenantId, id, 0);
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi dựng bài trình bày. Vui lòng bấm "Dựng bài" để thử lại.';

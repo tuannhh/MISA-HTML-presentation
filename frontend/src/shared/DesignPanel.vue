@@ -14,6 +14,10 @@ import BrandSettings from './BrandSettings.vue'
 import DesignPreview from './DesignPreview.vue'
 import { CUSTOM_THEME, themeTone } from '@/lib/design.js'
 import { SPEC_LIMITS as L, STYLE_OPTIONS } from '@/lib/slideModel.js'
+import MButton from '@/components/mds/MButton.vue'
+import MIcon from '@/components/mds/MIcon.vue'
+import { useToast } from '@/components/mds/toast.js'
+import { sentenceCaseSpec } from '@shared/deck/textCase.js'
 
 const props = defineProps({
   design: { type: Object, required: true },
@@ -48,6 +52,14 @@ function onTheme(v) {
   if (v === CUSTOM_THEME) d.value.palette = d.value.palette || { tone: tone.value, primary: '', secondary: '' }
   else d.value.palette = null
   d.value.theme = v
+}
+// Trình soạn thảo (thiết kế = chính spec, có slides): sửa tiêu đề bài cũ đang "Viết Hoa Từng Chữ" về viết hoa đầu câu.
+const toast = useToast()
+const isDeck = computed(() => Array.isArray(d.value.slides))
+function fixTitleCase() {
+  const n = sentenceCaseSpec(d.value)
+  if (n) toast.success(`Đã chuyển ${n} tiêu đề/nhãn về viết hoa đầu câu — bấm Lưu để giữ thay đổi`)
+  else toast.info('Không có tiêu đề nào đang viết hoa từng chữ')
 }
 function onColor(key, v) {
   if (!d.value.palette) d.value.palette = { tone: tone.value, primary: '', secondary: '' }
@@ -98,6 +110,7 @@ function onColor(key, v) {
     <div v-else-if="tab === 'font'" class="flex flex-col gap-2">
       <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Phông được nhúng kèm bài trình bày — máy chiếu/máy khác không cài phông vẫn hiển thị đúng, đủ dấu tiếng Việt.</p>
       <FontPicker v-model="d.font" />
+      <MButton v-if="isDeck" variant="outline" class="self-start" @click="fixTitleCase"><template #icon><MIcon name="refresh" :size="16" /></template>Sửa tiêu đề đang Viết Hoa Từng Chữ</MButton>
     </div>
     <LogoSettings v-else-if="tab === 'logo'" v-model="d.logo" :media="media" :theme="d.theme" :palette="d.palette" />
     <BrandSettings v-else-if="tab === 'brand'" :design="d" :media="media" :ratio="ratio" :compact="compact" />

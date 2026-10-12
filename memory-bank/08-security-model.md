@@ -55,12 +55,13 @@
 
 ## Sandbox xem trước
 
-- `/api/presentations/:id/preview` trả CSP: `sandbox allow-scripts allow-popups` (origin `null` — script trong bài không đọc được cookie/DOM ứng dụng), script/style chỉ chạy với **nonce**, `connect-src 'none'` (không gọi mạng), `frame-ancestors 'self'`.
-- iframe phía giao diện cũng đặt `sandbox="allow-scripts allow-popups"` — không cấp `allow-same-origin`/fullscreen; video phát ở lớp phủ của app (xem 05 §8).
+- `/api/presentations/:id/preview` trả CSP: `sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox` (origin `null` — script trong bài không đọc được cookie/DOM ứng dụng), script/style chỉ chạy với **nonce**, `connect-src 'none'` (không gọi mạng), `frame-ancestors 'self'`.
+- iframe phía giao diện cũng đặt `sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"` — không cấp `allow-same-origin`/fullscreen; video phát ở lớp phủ của app (xem 05 §8). `allow-popups-to-escape-sandbox` (2026-10-12): trang mở từ liên kết trong bài (tab mới, `rel=noopener noreferrer`) chạy bình thường, không thừa hưởng sandbox; bản thân khung vẫn origin `null`.
 - Vì iframe không có cookie, ảnh/video dùng **URL ký HMAC** (`lib/signedUrl.js`, khoá = `SESSION_SECRET`, có hạn `exp`) — so sánh chữ ký bằng `timingSafeEqual`.
 - Chế độ sửa (`?edit=1`, chủ + người được mời sửa; người chỉ xem bị bỏ qua cờ): khung nhận `deck:render` (HTML slide do renderer dùng chung của **ứng dụng** sinh từ bản nháp — mọi chuỗi đã `esc()`) chỉ từ `window.parent`, chèn bằng `<template>.innerHTML` (script không chạy khi chèn kiểu này; CSP nonce chặn thuộc tính sự kiện). Chiều ngược lại ứng dụng coi khung là **không tin cậy**: đường dẫn trường qua allowlist (`lib/editPaths.js`, map không prototype), toạ độ kẹp số hữu hạn, id phần tử phải có trong bản nháp; máy chủ vẫn chuẩn hoá strict khi lưu.
 - Chromium (PDF/thumbnail): chặn mọi request trừ `data:`/`about:blank`; nội dung đã inline sẵn (ảnh, phông, ảnh bìa video).
-- Chữ định dạng từ khung (`⟦…⟧`): thuộc tính chỉ nhận token màu trong `RICH_COLORS`, `#RRGGBB`, `b`, `n` — sai bất kỳ → cả thẻ thành chữ thường; `richHtml` escape chữ, `style` chỉ ghép từ giá trị đã kiểm (không thể chèn `url(...)`/`;` vào CSS). Máy chủ chuẩn hoá lại khi lưu.
+- Liên kết (`href=` trong `⟦…⟧`, `05` §18): `safeHref` chỉ nhận `http(s)` có tên miền, `mailto:`, `tel:` — chặn `javascript:`/`data:`/tài khoản trong URL/ký tự lạ; kiểm ở cả engine (`okHref`), `editPaths`/`specService` và renderer (`esc()` + `rel="noopener noreferrer"`). Liên hệ (`contact.js`): href chỉ ghép từ chữ số đã kiểm / email đã kiểm / `encodeURIComponent` (địa chỉ); mã QR SVG chỉ gồm toạ độ số. AI chỉ được dùng liên kết/số điện thoại/email/website **có trong tư liệu** — máy chủ đối chiếu (`verifyOutlineFacts`).
+- Chữ định dạng từ khung (`⟦…⟧`): thuộc tính chỉ nhận token màu trong `RICH_COLORS`, `#RRGGBB`, `b`, `n`, `href=` (cuối) — sai bất kỳ → cả thẻ thành chữ thường; `richHtml` escape chữ, `style` chỉ ghép từ giá trị đã kiểm (không thể chèn `url(...)`/`;` vào CSS). Máy chủ chuẩn hoá lại khi lưu.
 
 ## Mẫu thương hiệu (cô lập tenant)
 

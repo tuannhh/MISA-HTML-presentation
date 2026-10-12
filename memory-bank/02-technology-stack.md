@@ -38,6 +38,7 @@ Một tiến trình Node duy nhất phục vụ cả API lẫn SPA tĩnh (`dist/
 | multer | 2.4 | Upload multipart | memoryStorage cho ảnh; **diskStorage** cho tư liệu lớn và video |
 | jszip | 3.10 | Đọc pptx/docx | Có giới hạn số entry & dung lượng giải nén |
 | sharp | 0.35 | Chuẩn hoá ảnh | → WebP, tối đa 1920px, giới hạn 60MP |
+| qrcode | 1.5 | Mã QR trang Liên hệ/Ưu đãi | Chỉ dùng lõi tính ma trận (`qrcode/lib/core/qrcode.js`), tự vẽ SVG ở `shared/deck/qr.js` — chạy cả server lẫn trình duyệt |
 | puppeteer-core | 25.12 | Điều khiển Chromium | Chặn mọi request trừ `data:`/`about:blank` |
 | poppler-utils (`pdftoppm`) | Debian bookworm | Render trang PDF thành ảnh để cắt sơ đồ / ảnh giao diện | Công cụ hệ thống (apt), gọi bằng `execFile`, không qua shell; thiếu → bỏ qua bước cắt ảnh |
 | LibreOffice headless (`soffice`, gói `libreoffice-impress-nogui` + `libreoffice-writer-nogui`) | 7.4 (bookworm) | Chuyển PPTX/DOCX/ODP/ODT → PDF để nhận diện sơ đồ / ảnh giao diện như PDF | Chạy tuần tự (1 tiến trình), hồ sơ riêng mỗi lần, tệp đã gỡ liên kết ngoài + macro, proxy giả; thiếu → chỉ nhận diện trên PDF. Kèm phông Carlito/Caladea/Liberation (thay Calibri/Cambria/Arial) để bố cục trang đúng. Image tăng ~2 GB |

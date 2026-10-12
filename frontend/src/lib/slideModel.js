@@ -3,6 +3,7 @@
 import { SPEC_LIMITS } from '@shared/deck/limits.js';
 import { ICON_NAMES } from '@shared/deck/icons.js';
 import { elementsFromTemplate } from '@shared/deck/free.js';
+import { emptyContact, CTA_SUGGESTIONS } from '@shared/deck/contact.js';
 
 export { SPEC_LIMITS };
 
@@ -20,6 +21,8 @@ export const LAYOUTS = [
   { value: 'quote', label: 'Trích dẫn', icon: 'message' },
   { value: 'comparison', label: 'So sánh', icon: 'copy' },
   { value: 'org', label: 'Sơ đồ tổ chức', icon: 'users' },
+  { value: 'contact', label: 'Thông tin liên hệ', icon: 'phone' },
+  { value: 'offer', label: 'Chương trình ưu đãi', icon: 'tag' },
   { value: 'closing', label: 'Trang kết', icon: 'circle-check' },
   { value: 'free', label: 'Trang tự do', icon: 'layout-board' },
 ];
@@ -42,6 +45,10 @@ export const LAYOUT_FIELDS = {
   comparison: [...HEAD, 'columns'],
   // Sơ đồ tổ chức: ô đứng đầu (root + icon) + các nhánh (columns: tên, icon, mục con).
   org: [...HEAD, 'root', 'icon', 'columns'],
+  // Liên hệ: số điện thoại + kênh nhắn, email, địa chỉ, website, lời kêu gọi, mã QR lớn (slide.contact — ContactFields).
+  contact: [...HEAD, 'contact', 'caption'],
+  // Ưu đãi: quyền lợi (items) + thời hạn (caption) + liên hệ; mã QR chiếm nửa trang.
+  offer: [...HEAD, 'items', 'caption', 'contact'],
   closing: ['kicker', 'title', 'subtitle', 'tags', 'caption'],
   // Trang tự do: nội dung là các phần tử (xem FreeElementsPanel) — tiêu đề chỉ dùng cho danh sách trang/ghi chú.
   free: ['title'],
@@ -98,9 +105,10 @@ export const emptyStat = () => ({ value: '', prefix: '', suffix: '', label: '' }
 export const emptyColumn = () => ({ title: '', subtitle: '', tone: 'neutral', points: [''] });
 
 // template: mẫu bố cục trang tự do (shared/deck/free.js) — chỉ dùng khi layout = 'free'.
+const NEW_TITLE = { free: 'Trang tự do', contact: 'Liên hệ với chúng tôi', offer: 'Ưu đãi đặc biệt' };
 export function newSlide(layout = 'bullets', template = 'blank') {
   const s = {
-    id: newId(), layout, kicker: '', title: layout === 'free' ? 'Trang tự do' : 'Tiêu đề mới', highlight: '', subtitle: '', caption: '', root: '', icon: layout === 'org' ? 'user' : 'sparkles', notes: '',
+    id: newId(), layout, kicker: '', title: NEW_TITLE[layout] || 'Tiêu đề mới', highlight: '', subtitle: '', caption: '', root: '', icon: layout === 'org' ? 'user' : 'sparkles', notes: '',
     tags: [], items: [], stats: [], steps: [], columns: [], quote: { text: '', author: '', role: '' }, image: null, images: [], video: null,
   };
   if (layout === 'free') s.elements = elementsFromTemplate(template);
@@ -110,6 +118,9 @@ export function newSlide(layout = 'bullets', template = 'blank') {
 // Khi đổi layout: bổ sung khung dữ liệu tối thiểu để người dùng có chỗ nhập ngay.
 export function ensureLayoutContent(s) {
   if (['agenda', 'bullets', 'cards'].includes(s.layout) && !s.items.length) s.items = [emptyItem(), emptyItem(), emptyItem()];
+  if (s.layout === 'offer' && !s.items.length) s.items = [{ ...emptyItem(), icon: 'check' }, { ...emptyItem(), icon: 'check' }, { ...emptyItem(), icon: 'check' }];
+  // Liên hệ / Ưu đãi: khung nhập rỗng (không lưu sẵn thông tin — người dùng nhập theo từng trang).
+  if ((s.layout === 'contact' || s.layout === 'offer') && !s.contact) s.contact = emptyContact(s.layout === 'offer' ? CTA_SUGGESTIONS[1] : CTA_SUGGESTIONS[0]);
   if (s.layout === 'stats' && !s.stats.length) s.stats = [emptyStat(), emptyStat(), emptyStat()];
   if (['timeline', 'process'].includes(s.layout) && !s.steps.length) s.steps = [emptyItem(), emptyItem(), emptyItem()];
   if (s.layout === 'comparison' && s.columns.length < 2) s.columns = [emptyColumn(), emptyColumn()];
@@ -136,12 +147,26 @@ export function prepareSpecForSave(spec) {
     }
     for (const c of s.columns || []) c.points = (c.points || []).map((p) => String(p).trim()).filter(Boolean);
     s.tags = (s.tags || []).map((t) => String(t).trim()).filter(Boolean);
+    if (s.contact) trimContact(s);
     // Bố cục không có ô media → bỏ video (renderer không hiển thị, tránh dữ liệu thừa).
     if (s.video && !MEDIA_LAYOUTS.includes(s.layout)) s.video = null;
     if (s.video) s.image = null;
   }
   if (out.palette && out.theme !== 'custom') out.palette = null;
   return out;
+}
+
+// Thông tin liên hệ: bỏ ô trống (số/email/địa chỉ chưa nhập), cắt khoảng trắng; không còn gì → bỏ trường.
+function trimContact(s) {
+  const c = s.contact;
+  const t = (v) => String(v ?? '').trim();
+  c.phones = (c.phones || []).map((p) => ({ ...p, number: t(p.number), label: t(p.label) })).filter((p) => p.number);
+  c.emails = (c.emails || []).map(t).filter(Boolean);
+  c.addresses = (c.addresses || []).map((a) => t(a).replace(/\s*\n\s*/g, ', ')).filter(Boolean);
+  c.website = t(c.website);
+  c.qr = { asset: c.qr?.asset || null, link: t(c.qr?.link), caption: c.qr?.caption || '' };
+  const any = c.phones.length || c.emails.length || c.addresses.length || c.website || t(c.cta) || c.qr.asset || c.qr.link || t(c.qr.caption);
+  if (!any) delete s.contact;
 }
 
 // Trình chiếu khi bấm Sau / bút trình chiếu (trường slide.build; 'auto' = không lưu). Khớp BUILDS của renderer.

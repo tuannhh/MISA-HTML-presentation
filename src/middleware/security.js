@@ -63,7 +63,7 @@ export function securityHeaders() {
 // không được gọi mạng (connect-src none), chỉ nhúng được trong chính ứng dụng.
 export function deckCsp(nonce, origin) {
   return [
-    'sandbox allow-scripts allow-popups',
+    'sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox',
     "default-src 'none'",
     `script-src 'nonce-${nonce}'`,
     `style-src 'nonce-${nonce}'`,

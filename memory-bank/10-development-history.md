@@ -1,5 +1,23 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-12 — Kiểu chữ tiêu đề trang: viết hoa đầu câu (mặc định) / VIẾT HOA TOÀN BỘ
+
+- Người dùng báo: tiêu đề các trang đang viết hoa chữ cái đầu mọi từ. Yêu cầu 2 kiểu (viết hoa toàn bộ / chỉ viết hoa đầu câu), mặc định viết hoa đầu câu; luôn viết hoa MISA, AMIS, ASP, AI, JETPAY.
+- `shared/deck/textCase.js` (mới): `isTitleCased`, `buildCaseIndex` (bằng chứng tên riêng từ tư liệu), `sentenceCasePlain`/`sentenceCase` (giữ thẻ định dạng), `sentenceCaseOutline`, `sentenceCaseSpec`, `deckTexts`, `TITLE_CASES`. `presentationService`: đổi dàn ý sau `verifyOutlineFacts` (corpus) và bài sau `applyOutlineLinks` (chữ dàn ý), log `recased`. Prompt Gemini thêm `CASE_RULE` (dàn ý, dựng bài, 1 bước).
+- VIẾT HOA TOÀN BỘ: `design.font.titleCase = 'upper'` (`specService.cleanDesign`, strict báo lỗi giá trị lạ) → renderer `data-tcase` + engine cập nhật khi xem trước + CSS `text-transform`. Giao diện: radio trong `FontPicker`, xem trước `DesignPreview`, nút sửa bài cũ trong `DesignPanel` (trình soạn thảo).
+- Lỗi gặp khi làm: `repaintRich` lệch định dạng khi chỉ đổi hoa/thường → chia lại theo đoạn `parseRich` (`09`).
+- Test: `title-case.test.js` (5). Unit 215 (214 pass, 1 skip); `npm run build` đạt. Chưa thử với Gemini thật / trình duyệt cho tính năng này.
+
+## 2026-10-12 — Liên kết (H) + trang "Thông tin liên hệ" / "Chương trình ưu đãi" (L)
+
+- Yêu cầu: chèn được hyperlink (mở tab mới); nguồn có link thì chèn vào bài; trang liên hệ (số điện thoại + Zalo/Viber/Telegram/iMessage, email, địa chỉ, CTA, QR lớn) và trang ưu đãi (QR chiếm 1/2 màn hình) cho mọi nhóm nhân viên — người dùng nhập hoặc AI tự phát hiện từ nguồn. Chốt: không lưu thông tin liên hệ mặc định; QR = tải ảnh hoặc tạo từ link; làm H + L trước B.
+- **Liên kết**: `href=` trong chữ định dạng (`rich.js`: `safeHref`, `linkPhrase`, `richLinks`, `hrefWeight`), renderer `<a class="rl" target="_blank" rel="noopener noreferrer">`, engine: nút Liên kết/Ctrl+K trên `#rtb`, trình chiếu bấm link không chuyển trang, khung sửa chặn mở link. Sandbox iframe + CSP xem trước thêm `allow-popups-to-escape-sandbox`.
+- **Liên kết từ nguồn**: `ingestService` chèn `[nhãn](URL)` (DOCX/PPTX/HTML), `sourceFacts.js` (corpus + liên kết, `pdftotext`, `/URI` PDF; cấu hình `PDFTOTEXT_PATH`), prompt có danh sách liên kết, `verifyOutlineFacts` bỏ link/số/email/website không có trong nguồn, `applyOutlineLinks` gắn lại khi dựng.
+- **Liên hệ / Ưu đãi**: `contact.js`, `brands.js`, `qr.js` (dep `qrcode`), `specService.cleanContact`, layout `contact`/`offer` trong renderer + CSS, `parseContactPoints`/`fillContact`, ảnh loại `qr` của AI chỉ vào trang liên hệ; giao diện `ContactFields.vue`, `slideModel`, `editPaths`, `useSlideMedia` (QR vuông), dàn ý (`OUTLINE_LAYOUTS`, `POINT_HINT`, gợi ý cú pháp liên kết). `mdLinks.js` chuyển sang `shared/deck/` để giao diện dùng chung.
+- Test: `hyperlink.test.js` (7), `contact-offer.test.js` (13: kênh liên hệ, chuẩn hoá strict/lenient, asset QR, render + escape XSS, offer QR nửa trang, QR SVG, mdLinks, parseContactPoints, verifyOutlineFacts, dựng bài + gắn link, đọc link DOCX/PPTX/HTML/PDF, editPaths, schema). Unit 210 (209 pass, 1 skip thiếu `pdftoppm`); integration 19/19 trên MySQL tạm; `npm run build` đạt.
+- Chạy thật (API cổng 3010 + MySQL tạm, Gemini thật): văn bản có ưu đãi + liên hệ + 2 link → AI lập trang `offer` + `contact`, 2 liên kết giữ đúng (0 bị loại), dựng bài gắn 2 link; trình chiếu: link `tel:`/`zalo.me`/`viber://`/`mailto:`/Maps/website đều `target=_blank`; sửa QR từ link trên form → lưu → QR lớn bên phải (contact) / nửa trang (offer); Ctrl+K chèn link trên khung sửa; mobile 375px không tràn ngang. Đã gỡ MySQL tạm.
+- Ghi nhận chưa sửa: AI đôi khi tự thêm tên pháp nhân ở trang bìa ("Công ty Cổ phần MISA") dù nguồn không ghi — quy tắc 3 của prompt đã cấm, chưa có đối chiếu máy cho trường này.
+
 ## 2026-10-12 — Triển khai code mới lên Docker local (cổng 8088)
 
 - Người dùng báo bài `li6b4q68` "AI chưa lập được dàn ý". Log `outline_failed`: `TypeError … "data" … Received undefined` tại `storeImage ← storeUserMedia` — đúng lỗi F01 (gọi `storeImage` sai chữ ký khi tạo bài kèm ảnh). Code đã sửa từ `233d348`, nhưng container 8088 vẫn chạy image build 07/10.

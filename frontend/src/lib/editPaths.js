@@ -2,19 +2,22 @@
 // Chỉ nhận các đường dẫn trong danh sách cho phép, cắt theo SPEC_LIMITS — khung xem trước là nguồn dữ liệu không tin cậy.
 // Đường dẫn tương đối (không dùng alias @shared) để kiểm thử đơn vị chạy thẳng bằng Node.
 import { SPEC_LIMITS as L } from '../../../shared/deck/limits.js';
-import { hasRich, canonicalRich, cutRich, plainText } from '../../../shared/deck/rich.js';
+import { hasRich, canonicalRich, cutRich, plainText, hrefWeight } from '../../../shared/deck/rich.js';
+import { CONTACT_LIMITS as CL } from '../../../shared/deck/contact.js';
 import { isMovePath, MOVE_LIMIT, MOVE_RANGE, DECORS, cleanHide, cleanSize } from '../../../shared/deck/layers.js';
 import { newElement } from '../../../shared/deck/free.js';
 
 const clean = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
 const cut = (v, max) => clean(v).slice(0, max);
 // Chữ có định dạng (màu/đậm/giữ liền — shared/deck/rich.js): giới hạn tính theo chữ HIỂN THỊ, thẻ sai cú pháp thành chữ thường,
-// chuỗi thô quá dài (quá nhiều đoạn định dạng) → bỏ định dạng. Khớp specService.str để bản nháp không bị server từ chối.
+// chuỗi thô quá dài (quá nhiều đoạn định dạng) → bỏ định dạng. Khớp specService.str để bản nháp không bị server từ chối
+// (URL liên kết tính riêng: ≤ 8 liên kết dài tối đa mỗi ô).
 const cutR = (v, max) => {
   const s = clean(v);
   if (!hasRich(s)) return s.slice(0, max);
   const r = cutRich(canonicalRich(s), max);
-  return r.length > max * 4 + 400 ? plainText(r).slice(0, max) : r;
+  const links = hrefWeight(r);
+  return r.length - links > max * 4 + 400 || links > 8 * 506 ? plainText(r).slice(0, max) : r;
 };
 const at = (list, i) => (Array.isArray(list) && Number.isInteger(i) && i >= 0 && i < list.length ? list[i] : null);
 // Map không có prototype → khoá như '__proto__'/'constructor' từ khung xem trước không bao giờ khớp.
@@ -56,6 +59,16 @@ export function applyFrameEdit(spec, index, path, value) {
   if (p[0] === 'tags' && p.length === 2) return at(s.tags, n(1)) !== null ? set(s.tags, n(1), L.tag) : false;
   if (p[0] === 'images' && p[2] === 'caption') return set(at(s.images, n(1)), 'caption', L.caption);
   if ((p[0] === 'image' || p[0] === 'video') && p[1] === 'caption') return set(s[p[0]], 'caption', L.caption);
+  // Thông tin liên hệ (trang Liên hệ / Ưu đãi): lời kêu gọi, chú thích QR là chữ có định dạng; số/email/địa chỉ/website chữ thường.
+  if (p[0] === 'contact' && s.contact) {
+    const ct = s.contact;
+    if (p.length === 2 && p[1] === 'cta') return set(ct, 'cta', CL.cta);
+    if (p.length === 2 && p[1] === 'website') return set(ct, 'website', CL.website, true);
+    if (p.length === 3 && p[1] === 'qr' && p[2] === 'caption') return ct.qr ? set(ct.qr, 'caption', CL.qrCaption) : false;
+    if (p.length === 3 && (p[1] === 'emails' || p[1] === 'addresses')) return at(ct[p[1]], n(2)) !== null ? set(ct[p[1]], n(2), p[1] === 'emails' ? CL.email : CL.address, true) : false;
+    if (p.length === 4 && p[1] === 'phones' && (p[3] === 'number' || p[3] === 'label')) return set(at(ct.phones, n(2)), p[3], p[3] === 'number' ? CL.phone : CL.phoneLabel, true);
+    return false;
+  }
   if (p[0] === 'elements') {
     const el = (s.elements || []).find((e) => e.id === p[1]);
     if (!el) return false;
@@ -83,6 +96,8 @@ export function mediaTarget(slide, path) {
     const item = at(slide.items, Number(it[1]));
     return item ? { kind: 'item-image', item, image: item.image || null, video: null } : null;
   }
+  // Ảnh mã QR của trang Liên hệ / Ưu đãi.
+  if (path === 'contact.qr') return slide.contact ? { kind: 'qr', image: slide.contact.qr?.asset ? { asset: slide.contact.qr.asset, alt: '', caption: '', fit: 'contain' } : null, video: null } : null;
   const e = /^elements\.(e-[a-z0-9]+)$/i.exec(path);
   if (e) {
     const el = (slide.elements || []).find((x) => x.id === e[1]);
@@ -116,6 +131,7 @@ export function setMedia(slide, path, { image, video } = {}) {
     if (image) t.item.image = t.item.image ? image : { ...image, fit: 'contain' };
     else delete t.item.image;
   }
+  if (t.kind === 'qr' && image !== undefined) slide.contact.qr = { ...(slide.contact.qr || { link: '', caption: '' }), asset: image?.asset || null };
   if (t.kind === 'element-image' && image !== undefined) t.element.image = image;
   if (t.kind === 'element-video' && video !== undefined) t.element.video = video;
   return true;

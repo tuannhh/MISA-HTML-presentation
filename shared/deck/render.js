@@ -8,8 +8,11 @@ import { fontStack, DECK_FONTS, DEFAULT_FONT } from './fonts.js';
 import { STYLES, resolveVariant } from './variants.js';
 import { SPEC_LIMITS as LIM } from './limits.js';
 import { TEXT_STYLES } from './free.js';
-import { richHtml, plainText } from './rich.js';
+import { richHtml, plainText, linkAttrs } from './rich.js';
 import { moveAttr, hideClasses } from './layers.js';
+import { qrSvg } from './qr.js';
+import { PHONE_CHANNELS, CHANNEL_LABELS, CONTACT_LIMITS as CL, channelHref, emailHref, mapsHref, webHref, webLabel } from './contact.js';
+import { brandSvg } from './brands.js';
 
 export { VARIANTS, STYLES } from './variants.js';
 import { NAMES_3D } from './bg3d.js';
@@ -21,9 +24,12 @@ export const RATIO_SIZES = Object.freeze({
   '3:1': [4320, 1440],
 });
 // Bố cục AI được chọn khi dựng bài; 'free' (trang tự do — người dùng tự đặt phần tử) chỉ tạo từ trình soạn thảo.
+// contact (thông tin liên hệ) / offer (chương trình ưu đãi): số điện thoại + kênh nhắn, email, địa chỉ, website, lời kêu gọi, mã QR.
 export const AI_LAYOUTS = Object.freeze([
-  'cover', 'section', 'agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'org', 'quote', 'comparison', 'closing',
+  'cover', 'section', 'agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'org', 'quote', 'comparison', 'contact', 'offer', 'closing',
 ]);
+// Bố cục có khối thông tin liên hệ (slide.contact).
+export const CONTACT_LAYOUTS = Object.freeze(['contact', 'offer']);
 export const LAYOUTS = Object.freeze([...AI_LAYOUTS, 'free']);
 // Tông màu: các bảng màu dựng sẵn (palette.js) + 'custom' (người dùng nhập 2 màu, xem spec.palette).
 export const THEMES = Object.freeze([...Object.keys(THEME_PRESETS), CUSTOM_THEME]);
@@ -229,6 +235,55 @@ function railList(steps, label, ctx, editValue) {
   return `<div class="tlv">${steps
     .map((st, i) => `<div class="tlv-i" style="${accent(i)}"><span class="tlv-v" data-a="up" data-d="${16 + i * 7}" data-dist="30"${editValue && st.value ? E(ctx, `steps.${i}.value`, LIM.itemValue) : ''}>${rt(label(st, i))}</span><div class="tlv-rail"><i class="tl-dot" data-a="pop" data-d="${14 + i * 7}"></i><i class="tlv-ln"></i></div><div class="tlv-c" data-a="left" data-d="${18 + i * 7}">${itemText(st, ctx, `steps.${i}`)}</div></div>`)
     .join('')}</div>`;
+}
+
+/* ---------------- thông tin liên hệ (trang Liên hệ / Ưu đãi) ---------------- */
+// Liên kết mở tab mới khi trình chiếu/xuất; chế độ sửa dùng <span> (bấm vào là sửa chữ, không mở trang). href dựng từ dữ liệu đã kiểm
+// (contact.js) và luôn escape.
+const aTag = (ctx, href, cls, inner, extra = '') =>
+  href && !ctx.edit ? `<a class="${cls}"${linkAttrs(href)}${extra}>${inner}</a>` : `<span class="${cls}"${extra}>${inner}</span>`;
+
+// Các dòng liên hệ: biểu tượng + nội dung. Số điện thoại: số (bấm = gọi nếu bật kênh "Gọi") + logo từng kênh nhắn (bấm = mở kênh).
+function contactRows(ct, ctx, d0) {
+  const rows = [];
+  const row = (ic, inner, cls = '') =>
+    `<div class="ct-row${cls}" data-a="left" data-d="${d0 + rows.length * 6}" data-dist="40"><span class="ib ct-ib">${icon(ic)}</span><div class="ct-v">${inner}</div></div>`;
+  // Ô chưa nhập (bản nháp trong trình soạn thảo) → bỏ qua, giữ chỉ số k để đường dẫn sửa đúng mục.
+  list(ct.phones).forEach((ph, k) => {
+    if (!String(ph?.number ?? '').trim()) return;
+    const chans = list(ph.channels);
+    const num = aTag(ctx, chans.includes('call') ? channelHref('call', ph.number) : null, 'ct-num', esc(ph.number), E(ctx, `contact.phones.${k}.number`, CL.phone, false, true));
+    const lab = ph.label ? `<span class="ct-lab"${E(ctx, `contact.phones.${k}.label`, CL.phoneLabel, false, true)}>${esc(ph.label)}</span>` : '';
+    const msg = PHONE_CHANNELS.filter((c) => c !== 'call' && chans.includes(c));
+    const ch = msg.length
+      ? `<span class="ct-ch">${msg.map((c) => aTag(ctx, channelHref(c, ph.number), `ct-b ct-${c}`, brandSvg(c, CHANNEL_LABELS[c]), ` title="${esc(`${CHANNEL_LABELS[c]} ${ph.number}`)}"`)).join('')}</span>`
+      : '';
+    rows.push(row('phone', `${lab}<span class="ct-pl">${num}${ch}</span>`, ' ct-ph'));
+  });
+  list(ct.emails).forEach((e, k) => String(e ?? '').trim() && rows.push(row('mail', aTag(ctx, emailHref(e), 'ct-t', esc(e), E(ctx, `contact.emails.${k}`, CL.email, false, true)))));
+  list(ct.addresses).forEach((a, k) => String(a ?? '').trim() && rows.push(row('pin', aTag(ctx, mapsHref(a), 'ct-t ct-addr', esc(a), E(ctx, `contact.addresses.${k}`, CL.address, false, true)))));
+  const web = webHref(ct.website);
+  if (web) rows.push(row('globe', aTag(ctx, web, 'ct-t', esc(webLabel(web)), E(ctx, 'contact.website', CL.website, false, true))));
+  return rows.length ? `<div class="ct-list">${rows.join('')}</div>` : '';
+}
+
+// Lời kêu gọi (khối nổi bật màu nhấn) — chữ có định dạng (màu/đậm/liên kết do người dùng gắn).
+function ctaHtml(ct, ctx, d) {
+  if (!ct.cta) return '';
+  return `<div class="ct-cta" data-a="pop" data-d="${d}">${icon('arrow')}<span${E(ctx, 'contact.cta', CL.cta, false)}>${rt(ct.cta)}</span></div>`;
+}
+
+// Mã QR: ảnh QR tải lên (trọn khung, nền trắng) hoặc mã tự tạo từ link (SVG vector). Chế độ sửa: bấm để đổi ảnh QR.
+function qrBlock(ct, ctx, d) {
+  const q = ct.qr || {};
+  const url = q.asset ? ctx.assetUrl(q.asset) : null;
+  const svg = !url && q.link ? qrSvg(q.link, `Mã QR: ${q.link}`) : '';
+  const cap = q.caption ? `<div class="qr-cap"${E(ctx, 'contact.qr.caption', CL.qrCaption, false)}>${rt(q.caption)}</div>` : '';
+  if (!url && !svg) {
+    return ctx.edit ? `<div class="qr empty" data-a="zoom" data-d="${d}"${M(ctx, 'contact.qr')}><div class="qr-img">${icon('image')}</div><div class="qr-cap">Bấm để tải ảnh mã QR — hoặc nhập link ở bảng nội dung để tự tạo</div></div>` : '';
+  }
+  const img = url ? `<img src="${esc(url)}" alt="${esc(q.caption ? plainText(q.caption) : 'Mã QR')}">` : svg;
+  return `<div class="qr" data-a="zoom" data-d="${d}"${url ? M(ctx, 'contact.qr') : ''}><div class="qr-img">${img}</div>${cap}</div>`;
 }
 
 // Sơ đồ tổ chức: hệ số cỡ chữ theo số nhánh (nhiều nhánh → cột hẹp).
@@ -491,6 +546,28 @@ ${c.subtitle ? `<span class="label"${E(ctx, `columns.${i}.subtitle`, LIM.colSubt
     return `${head(s, ctx)}<div class="body"><div class="cmp${two ? ' two' : ''}" style="--cols:${Math.max(1, cols.length)}">${inner}</div></div>`;
   },
 
+  // Trang Liên hệ: thông tin liên hệ bên trái, mã QR lớn bên phải (≈ 40% chiều cao trang — dễ quét từ xa).
+  contact(s, ctx) {
+    const ct = s.contact || {};
+    const qr = qrBlock(ct, ctx, 24);
+    const note = s.caption ? `<p class="ct-note" data-a="fade" data-d="46"${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</p>` : '';
+    return `${head(s, ctx)}<div class="body"><div class="ct${qr ? ' has-qr' : ''}"><div class="ct-l">${contactRows(ct, ctx, 14)}${ctaHtml(ct, ctx, 40)}${note}</div>${qr}</div></div>`;
+  },
+
+  // Trang Ưu đãi: nửa trái = chương trình (tiêu đề, quyền lợi, thời hạn, lời kêu gọi, liên hệ), nửa phải = mã QR chiếm 1/2 trang.
+  offer(s, ctx) {
+    const ct = s.contact || {};
+    const items = list(s.items).slice(0, 6);
+    const pts = items.length
+      ? `<ul class="of-pts">${items
+          .map((it, i) => `<li data-a="left" data-d="${14 + i * 6}" data-dist="40">${icon(it.icon && it.icon !== 'sparkles' ? it.icon : 'check')}<div>${it.title ? `<b${E(ctx, `items.${i}.title`, LIM.itemTitle, true)}>${rt(it.title)}</b>` : ''}${it.text ? `<span${E(ctx, `items.${i}.text`, LIM.itemText, true)}>${rt(it.text)}</span>` : ''}</div></li>`)
+          .join('')}</ul>`
+      : '';
+    const cap = s.caption ? `<div class="of-cap" data-a="fade" data-d="30">${icon('clock')}<span${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</span></div>` : '';
+    const qr = qrBlock(ct, ctx, 18);
+    return `<div class="body"><div class="of${qr ? ' has-qr' : ''}"><div class="of-l">${head(s, ctx)}${pts}${cap}${ctaHtml(ct, ctx, 36)}${contactRows(ct, ctx, 42)}</div>${qr ? `<div class="of-r">${qr}</div>` : ''}</div></div>`;
+  },
+
   closing(s, ctx, v) {
     const t = `${s.kicker ? `<div class="kicker" data-a="up" data-d="0"><span${E(ctx, 'kicker', LIM.kicker)}>${rt(s.kicker)}</span></div>` : ''}
 <h2 class="cl-t" data-a="zoom" data-d="4"${E(ctx, 'title', LIM.title, true)}>${rt(s.title)}</h2>
@@ -692,7 +769,7 @@ export function deckParts(spec, opts) {
 
   return {
     W, H, mode,
-    attrs: { theme, tone, font: fontBody, style: deckStyle, bg },
+    attrs: { theme, tone, font: fontBody, style: deckStyle, bg, tcase: spec.font?.titleCase === 'upper' ? 'upper' : 'sentence' },
     rootCss: `:root{--W:${W}px;--H:${H}px;--f-sans:${fontStack(fontBody)};--f-head:${fontStack(fontHead)}}`,
     themeCss: `${themeVarsCss(theme, spec.palette)}${brand ? inkVarsCss(theme, spec.palette) : ''}`,
     fontIds: [fontHead, fontBody],
@@ -721,12 +798,12 @@ export function renderDeckHtml(spec, opts) {
   const a = d.attrs;
 
   return `<!doctype html>
-<html lang="${esc(opts.lang || 'vi')}" data-deck-theme="${a.theme}" data-tone="${a.tone}" data-font="${a.font}" data-style="${a.style}">
+<html lang="${esc(opts.lang || 'vi')}" data-deck-theme="${a.theme}" data-tone="${a.tone}" data-font="${a.font}" data-style="${a.style}" data-tcase="${a.tcase}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="generator" content="MISA Presentation">
-<title>${rt(d.title)}</title>
+<title>${esc(plainText(d.title))}</title>
 <style${nonce}>${opts.fontCss || ''}
 ${d.rootCss}
 ${opts.css || ''}

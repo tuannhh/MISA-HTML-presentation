@@ -123,7 +123,7 @@ onMounted(v.load)
         <MButton variant="icon" aria-label="Đóng xem lại" @click="previewId = ''"><template #icon><MIcon name="x" :size="compact ? 24 : 16" /></template></MButton>
       </div>
       <div class="relative w-full overflow-hidden rounded-lg bg-[#05070F]" :style="{ aspectRatio: ratioCss(previewing.ratio) }">
-        <iframe :key="previewing.id" :src="v.previewUrl(previewing.id)" :title="`Xem lại ${label(previewing)}`" sandbox="allow-scripts allow-popups" class="absolute inset-0 h-full w-full border-0" />
+        <iframe :key="previewing.id" :src="v.previewUrl(previewing.id)" :title="`Xem lại ${label(previewing)}`" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" class="absolute inset-0 h-full w-full border-0" />
       </div>
       <p class="text-[var(--mds-text-secondary)]" :class="compact ? 'text-[13px] leading-[18px]' : 'text-[12px] leading-4'">Bấm vào khung rồi dùng phím mũi tên (hoặc vuốt) để xem các trang.</p>
     </section>

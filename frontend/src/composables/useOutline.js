@@ -25,6 +25,8 @@ export const OUTLINE_LAYOUTS = [
   { value: 'quote', label: 'Trích dẫn' },
   { value: 'comparison', label: 'So sánh' },
   { value: 'org', label: 'Sơ đồ tổ chức' },
+  { value: 'contact', label: 'Thông tin liên hệ' },
+  { value: 'offer', label: 'Chương trình ưu đãi' },
   { value: 'closing', label: 'Trang kết' },
 ];
 export const OUTLINE_LAYOUT_LABEL = Object.fromEntries(OUTLINE_LAYOUTS.map((l) => [l.value, l.label]));
@@ -40,7 +42,11 @@ export const POINT_HINT = {
   agenda: 'Mỗi dòng: “Tên phần: mô tả ngắn”',
   cards: 'Mỗi dòng: “Tiêu đề thẻ: diễn giải”',
   bullets: 'Mỗi dòng: “Ý chính: diễn giải”',
+  contact: 'Mỗi dòng 1 thông tin: “Hotline: 1900 8677” · “Điện thoại: 0912 345 678 (Zalo, Viber)” · “Email: …” · “Website: …” · “Địa chỉ: …” · “Kêu gọi: Liên hệ để được tư vấn miễn phí” · “QR: link tạo mã QR” — ảnh gắn ở trang này là ảnh mã QR',
+  offer: 'Mỗi quyền lợi 1 dòng: “Giảm 30%: khi đăng ký trước 31/12” · thêm dòng liên hệ như trang Liên hệ (“Hotline: …”, “Kêu gọi: …”, “QR: …”) — ảnh gắn ở trang này là ảnh mã QR',
 };
+// Cú pháp liên kết trong dòng nội dung (mở tab mới khi trình chiếu).
+export const LINK_HINT = 'Chèn liên kết: [chữ hiển thị](https://…)';
 
 export const emptyOutlineSlide = (layout = 'auto') => ({ id: newId(), layout, title: '', subtitle: '', points: [''], notes: '', images: [], video: null });
 

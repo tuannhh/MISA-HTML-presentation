@@ -4,7 +4,7 @@
 //  - strict (người dùng lưu): vượt giới hạn → trả danh sách lỗi để API báo 422 (không âm thầm cắt dữ liệu người dùng).
 import { randomUUID } from 'node:crypto';
 import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE, BRAND_SLOTS, BUILDS } from '../../shared/deck/render.js';
-import { hasRich, canonicalRich, plainText, cutRich } from '../../shared/deck/rich.js';
+import { hasRich, canonicalRich, plainText, cutRich, hrefWeight, safeHref } from '../../shared/deck/rich.js';
 import { CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
 import { FONT_IDS, DEFAULT_FONT } from '../../shared/deck/fonts.js';
 import { ICON_NAMES } from '../../shared/deck/icons.js';
@@ -13,6 +13,8 @@ import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 import { LOGO_MOTIONS } from '../../shared/deck/bg3d.js';
 import { VARIANTS, STYLES } from '../../shared/deck/variants.js';
 import { cleanMoves, cleanHide } from '../../shared/deck/layers.js';
+import { TITLE_CASES } from '../../shared/deck/textCase.js';
+import { PHONE_CHANNELS, CONTACT_LIMITS as CL, validPhone, validEmail, webHref } from '../../shared/deck/contact.js';
 import { FREE_TYPES, TEXT_STYLES, TEXT_ALIGNS, TEXT_VALIGNS, TEXT_COLORS, FILLS, SHAPES, SHAPE_FILLS, TABLE_STYLES, RADII, SIZE_RANGE } from '../../shared/deck/free.js';
 
 export { SPEC_LIMITS };
@@ -39,11 +41,12 @@ function makeCtx(strict) {
       // Bỏ ký tự điều khiển (trừ xuống dòng/tab), chuẩn hoá khoảng trắng đầu cuối.
       let s = String(v).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim();
       // Chữ có định dạng (màu/đậm/giữ liền — shared/deck/rich.js): độ dài tính theo chữ HIỂN THỊ; thẻ sai cú pháp thành chữ thường.
-      // Trần thô (gồm thẻ) chặn chuỗi phình to vì quá nhiều đoạn định dạng.
+      // Trần thô (gồm thẻ) chặn chuỗi phình to vì quá nhiều đoạn định dạng — URL liên kết tính riêng (≤ 8 liên kết × 500 ký tự).
       if (hasRich(s)) {
         s = canonicalRich(s);
         const len = plainText(s).length;
-        if (len > max || s.length > max * 4 + 400) {
+        const links = hrefWeight(s);
+        if (len > max || s.length - links > max * 4 + 400 || links > 8 * 506) {
           if (strict) errors.push(`${path}: tối đa ${max} ký tự`);
           return len > max ? cutRich(s, max) : plainText(s).slice(0, max);
         }
@@ -155,7 +158,9 @@ export function cleanDesign(c, o) {
   const background = BACKGROUNDS.includes(o.background) ? o.background : 'network';
   const f = c.obj(o.font);
   const body = FONT_IDS.includes(f.body) ? f.body : DEFAULT_FONT;
-  const font = { heading: FONT_IDS.includes(f.heading) ? f.heading : body, body };
+  // titleCase: kiểu chữ tiêu đề trang — mặc định viết hoa đầu câu (không lưu), 'upper' = VIẾT HOA TOÀN BỘ (CSS).
+  const font = { heading: FONT_IDS.includes(f.heading) ? f.heading : body, body, ...(f.titleCase === 'upper' ? { titleCase: 'upper' } : {}) };
+  if (f.titleCase !== undefined && !TITLE_CASES.includes(f.titleCase) && c.strict) c.errors.push('font.titleCase: kiểu chữ tiêu đề không hợp lệ');
   let logo = null;
   if (o.logo) {
     const lg = c.obj(o.logo);
@@ -287,6 +292,54 @@ function cleanStat(c, v, path) {
   };
 }
 
+// Thông tin liên hệ (trang Liên hệ / Ưu đãi — shared/deck/contact.js). Số điện thoại/email/website sai định dạng: lưu → báo lỗi,
+// kết quả AI → bỏ mục đó. Chữ thuần (trừ lời kêu gọi, chú thích QR có định dạng). Không còn gì → null (không lưu trường).
+export function cleanContact(c, v, path = 'contact') {
+  if (v === undefined || v === null) return null;
+  const o = c.obj(v);
+  const plain = (x, max, at) => plainText(c.str(x, max, at)).replace(/\s+/g, ' ').trim();
+  const phones = c
+    .arr(o.phones, CL.phones, `${path}.phones`)
+    .map((ph, k) => {
+      const x = c.obj(ph);
+      const number = plain(x.number, CL.phone, `${path}.phones[${k}].number`);
+      if (!number) return null;
+      if (!validPhone(number)) {
+        if (c.strict) c.errors.push(`${path}.phones[${k}].number: số điện thoại không hợp lệ`);
+        return null;
+      }
+      const want = Array.isArray(x.channels) ? x.channels : [];
+      const channels = PHONE_CHANNELS.filter((ch) => want.includes(ch));
+      return { number, label: plain(x.label, CL.phoneLabel, `${path}.phones[${k}].label`), channels: channels.length ? channels : ['call'] };
+    })
+    .filter(Boolean);
+  const emails = c
+    .arr(o.emails, CL.emails, `${path}.emails`)
+    .map((e, k) => {
+      const v2 = plain(e, CL.email, `${path}.emails[${k}]`);
+      if (v2 && !validEmail(v2)) {
+        if (c.strict) c.errors.push(`${path}.emails[${k}]: email không hợp lệ`);
+        return '';
+      }
+      return v2;
+    })
+    .filter(Boolean);
+  const addresses = c.arr(o.addresses, CL.addresses, `${path}.addresses`).map((a, k) => plain(a, CL.address, `${path}.addresses[${k}]`)).filter(Boolean);
+  const site = plain(o.website, CL.website, `${path}.website`);
+  const website = site ? webHref(site) : null;
+  if (site && !website && c.strict) c.errors.push(`${path}.website: địa chỉ website không hợp lệ`);
+  const q = c.obj(o.qr);
+  const qrAsset = uuidOrNull(q.asset);
+  if (q.asset && !qrAsset && c.strict) c.errors.push(`${path}.qr.asset: mã ảnh QR không hợp lệ`);
+  const rawLink = plain(q.link, CL.qrLink, `${path}.qr.link`);
+  const qrLink = rawLink ? safeHref(/^[a-z][a-z0-9+.-]*:/i.test(rawLink) ? rawLink : `https://${rawLink}`) : null;
+  if (rawLink && !qrLink && c.strict) c.errors.push(`${path}.qr.link: link tạo mã QR không hợp lệ (https://…)`);
+  const qr = { asset: qrAsset, link: qrLink || '', caption: c.str(q.caption, CL.qrCaption, `${path}.qr.caption`) };
+  const out = { phones, emails, addresses, website: website || '', cta: c.str(o.cta, CL.cta, `${path}.cta`), qr };
+  const any = phones.length || emails.length || addresses.length || out.website || out.cta || qr.asset || qr.link || qr.caption;
+  return any ? out : null;
+}
+
 // Kết quả AI đôi khi chọn layout nhưng thiếu dữ liệu tương ứng → hạ về layout hiển thị được, tránh trang trống.
 function fallbackLayout(s) {
   const has = {
@@ -301,11 +354,15 @@ function fallbackLayout(s) {
     quote: !!s.quote.text,
     image: !!s.image?.asset || !!s.video,
     gallery: s.images.some((im) => im.asset),
+    // Liên hệ: phải có ít nhất 1 thông tin liên hệ / mã QR (AI không được tự bịa — xem outlineService.verifyContacts).
+    contact: !!(s.contact && (s.contact.phones.length || s.contact.emails.length || s.contact.addresses.length || s.contact.website || s.contact.qr.asset || s.contact.qr.link)),
+    offer: s.items.length > 0 || !!s.contact,
     free: true,
   };
   if (!(s.layout in has) || has[s.layout]) return s.layout;
   if (s.layout === 'image' && s.items.length) return 'bullets';
   if (s.layout === 'gallery' && s.image?.asset) return 'image';
+  if (s.layout === 'contact') return 'closing';
   return 'section';
 }
 
@@ -357,6 +414,9 @@ function cleanSlide(c, v, i, seen) {
     images: c.arr(o.images, SPEC_LIMITS.images, `${p}.images`).map((im, k) => cleanImage(c, im, `${p}.images[${k}]`)).filter(Boolean),
     video: cleanVideo(c, o.video, `${p}.video`),
   };
+  // Thông tin liên hệ: giữ cả khi đổi sang bố cục khác (đổi qua lại không mất dữ liệu đã nhập), chỉ hiển thị ở contact/offer.
+  const contact = cleanContact(c, o.contact, `${p}.contact`);
+  if (contact) slide.contact = contact;
   // Phần tử đặt tự do: là toàn bộ nội dung của trang tự do; ở bố cục khác là lớp CHÈN THÊM phía trên (ảnh, logo, chữ, hình khối…).
   if (layout === 'free' || (Array.isArray(o.elements) && o.elements.length)) {
     const seenEl = new Set();
@@ -409,6 +469,7 @@ export function collectAssetIds(spec) {
     for (const it of s.items || []) img(it.image);
     add(s.video?.asset);
     add(s.video?.poster);
+    add(s.contact?.qr?.asset);
     for (const e of s.elements || []) {
       img(e.image);
       add(e.video?.asset);
@@ -449,6 +510,7 @@ export function dropForeignAssets(spec, allowedIds) {
       if (it.image && !it.image.asset) delete it.image;
     }
     s.video = keepVideo(s.video);
+    if (s.contact?.qr?.asset && !ok(s.contact.qr.asset)) s.contact.qr = { ...s.contact.qr, asset: null };
     for (const e of s.elements || []) {
       if (e.image) e.image = keep(e.image);
       if (e.video) e.video = keepVideo(e.video);
@@ -492,6 +554,7 @@ export function remapAssetIds(doc, map) {
       if (it.image && !it.image.asset) delete it.image;
     }
     s.video = vid(s.video);
+    if (s.contact?.qr?.asset) s.contact.qr.asset = m(s.contact.qr.asset);
     for (const e of s.elements || []) {
       img(e.image);
       if (e.video) e.video = vid(e.video);
