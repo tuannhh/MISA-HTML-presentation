@@ -1,5 +1,28 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-14 — Hoàn tác / Làm lại không giới hạn (Ctrl/⌘+Z, Ctrl/⌘+Shift+Z); tải PDF/HTML chỉ ra 1 tệp (IDM)
+
+- Yêu cầu: (1) Ctrl+Z hoàn tác không giới hạn, Ctrl+Shift+Z (⌘⇧Z trên Mac) làm lại bước liền kề; (2) máy có IDM bấm tải PDF → vừa IDM tải
+  (15 MB, mở được) vừa hiện Save As ra tệp 0 KB — chỉ muốn 1 tệp: có IDM thì IDM tải, không thì lưu theo thiết lập trình duyệt.
+- (2) Gốc: giao diện tải bằng `fetch` → blob; IDM bắt phản hồi fetch rồi tự tải lại → blob rỗng → tệp 0 KB. Sửa: `POST /:id/exports` dựng + giữ
+  tệp (`src/services/exportStore.js`, mã gắn người + bài, 15 phút, Range) → `downloadExport` mở link `GET /:id/exports/:token` bằng tải thường.
+  GET `/export.html|pdf` cũ giữ nguyên. Chi tiết `05` §23, API `04`, bảo mật `08`.
+- (1) `lib/editHistory.js` (ảnh chụp theo trang, dùng chung chuỗi trang không đổi) + `useEditor` (`watch` gộp 400 ms, `reset` khi mở, `rebase`
+  sau lưu, phím ở `window`) + engine `histKey`/`askHistory` → `deck:history` + nút ↶ ↷ desktop (tooltip phím tắt) / mobile (thanh đáy).
+  Thêm icon Tabler `arrow-back-up`, `arrow-forward-up` vào `iconRegistry.generated.js`. Chi tiết `05` §24, bẫy `09`, quy tắc `11` (6, 16).
+- Kiểm chứng: unit **250** (249 pass, 1 skip `pdftoppm` trong Git Bash) — mới `export-store.test.js` (5), `edit-history.test.js` (7: nhiều bước,
+  1000 bước về đúng bản đầu + JSON y hệt, giữ đối tượng trang, rebase, phím tắt, `useEditor` gộp gõ + về bản đã lưu hết "Chưa lưu" + lưu xong
+  vẫn hoàn tác); tích hợp HTTP (MySQL tạm `mp-it-mysql`, đã xoá) **44/44** — mới `EXPORT-05` (tải 2 lần, Range 206, người khác/mã sai 404,
+  định dạng lạ 400, HTML có CSP sandbox); build OK. Sao lưu `../backups/20261014T074921Z`, `…T075904Z`; bài người dùng `e5updmsl` còn nguyên trước khi
+  dựng lại Docker 8088; smoke (`SMOKE_BOOTSTRAP=1`) **TẤT CẢ ĐẠT** (bước mới "tải 2 bước: PDF 5005 KB qua link GET").
+  Chrome thật (puppeteer, Docker 8088, bài cũ `da8a2ff3` của tài khoản thử — chỉ sửa bản nháp, chặn mọi lệnh ghi, kết thúc 0 lệnh ghi): nhân
+  bản trang → Ctrl+Z / Ctrl+Shift+Z / ⌘Z / ⌘⇧Z / nút ↶ đúng, về bản đã lưu hết "Chưa lưu"; gõ trong ô chữ trên slide → Ctrl+Z trong khung về chữ
+  cũ, Ctrl+Shift+Z trở lại; Ctrl+Z trong ô tên bài là hoàn tác chữ của trình duyệt; tải PDF từ menu "Tải xuống" → **đúng 1 lượt tải**, 1 tệp
+  `Kế hoạch Chuyển đổi số Phòng Kinh doanh 2027.pdf` 2,43 MB, `%PDF-`, không tạo blob. Mobile 375×812 cảm ứng: 2 nút 48 px ở thanh đáy, không
+  tràn ngang, chạm Hoàn tác/Làm lại đúng.
+- Chưa kiểm chứng: máy có IDM thật (máy dev không cài IDM) — kiểm theo cơ chế: IDM nhận các lượt tải GET thường + Range, không còn phản hồi
+  fetch nào chứa PDF; Safari/iPadOS với bàn phím ngoài (⌘Z) — mới kiểm bằng sự kiện Meta+Z trên Chrome.
+
 ## 2026-10-14 — Soạn thảo: chữ không bị cắt, cỡ chữ pt, giãn dòng, độ rộng khung, ngắt dòng; bỏ chữ phụ khi dựng bài; link thư mục Google Drive
 
 - Yêu cầu (kèm ảnh bài "Diễn đàn quốc gia thường niên Văn hóa với doanh nghiệp 2026" trên Docker 8088): (1) bỏ phần chữ phụ khi dựng bài; (2) số

@@ -11,7 +11,7 @@ import MEmptyState from '@/components/mds/MEmptyState.vue'
 import MDropdownMenu from '@/components/mds/MDropdownMenu.vue'
 import MTag from '@/components/mds/MTag.vue'
 import { useToast } from '@/components/mds/toast.js'
-import { get, post, download } from '@/lib/api.js'
+import { get, post, downloadExport } from '@/lib/api.js'
 import { formatDateTime, ratioCss } from '@/lib/format.js'
 import { useDeckFrame } from '@/composables/useDeckFrame.js'
 import { useDeckUrl } from '@/composables/useDeckUrl.js'
@@ -56,7 +56,7 @@ async function act(kind) {
       const copy = (await post(`/api/presentations/${id}/duplicate`)).data
       toast.success('Đã nhân bản về bài của bạn')
       router.push(deckPath(copy, 'edit'))
-    } else await download(`/api/presentations/${id}/export.${kind}`, `${deck.value.title}.${kind}`)
+    } else await downloadExport(id, kind)
   } catch (err) {
     toast.error(err.message)
   } finally {

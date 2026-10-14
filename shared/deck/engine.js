@@ -8,7 +8,7 @@
    Mẫu nền chuyển động: window.DeckBg (shared/deck/backgrounds.js, được ghép trước engine).
    Chế độ edit (data-mode="edit", chỉ khung xem trước của trình soạn thảo): khung cuối tĩnh, sửa chữ trực tiếp (data-e →
    contenteditable, gửi {type:'deck:edit'}), bấm ảnh/video để đổi ({type:'deck:media'}), chọn/kéo/đổi kích thước phần tử trang
-   tự do ({type:'deck:select'|'deck:geom'|'deck:el'}), Ctrl/Cmd+S ({type:'deck:save'}), nhận {type:'deck:render'} để dựng lại slide từ bản nháp chưa lưu. */
+   tự do ({type:'deck:select'|'deck:geom'|'deck:el'}), Ctrl/Cmd+S ({type:'deck:save'}), Ctrl/Cmd+Z · Ctrl/Cmd+Shift+Z ({type:'deck:history'}), nhận {type:'deck:render'} để dựng lại slide từ bản nháp chưa lưu. */
 (function () {
   'use strict';
   var deck = document.getElementById('deck');
@@ -681,6 +681,20 @@
   var PT = (function () { var d = document.createElement('div'); try { d.contentEditable = 'plaintext-only'; } catch (e) { /* trình duyệt cũ */ } return d.contentEditable === 'plaintext-only'; })();
   var selFe = null, drag = null, pending = null, liveCss = null, lastCss = '', cache = [], guides = [];
   function post(msg) { try { window.parent.postMessage(msg, '*'); } catch (e) { /* bỏ qua */ } }
+  // Phím lịch sử (cùng quy ước frontend/src/lib/editHistory.js historyKey): Ctrl/Cmd+Z hoàn tác; Ctrl/Cmd+Shift+Z, Ctrl+Y làm lại.
+  function histKey(e) {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.isComposing) return '';
+    var k = String(e.key || '').toLowerCase();
+    if (k === 'z') return e.shiftKey ? 'redo' : 'undo';
+    if (k === 'y' && e.ctrlKey && !e.metaKey && !e.shiftKey) return 'redo';
+    return '';
+  }
+  // Lịch sử hoàn tác thuộc về ứng dụng (bản nháp, mọi thao tác ở khung lẫn bảng bên) → nhờ cửa sổ cha. Đang gõ trong ô chữ của
+  // slide: gửi nốt nội dung + rời ô (slide đang gõ không bị hoãn dựng lại → hiện ngay bước vừa hoàn tác).
+  function askHistory(action, el) {
+    if (el && el.isContentEditable) { sendEdit(el, true); el.blur(); }
+    post({ type: 'deck:history', action: action });
+  }
   function slideIndex(el) { return slides.indexOf(el && el.closest ? el.closest('.slide') : null); }
   function edEl(t) { return t && t.closest ? t.closest('[data-e]') : null; }
   // plaintext-only: trình duyệt không tự chèn định dạng (dán/kéo thả HTML) — định dạng chỉ qua thanh công cụ (span.rt dựng lại từ mô hình).
@@ -1562,6 +1576,8 @@
       // định dạng chỉ qua thanh công cụ để luôn lưu được.
       if (it === 'insertParagraph' || it === 'insertLineBreak') { e.preventDefault(); if (el.hasAttribute('data-ml')) insertText(el, '\n'); return; }
       if (it.indexOf('format') === 0) { e.preventDefault(); return; }
+      // Hoàn tác/Làm lại từ menu chuột phải của trình duyệt → dùng lịch sử của ứng dụng như phím tắt.
+      if (it === 'historyUndo' || it === 'historyRedo') { e.preventDefault(); askHistory(it === 'historyUndo' ? 'undo' : 'redo', el); return; }
       var max = +(el.getAttribute('data-max') || 0);
       if (max && it.indexOf('insert') === 0) {
         var add = e.data || (e.dataTransfer && e.dataTransfer.getData('text/plain')) || '';
@@ -1620,6 +1636,13 @@
     document.addEventListener('pointerdown', function (e) { if (dcm && dcEl && !dcm.contains(e.target) && !(e.target.closest && e.target.closest('[data-dc]'))) closeDcm(); }, true);
     addEventListener('keydown', function (e) {
       var el = edEl(e.target);
+      // Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (Ctrl+Y) — ô nhập của thanh công cụ (cỡ chữ, liên kết…) giữ hoàn tác chữ của trình duyệt.
+      var hk = histKey(e);
+      if (hk && !(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA'))) {
+        e.preventDefault();
+        askHistory(hk, el);
+        return;
+      }
       // Ctrl/Cmd+S trong khung → nhờ ứng dụng lưu (gửi nốt nội dung đang gõ trước).
       if ((e.key === 's' || e.key === 'S') && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();

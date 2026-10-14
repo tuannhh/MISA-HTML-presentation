@@ -24,6 +24,11 @@
 - **Đã kiểm bằng test tự động (2026-10-12, `test/integration/https-proxy.test.js`)**: sau cổng vào giả kết thúc TLS (`X-Forwarded-Proto: https`, gắn IP thật vào XFF) với `TRUST_PROXY` đúng số lớp + `SESSION_COOKIE_SECURE=true` → cookie `mp.sid` có `Secure; HttpOnly; SameSite=Lax`, đăng nhập dùng được; client tự gửi `X-Forwarded-For: 1.2.3.4` → audit vẫn ghi IP do cổng vào gắn. Gọi thẳng app bằng http → **không** cấp cookie phiên. Production lệch https ↔ cookie Secure → `loadConfig` dừng khởi động.
 - Đăng nhập: bcrypt chạy trên worker_threads (`PASSWORD_HASH_THREADS`) — nhiều người đăng nhập cùng lúc không làm treo các request khác; hash giả cho email không tồn tại vẫn giữ thời gian phản hồi như nhau.
 - Tệp HTML xuất ra chạy offline nên không chịu giới hạn này (đúng ý: chỉ chặn truy cập máy chủ).
+- **Link tải bản xuất** (`GET /:id/exports/:token`, `05` §23): vẫn qua phiên đăng nhập + `IP_ALLOWLIST` (IDM gửi kèm cookie của trình duyệt);
+  mã 192 bit ngẫu nhiên, gắn người tạo + bài, hết hạn 15 phút không dùng, sai người/sai bài/hết hạn trả cùng 404 (không dò được mã); tệp ở
+  `STORAGE_DIR/temp`, tên do server sinh. Quyền đọc kiểm ở bước POST (dựng) — người bị thu hồi quyền trong 15 phút đó vẫn tải được bản đã dựng
+  cho chính họ (chấp nhận: là bản họ đã có quyền tải lúc dựng). HTML tải về kèm `Content-Security-Policy: sandbox` + `nosniff` (mở nhầm URL trong
+  trình duyệt cũng không chạy script trên domain ứng dụng).
 
 ## Phân quyền & cách ly tenant
 

@@ -64,6 +64,8 @@ Mật khẩu: 10–128 ký tự, có cả chữ và số. `user` trả về: `{ 
 | GET | `/:id/preview` | *đọc*. HTML trình chiếu cho iframe. `?edit=1` (chủ + người được mời sửa; người chỉ xem bị bỏ qua cờ) = chế độ **sửa trực tiếp** (`data-e`/`data-m`, không HUD, không chuyển động chữ). Header CSP `sandbox allow-scripts allow-popups`, nonce, `connect-src 'none'`, `frame-ancestors 'self'`, `no-store` |
 | GET | `/:id/export.html` | Tải HTML một tệp (ảnh + phông đã chọn base64, giữ chuyển động + nền động). Video tải lên nhúng base64 nếu tổng ≤ `EXPORT_VIDEO_MB`, vượt → khung ảnh bìa không phát; YouTube vẫn mở được khi có mạng. Ghi audit |
 | GET | `/:id/export.pdf` | Tải PDF (mode print, không chuyển động) qua Chromium. Ghi audit, rate-limit |
+| POST | `/:id/exports` | *đọc*. Body `{ format: 'pdf' \| 'html' }` — dựng như 2 GET trên (cùng quyền, hàng đợi, audit; `pdf` dùng rate-limit `exportPdf`) rồi giữ tệp chờ tải → **201** `{ url, name, bytes, expiresAt }`. Định dạng khác → 400 `INVALID_FORMAT`. Giao diện dùng luồng này (`05` §23) |
+| GET | `/:id/exports/:token` | Tệp vừa dựng, `Content-Disposition: attachment`, `Content-Length`, Range (206), `Cache-Control: private, no-store`; HTML thêm `Content-Security-Policy: sandbox`. Chỉ đúng người tạo + đúng bài; hạn 15 phút kể từ lần tải gần nhất, tải lại nhiều lần được. Còn lại → 404 `EXPORT_EXPIRED` |
 
 Tên tệp tải về: `Content-Disposition` có `filename` ASCII + `filename*` UTF-8 (giữ tiếng Việt). Xuất HTML/PDF: *đọc* (người chỉ xem vẫn tải được — quyết định của chủ dự án 2026-10-07).
 

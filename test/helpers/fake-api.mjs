@@ -15,6 +15,6 @@ export const put = call('PUT');
 export const del = call('DELETE');
 export const postForm = call('POST');
 export const uploadForm = call('POST');
-export const download = async () => {};
+export const downloadExport = async () => ({});
 export const api = (method, path, o) => globalThis.__fakeApi(method, path, o?.body);
 export const setCsrf = () => {};

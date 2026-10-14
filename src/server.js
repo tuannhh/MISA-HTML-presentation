@@ -18,6 +18,7 @@ async function main() {
   const container = await createContainer(config, pool);
   await container.services.presentations.recoverStale();
   await container.storage.cleanupUploads(0);
+  await container.services.exportFiles.purgeLeftovers();
 
   const app = createApp({ config, pool, ...container });
   const server = app.listen(config.port, () => logger.info('server_listening', { port: config.port }));
@@ -26,6 +27,7 @@ async function main() {
 
   const tempTimer = setInterval(() => {
     container.storage.cleanupTemp().catch(() => {});
+    container.services.exportFiles.sweep();
     container.storage.cleanupUploads(12 * 3600 * 1000).catch(() => {});
   }, 15 * 60 * 1000);
   tempTimer.unref();

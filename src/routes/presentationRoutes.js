@@ -6,18 +6,19 @@ import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
 import { deckCsp } from '../middleware/security.js';
 import { ok, pick, paging, uuidParam } from '../lib/validate.js';
-import { tooLarge, notFound } from '../lib/httpError.js';
+import { tooLarge, notFound, badRequest } from '../lib/httpError.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { cappedDiskStorage } from '../lib/cappedDiskStorage.js';
 
 // Tên file tải về: bỏ ký tự cấm, kèm filename* UTF-8 để giữ tiếng Việt.
+const fileBase = (title) => String(title || 'bai-trinh-bay').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'bai-trinh-bay';
 function disposition(title, ext) {
-  const base = String(title || 'bai-trinh-bay').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'bai-trinh-bay';
+  const base = fileBase(title);
   const ascii = base.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^\x20-\x7e]/g, '_');
   return `attachment; filename="${ascii}.${ext}"; filename*=UTF-8''${encodeURIComponent(base)}.${ext}`;
 }
 
-export function presentationRoutes({ service, templates, sharing, publications, config, limits }) {
+export function presentationRoutes({ service, templates, sharing, publications, exportFiles, config, limits }) {
   const r = Router();
   // Tệp nguồn: ghi thẳng ra đĩa (tổng tới MAX_UPLOAD_MB, không giữ trong RAM); tên tệp do server sinh (UUID).
   const maxSourceBytes = config.limits.maxUploadMb * 1048576;
@@ -223,6 +224,31 @@ export function presentationRoutes({ service, templates, sharing, publications, 
     const { pdf, title } = await service.exportPdf(req.user, req.params.id, req.ip);
     res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': disposition(title, 'pdf'), 'Cache-Control': 'no-store' });
     res.send(Buffer.from(pdf));
+  });
+
+  // Tải 2 bước cho giao diện (memory-bank 05 §23): POST dựng + cấp link (JSON → lỗi hiện tiếng Việt, giữ trạng thái chờ)
+  // → trình duyệt tải link bằng GET thường. Không tải fetch→blob: IDM chặn phản hồi fetch rồi tự tải lại → trình duyệt lưu tệp 0 KB.
+  // GET /export.html|pdf ở trên giữ nguyên cho API/kịch bản cũ.
+  const pdfLimit = (req, res, next) => (req.body?.format === 'pdf' ? limits.exportPdf(req, res, next) : next());
+  r.post('/:id/exports', auth, id, pdfLimit, async (req, res) => {
+    const format = req.body?.format;
+    if (format !== 'pdf' && format !== 'html') throw badRequest('Định dạng tải về chỉ nhận pdf hoặc html', 'INVALID_FORMAT');
+    const out = format === 'pdf' ? await service.exportPdf(req.user, req.params.id, req.ip) : await service.exportHtml(req.user, req.params.id, req.ip);
+    const { token, bytes, expiresAt } = await exportFiles.put({ userId: req.user.id, presentationId: req.params.id, data: format === 'pdf' ? out.pdf : out.html, title: out.title, ext: format });
+    ok(res, { url: `/api/presentations/${req.params.id}/exports/${token}`, name: `${fileBase(out.title)}.${format}`, bytes, expiresAt: new Date(expiresAt).toISOString() }, null, 201);
+  });
+
+  // Phục vụ bản đã dựng: đúng người + đúng bài + còn hạn; tải lại được nhiều lần / theo Range (IDM chia luồng, tiếp tục tải).
+  r.get('/:id/exports/:token', auth, id, (req, res, next) => {
+    const f = exportFiles.get(req.params.token, { userId: req.user.id, presentationId: req.params.id });
+    const expired = () => notFound('Liên kết tải đã hết hạn — vui lòng bấm tải lại', 'EXPORT_EXPIRED');
+    if (!f) throw expired();
+    const headers = { 'Content-Type': f.type, 'Content-Disposition': disposition(f.title, f.ext), 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' };
+    if (f.ext === 'html') headers['Content-Security-Policy'] = 'sandbox';
+    res.sendFile(f.file, { headers, cacheControl: false }, (err) => {
+      if (!err || res.headersSent) return;
+      next(err.code === 'ENOENT' ? expired() : err);
+    });
   });
 
   return r;

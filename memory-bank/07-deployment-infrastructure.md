@@ -35,7 +35,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `BCRYPT_ROUNDS` | | 12 | |
 | `PASSWORD_HASH_THREADS` | | 2 | Số worker_threads băm/so bcrypt (1–8) — luồng chính không bị chặn khi nhiều người đăng nhập cùng lúc |
 | `STORAGE_DIR` | | `./data/storage` (dev) / `/data/storage` (Docker) | |
-| `TEMP_TTL_MINUTES` | | 60 | Dọn tệp tạm quá hạn |
+| `TEMP_TTL_MINUTES` | | 60 | Dọn tệp tạm quá hạn (cũng là trần sống của bản xuất chờ tải `export-*` trong `STORAGE_DIR/temp`; kho bản xuất tự hết hạn sau 15 phút không dùng — `05` §23) |
 | `MAX_UPLOAD_MB` / `MAX_IMAGE_UPLOAD_MB` | | 300 / 15 | `MAX_UPLOAD_MB` = **tổng** tệp nguồn 1 lần tạo (và trần tải từ link) |
 | `MAX_UPLOAD_FILES` | | 20 | Số tệp nguồn tối đa 1 lần tạo |
 | `MAX_SOURCE_CHARS` | | 400000 | Tổng ký tự tư liệu (văn bản + bản chuyển thể) gửi bước dựng bài |

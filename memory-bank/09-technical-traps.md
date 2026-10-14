@@ -350,3 +350,19 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - **`safeFetch` mang nguyên header qua chuyển hướng** (kể cả sang tên miền khác) → khoá Google để ở query `key=` (không đặt header
   `x-goog-api-key`), header chỉ chứa thứ không bí mật (resourcekey vốn nằm trên link chia sẻ).
 
+## Tải tệp + hoàn tác (2026-10-14)
+
+- **Trình quản lý tải (IDM…) + `fetch` → blob = tệp 0 KB**: tiện ích IDM bắt phản hồi tải được (`application/pdf`…) kể cả của `fetch`/XHR, huỷ luồng
+  trình duyệt rồi tự tải lại URL → `blob()` rỗng nhưng `<a download href=blob:>` vẫn chạy → 2 lượt tải, 1 tệp 0 KB. Tải tệp cho người dùng luôn
+  bằng **GET thường** (`Content-Disposition: attachment`) tới URL tải lại được nhiều lần (IDM gửi lại request + Range nhiều luồng) — xem `05` §23.
+  Lỗi cần hiện tiếng Việt → tách bước dựng (POST, JSON) khỏi bước tải.
+- **Kiểm tải bằng puppeteer**: `setRequestInterception(true)` làm Chrome **huỷ** lượt tải (`downloadProgress: canceled`) → tắt chặn request trước
+  khi tải; `Browser.setDownloadBehavior.downloadPath` phải là đường dẫn Windows (`cygpath -w`), đường `/tmp/...` của Git Bash cũng làm huỷ.
+  Kịch bản kiểm thật: `tmp/undo-download-check.mjs <mã bài> <thư mục Windows>` (chỉ sửa bản nháp, chặn mọi PATCH/PUT/DELETE).
+- **Hoàn tác theo ảnh chụp JSON**: dựng lại spec phải giữ **thứ tự khoá** (`{...spec, slides: null}` rồi gán lại `slides`) — lệch thứ tự là
+  "Chưa lưu" mãi dù nội dung trùng bản gốc (`dirty` so JSON). Component nào tự "chuẩn hoá" bản nháp khi dựng lại (gán giá trị mặc định lúc mount)
+  sẽ tạo bước mới ngay sau hoàn tác và **xoá nhánh làm lại** — chuẩn hoá phải làm ở `adopt`/`withDesignDefaults`, không ở component.
+- **Ctrl+Z trong ô chữ của khung slide**: engine hoãn `deck:render` khi ô chữ đang focus (để không giật con trỏ) → hoàn tác lúc đang gõ phải rời ô
+  trước (engine `askHistory` gửi nốt nội dung + `blur`) thì slide mới hiện bước vừa hoàn tác; không thì chữ cũ trên DOM ghi đè lại bản nháp.
+- Test `useEditor` với máy chủ giả: dữ liệu mở bài phải là bản **đã chuẩn hoá** (`prepareSpecForSave`) như máy chủ thật — bản thô làm bước sau lưu
+  khác ở mọi trang (chuẩn hoá) → chuyển nhầm về trang 1 khi hoàn tác.

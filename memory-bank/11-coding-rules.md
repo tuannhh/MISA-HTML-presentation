@@ -25,7 +25,7 @@
 3. **Dùng component MDS** có sẵn (`components/mds/`), token màu `--mds-*`; không hard-code màu/hex. Thiếu component (vd. bottom sheet) → viết trong `mobile/` hoặc `shared/` theo token MDS.
 4. **Mobile:** gốc `.mds-mobile-app`, MobileShell (TopBar + BottomNav khi là màn gốc), footer sticky (Hủy trái – chính phải), vùng chạm ≥ 44px, Back ở màn gốc gọi `exitToHost()`. 403/404 hiển thị trong shell mobile.
 5. **Form:** dùng `FormField` (label thật, liên kết input), `maxlength` lấy từ `SPEC_LIMITS`, lỗi hiển thị cạnh trường; nút submit ngoài form dùng `form="id"`.
-6. **Gọi API** chỉ qua `lib/api.js`; xử lý `ApiError.code` cụ thể (409 `VERSION_CONFLICT`, `MUST_CHANGE_PASSWORD`…), không nuốt lỗi.
+6. **Gọi API** chỉ qua `lib/api.js`; xử lý `ApiError.code` cụ thể (409 `VERSION_CONFLICT`, `MUST_CHANGE_PASSWORD`…), không nuốt lỗi. **Tải tệp cho người dùng** (PDF/HTML/…) không dùng `fetch` → blob: dựng bằng POST (JSON) rồi để trình duyệt tải link GET thường (`downloadExport`, `05` §23).
 7. **Clone dữ liệu** reactive bằng `clone()` của `lib/slideModel.js`, không dùng `structuredClone`.
 8. **Sửa bản sao MDS** phải đánh dấu `// [MISA Presentation] …` và ghi vào bảng vá ở `09`.
 9. **Đường dẫn bài** luôn dựng bằng `deckPath(deck, feature)` (`lib/deckPath.js`), không tự ghép `/p/:id/...`. Quyết định hiển thị theo vai trò bài dùng `deckAccess`/`deckTarget`/`deckMenuItems`/`deckNav` (`lib/deckActions.js`) — không dùng `isOwner` cho thao tác người được mời sửa cũng làm được.
@@ -36,6 +36,10 @@
 14. **Trình chiếu / 3D:** `slide.build` và nền 3D là lựa chọn của người dùng — **không** đưa vào prompt/schema AI. Đơn vị "ý" và khối phóng được khai báo bằng bộ chọn `UNIT`/`ZOOM` trong `engine.js` — thêm bố cục/lớp khối mới phải cập nhật hai bộ chọn này (test `present-3d.test.js` đối chiếu). Server/renderer chỉ import `shared/deck/bg3d.js` (không import three); `FALLBACK_2D` có bản sao trong engine (test đối chiếu). Hiệu ứng 3D phải có đường lùi khi không có WebGL.
 
 15. **Vị trí / cỡ chữ / hoạ tiết** (`slide.moves`, `slide.hide`) là chỉnh tay của người dùng — **không** đưa vào prompt/schema AI. Mọi hàm kiểm tra ở `shared/deck/layers.js` (dùng chung server + app). Thêm ô chữ dời được = mở rộng `MOVE_PATH_RE` + gắn qua `E()`; thêm hoạ tiết = `DECORS` (nhãn, bố cục, `pick`) + CSS `x-<khoá>` (ẩn + nắn bố cục) + `DC()` nếu bấm được + test `layers.test.js`. Vị trí ô chữ chỉ dùng thuộc tính `translate` (không `transform`). `moves[path]` = `{x, y, s?, l?, w?}` — thêm thuộc tính mới phải đi đủ 4 chỗ: `cleanMoves` + `moveAttr` (layers.js), `applyFrameMove` (editPaths.js, undefined = giữ cũ), `commitMove`/`setMv` (engine, luôn gửi đủ giá trị) + test `layers.test.js`. Kích thước tính trong hệ toạ độ đã `zoom` → chia cho `s`.
+
+16. **Hoàn tác / Làm lại**: mọi thay đổi nội dung phải đi qua `draft` của `useEditor` (lịch sử tự ghi qua `watch`) — không giữ trạng thái nội dung
+    bài ngoài bản nháp, không "chuẩn hoá" bản nháp trong component (sinh bước thừa, mất nhánh làm lại). Thao tác gửi nhiều thông điệp từ khung cho
+    1 hành động thì gộp lại (vd. `setPt` lưu 1 lần). Phím tắt lịch sử dùng `historyKey`/`isTextField` (`lib/editHistory.js`; engine có bản sao `histKey`).
 
 ## Quy trình
 

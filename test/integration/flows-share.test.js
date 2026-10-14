@@ -199,6 +199,51 @@ test('EXPORT-01/02/04: HTML độc lập (đúng tiêu đề, không lộ API/UR
   assert.equal(pages, 5, 'mỗi trang bài = 1 trang PDF');
 });
 
+test('EXPORT-05: tải 2 bước (POST dựng → GET link) — 1 tệp đúng, tải lại + Range được (IDM), người khác/mã sai → 404, định dạng lạ → 400', { timeout: 120000 }, async () => {
+  const app = getApp();
+  const u = await app.newUser('dl');
+  const other = await app.newUser('dlother');
+  const d = await app.readyDeck(u);
+  let r = await u.post(P(d.id, '/exports'), { format: 'docx' });
+  assert.equal(r.status, 400);
+  assert.equal(r.json.error.code, 'INVALID_FORMAT');
+  r = await other.post(P(d.id, '/exports'), { format: 'html' });
+  assert.equal(r.status, 404, 'không đọc được bài → không dựng được bản xuất');
+
+  r = await u.post(P(d.id, '/exports'), { format: 'pdf' });
+  assert.equal(r.status, 201, JSON.stringify(r.json));
+  const { url, name, bytes } = r.json.data;
+  assert.match(url, new RegExp(`^/api/presentations/${d.id}/exports/[A-Za-z0-9_-]{32}$`));
+  assert.equal(name, `${(await u.get(P(d.id))).json.data.title}.pdf`, 'tên tệp theo tiêu đề bài');
+  assert.ok(name.endsWith('.pdf') && bytes > 1000);
+  // Trình duyệt / IDM tải nhiều lần cùng link (IDM bắt lại request của trình duyệt rồi tự tải).
+  for (let i = 0; i < 2; i++) {
+    const res = await u.req('GET', url, undefined, { raw: true });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/pdf');
+    assert.match(res.headers.get('content-disposition'), /^attachment; filename=".+\.pdf"; filename\*=UTF-8''/);
+    assert.equal(Number(res.headers.get('content-length')), bytes);
+    assert.match(res.headers.get('cache-control'), /no-store/);
+    const buf = Buffer.from(await res.arrayBuffer());
+    assert.equal(buf.length, bytes, 'tệp đủ dung lượng (không phải 0 KB)');
+    assert.equal(buf.subarray(0, 5).toString(), '%PDF-');
+  }
+  const part = await u.req('GET', url, undefined, { raw: true, headers: { range: 'bytes=0-4' } });
+  assert.equal(part.status, 206, 'IDM chia luồng theo Range');
+  assert.equal(Buffer.from(await part.arrayBuffer()).toString(), '%PDF-');
+  assert.equal((await other.req('GET', url, undefined, { raw: true })).status, 404, 'mã tải gắn với người tạo');
+  assert.equal((await u.req('GET', url.replace(/[A-Za-z0-9_-]{32}$/, 'x'.repeat(32)), undefined, { raw: true })).status, 404);
+
+  r = await u.post(P(d.id, '/exports'), { format: 'html' });
+  assert.equal(r.status, 201);
+  const html = await u.req('GET', r.json.data.url, undefined, { raw: true });
+  assert.equal(html.status, 200);
+  assert.equal(html.headers.get('content-type'), 'text/html; charset=utf-8');
+  assert.equal(html.headers.get('content-security-policy'), 'sandbox');
+  assert.match(html.headers.get('content-disposition'), /^attachment;/);
+  assert.match(await html.text(), /<title>Giới thiệu nền tảng MISA AMIS<\/title>/);
+});
+
 test('Xuất bản (P) qua HTTP: chủ bài xuất bản → domain công khai phục vụ theo Host, noindex; người khác không xuất bản được; admin gỡ được', { timeout: 60000 }, async () => {
   const app = getApp();
   const u = await app.newUser('pub');

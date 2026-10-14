@@ -106,7 +106,7 @@ export function createApp({ config, pool, repos, services }) {
   api.use(limits.api);
   api.use(csrfProtection(config));
   api.use('/auth', authRoutes({ auth: services.auth, users: repos.users, limits }));
-  api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, sharing: services.sharing, publications: services.publications, config, limits }));
+  api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, sharing: services.sharing, publications: services.publications, exportFiles: services.exportFiles, config, limits }));
   api.use('/templates', templateRoutes({ service: services.templates, limits }));
   api.use('/assets', assetRoutes({ service: services.presentations }));
   api.use('/admin', adminRoutes({ auth: services.auth, publications: services.publications }));

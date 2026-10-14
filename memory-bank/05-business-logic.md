@@ -568,3 +568,47 @@ A+/A−; chỉnh giãn dòng; tiêu đề "Cam kết thực thi và hành độn
 - **Màn dựng bài / lập dàn ý** (`JobProgress`, desktop + mobile `OutlinePage`/`EditorPage`): bỏ đoạn chữ phụ ("Đọc tư liệu (kể cả PDF scan…",
   "Chọn bố cục, biểu tượng…", "Màn hình tự cập nhật…"); thanh tiến trình theo thời gian đã chạy / dự kiến (3–95%, chưa có dự kiến → thanh chạy
   vô định, tôn trọng giảm chuyển động) + 1 dòng trạng thái `aria-live` ("Đang chờ đến lượt — vị trí thứ N…" / "Đã chạy X · dự kiến còn …").
+
+## 23. Tải PDF/HTML 2 bước — chỉ 1 tệp, có IDM hay không (2026-10-14)
+
+Yêu cầu chủ dự án: máy có Internet Download Manager, bấm tải PDF thì vừa IDM tải (15 MB, mở được) vừa hiện Save As của Windows ra tệp
+**0 KB** hỏng. Muốn chỉ 1 tệp chuẩn: có IDM → IDM tải; không có → trình duyệt lưu theo thiết lập (hỏi nơi lưu / thư mục mặc định).
+
+- **Gốc**: giao diện cũ tải bằng `fetch` → `blob` → `<a download href=blob:>`. Tiện ích IDM bắt **phản hồi của fetch** (`application/pdf`), huỷ
+  luồng của trình duyệt rồi tự tải lại URL (kèm cookie) → `res.blob()` rỗng → trình duyệt vẫn "tải" blob 0 KB (2 lượt, 1 hỏng). Không sửa được
+  ở phía blob (không biết trước có IDM) → bỏ cách tải bằng fetch.
+- **Luồng mới** (`lib/api.js downloadExport(id, format)`, dùng ở trình soạn thảo, danh sách bài, trang xem — desktop + mobile):
+  1. `POST /api/presentations/:id/exports {format:'pdf'|'html'}` — máy chủ dựng (như GET cũ: quyền *đọc*, hàng đợi, rate-limit PDF, audit) rồi
+     ghi ra thư mục tạm, trả JSON `{ url, name, bytes, expiresAt }`. Lỗi là JSON như mọi API → toast tiếng Việt; nút giữ trạng thái chờ khi dựng.
+  2. Giao diện bấm `<a href=url download>` → **GET thường** `.../exports/<mã>` trả tệp với `Content-Disposition: attachment` (tên UTF-8),
+     `Content-Length`, `Accept-Ranges` → có IDM thì IDM nhận (trình duyệt tự huỷ lượt của nó), không có thì trình duyệt lưu. Chỉ 1 tệp.
+- **Kho bản xuất** `src/services/exportStore.js` (`container.services.exportFiles`): mã 32 ký tự ngẫu nhiên (`randomBytes(24)` base64url) gắn
+  `userId` + `presentationId`; tệp `export-<mã>.<đuôi>` trong `STORAGE_DIR/temp`; hạn **15 phút tính từ lần dùng gần nhất** (IDM tạm dừng/tiếp
+  tục); tải lại nhiều lần + theo Range (IDM chia luồng) mà không dựng lại; ≤ 4 bản/người (bỏ bản cũ nhất), ≤ 200 bản tổng; `sweep` mỗi lần ghi + theo
+  hẹn giờ dọn tạm 15 phút; khởi động xoá `export-*` sót (`purgeLeftovers`, **chỉ `server.js` gọi** — script phụ dùng chung container
+  không được xoá tệp server đang phục vụ; sổ mã ở RAM — 1 instance, `07`). Sai người / sai bài / hết hạn / mã sai dạng → cùng 404
+  `EXPORT_EXPIRED` ("Liên kết tải đã hết hạn — vui lòng bấm tải lại").
+- `GET /:id/export.html|pdf` giữ nguyên (API, smoke, đo tải dùng).
+
+## 24. Hoàn tác / Làm lại trong trình soạn thảo (2026-10-14)
+
+Yêu cầu: Ctrl+Z hoàn tác về bước trước, **không giới hạn số lần**; Ctrl+Shift+Z (⌘⇧Z trên Mac) làm lại bước liền kề vừa hoàn tác.
+
+- **Lõi** `frontend/src/lib/editHistory.js` (`createEditHistory`, thuần JS): mỗi bước = `{ t: tiêu đề, m: JSON spec bỏ slides (giữ vị trí khoá),
+  s: [JSON từng trang] }`; trang không đổi dùng lại **đúng chuỗi** của bước trước → 1 lần sửa chỉ tốn thêm trang bị sửa (1000 bước × bài 20 trang
+  vẫn nhẹ). `record` bỏ qua khi trùng bước đang đứng; thay đổi mới sau khi hoàn tác **bỏ nhánh làm lại**. `undo/redo` ghi nốt thay đổi chưa kịp
+  ghi trước khi lùi; dựng lại trạng thái dùng lại đối tượng trang có JSON trùng (mỗi đối tượng 1 lần — 2 trang giống hệt không bị dùng chung) và
+  trả `index` = trang đầu tiên khác → trình soạn thảo chuyển tới trang vừa hoàn tác/làm lại (-1: chỉ đổi tiêu đề/thiết lập chung → giữ trang).
+- **Gắn vào bản nháp** (`useEditor`): `watch(draft, deep)` → gộp thay đổi liên tục trong **400 ms** thành 1 bước (gõ chữ hoàn tác theo cụm, không
+  từng ký tự; kéo/thả, thêm/xoá trang, đổi thiết kế… đều tự vào lịch sử — không cần sửa từng chỗ thao tác). Mở bài → `reset`; lưu → ghi cụm đang
+  gõ trước, bản máy chủ chuẩn hoá **thay** bước đang đứng (`rebase`, không thành bước thừa) → lưu xong vẫn hoàn tác được; "Hủy thay đổi" / khôi
+  phục phiên bản / đổi tỷ lệ là 1 bước như mọi thay đổi (hoàn tác được). Quay về đúng bản đã lưu → hết "Chưa lưu" (JSON trùng `baseline`).
+  Đổi bề mặt desktop ↔ mobile: lịch sử bài vừa rời được giữ (1 bài) và dùng lại nếu bản nháp mở lại khớp bước đang đứng.
+- **Phím**: `historyKey` — Ctrl/⌘+Z hoàn tác; Ctrl/⌘+Shift+Z, Ctrl+Y làm lại (⌘Y trên Mac là lịch sử trình duyệt — bỏ); bỏ qua khi có Alt (AltGr)
+  hoặc đang gõ IME. Ngoài khung: listener `window` trong `useEditor`; con trỏ đang ở **ô nhập chữ của ứng dụng** (tên bài, ô ở bảng bên, hộp thoại)
+  → để trình duyệt hoàn tác chữ trong ô; trong `[role=dialog]` → bỏ qua. Trong khung slide: engine (`histKey`) chặn phím + lệnh "Hoàn tác" của
+  menu chuột phải (`beforeinput historyUndo/Redo`), đang gõ ô chữ thì gửi nốt nội dung + rời ô (để slide dựng lại ngay), gửi
+  `deck:history {action}` → `useLiveDeck({ onHistory })` → `ed.undo()/redo()`. Ô nhập của thanh định dạng trong khung (cỡ chữ, liên kết) giữ
+  hoàn tác của trình duyệt.
+- **Nút**: desktop — ↶ ↷ (`arrow-back-up` / `arrow-forward-up`) ngay sau ô tên bài, tooltip "Hoàn tác · Ctrl+Z" / "Làm lại · Ctrl+Shift+Z"
+  (Mac: ⌘Z / ⌘⇧Z — `HISTORY_SHORTCUTS`), `aria-keyshortcuts`; mobile — 2 nút 48 px đầu thanh đáy, trước "Hủy thay đổi" / "Lưu". Khoá khi hết bước.

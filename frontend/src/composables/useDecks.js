@@ -3,7 +3,7 @@ import { deckTarget } from '@/lib/deckActions.js';
 import { deckPath } from '@/lib/deckPath.js';
 import { ref, reactive, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
-import { get, post, patch, del, download } from '@/lib/api.js';
+import { get, post, patch, del, downloadExport } from '@/lib/api.js';
 import { useToast } from '@/components/mds/toast.js';
 
 export const PAGE_SIZE = 24;
@@ -81,7 +81,7 @@ export function useDecks(scope) {
       const res = await patch(`/api/presentations/${d.id}`, { visibility });
       Object.assign(d, { visibility: res.data.visibility, publishedAt: res.data.publishedAt });
     });
-  const exportFile = (d, kind) => run(d.id, `export-${kind}`, () => download(`/api/presentations/${d.id}/export.${kind}`, `${d.title}.${kind}`));
+  const exportFile = (d, kind) => run(d.id, `export-${kind}`, () => downloadExport(d.id, kind));
 
   /* ---- xử lý chọn thao tác (menu) — xoá cần xác nhận, chia sẻ mở panel của trang ---- */
   const router = useRouter();

@@ -236,6 +236,20 @@ const pdf = Buffer.from(await r.arrayBuffer());
 assert.equal(pdf.subarray(0, 4).toString(), '%PDF');
 writeFileSync('tmp/smoke-export.pdf', pdf);
 console.log(`✓ xem trước (CSP sandbox), xuất HTML 1 tệp (${(html.length / 1024).toFixed(0)} KB), PDF (${(pdf.length / 1024).toFixed(0)} KB)`);
+// Giao diện tải 2 bước (POST dựng → GET link thường): IDM/trình duyệt nhận đúng 1 tệp; tải lại + Range được, người khác → 404.
+r = await a.req('POST', `/api/presentations/${id}/exports`, { format: 'pdf' });
+assert.equal(r.status, 201, JSON.stringify(r.json));
+const dl = r.json.data;
+r = await a.req('GET', dl.url, undefined, { raw: true });
+assert.equal(r.status, 200);
+assert.match(r.headers.get('content-disposition'), /^attachment;/);
+const dlPdf = Buffer.from(await r.arrayBuffer());
+assert.equal(dlPdf.length, dl.bytes, 'tệp tải về đủ dung lượng');
+assert.equal(dlPdf.subarray(0, 4).toString(), '%PDF');
+r = await a.req('GET', dl.url, undefined, { raw: true, extra: { range: 'bytes=0-3' } });
+assert.equal(r.status, 206);
+assert.equal((await b.req('GET', dl.url, undefined, { raw: true })).status, 404);
+console.log(`✓ tải 2 bước: PDF ${(dl.bytes / 1024).toFixed(0)} KB qua link GET (Range 206, người khác 404)`);
 
 r = await a.req('PATCH', `/api/presentations/${id}`, { visibility: 'private' });
 r = await b.req('GET', `/api/presentations/${id}`);

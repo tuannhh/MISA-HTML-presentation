@@ -93,23 +93,21 @@ export async function uploadForm(path, form, { onProgress, retryCsrf = true } = 
   throw new ApiError(status, e.code || (status === 413 ? 'UPLOAD_TOO_LARGE' : 'HTTP_ERROR'), e.message || fallback, e.details);
 }
 
-// Tải file (HTML/PDF) bằng fetch để giữ cookie + báo lỗi tiếng Việt thay vì trang lỗi trình duyệt.
-export async function download(path, fallbackName) {
-  const res = await fetch(path, { credentials: 'same-origin' });
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new ApiError(res.status, json?.error?.code || 'HTTP_ERROR', json?.error?.message || `Lỗi ${res.status}`);
-  }
-  const blob = await res.blob();
-  const cd = res.headers.get('content-disposition') || '';
-  const m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
-  const name = m ? decodeURIComponent(m[1]) : fallbackName;
-  const url = URL.createObjectURL(blob);
+/**
+ * Tải bản xuất (format 'pdf' | 'html') của bài: server dựng xong trả link tải (JSON → lỗi tiếng Việt như mọi API,
+ * nút giữ trạng thái chờ trong lúc dựng) → giao TRÌNH DUYỆT tải link bằng GET thường (Content-Disposition: attachment).
+ * Có trình quản lý tải (IDM…) thì nó nhận tải; không có thì trình duyệt lưu theo thiết lập (hỏi nơi lưu / thư mục mặc định).
+ * KHÔNG tải fetch → blob: IDM chặn phản hồi fetch rồi tự tải lại → trình duyệt lưu blob rỗng (tệp 0 KB, 2 lần tải).
+ * @returns {Promise<{ url: string, name: string, bytes: number, expiresAt: string }>}
+ */
+export async function downloadExport(id, format) {
+  const { data } = await post(`/api/presentations/${id}/exports`, { format });
   const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
+  a.href = data.url;
+  a.download = ''; // tên tệp lấy từ Content-Disposition (giữ tiếng Việt)
+  a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return data;
 }

@@ -57,7 +57,7 @@ function onBuildAll(build) {
 // :code = mã ngắn 8 ký tự (API nhận cả mã ngắn lẫn UUID).
 const id = route.params.code || route.params.id
 const ed = useEditor(id, { onOutline: (d) => router.replace(deckPath(d, 'outline')) })
-const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, assets, media, videoLibrary } = ed
+const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, assets, media, videoLibrary, canUndo, canRedo } = ed
 useDeckUrl(deck, 'edit')
 const access = computed(() => (deck.value ? deckAccess(deck.value) : 'owner'))
 const isOwner = computed(() => access.value === 'owner')
@@ -66,7 +66,7 @@ const view = ref('slides') // 'slides' | 'deck'
 const frame = ref(null)
 const strip = ref(null)
 const sm = useSlideMedia(draft, selected)
-const live = useLiveDeck(frame, { draft, deck, selected, assets, onMedia: sm.open, onSave: () => onSave(), onNotice: (t) => toast.info(t) })
+const live = useLiveDeck(frame, { draft, deck, selected, assets, onMedia: sm.open, onSave: () => onSave(), onHistory: (a) => (a === 'redo' ? ed.redo() : ed.undo()), onNotice: (t) => toast.info(t) })
 const selectedElId = computed(() => (live.selectedEl.value?.index === selected.value ? live.selectedEl.value.id : ''))
 const isFree = computed(() => slide.value?.layout === 'free')
 watch(selected, async (i) => {
@@ -354,6 +354,9 @@ onMounted(ed.load)
         <button v-if="saveError.status === 409" type="button" class="block min-h-12 text-left font-medium text-[var(--mds-brand-600)]" @click="reloadLatest">Tải lại bản mới nhất</button>
       </FormAlert>
       <div class="flex gap-2">
+        <!-- Hoàn tác / Làm lại (bàn phím ngoài: Ctrl/⌘+Z, Ctrl/⌘+Shift+Z) -->
+        <MButton variant="icon" aria-label="Hoàn tác" :disabled="!canUndo" @click="ed.undo()"><template #icon><MIcon name="arrow-back-up" :size="24" /></template></MButton>
+        <MButton variant="icon" aria-label="Làm lại" :disabled="!canRedo" @click="ed.redo()"><template #icon><MIcon name="arrow-forward-up" :size="24" /></template></MButton>
         <MButton variant="outline" class="flex-1" :disabled="!dirty || saving" @click="ed.discard()">Hủy thay đổi</MButton>
         <MButton variant="primary" class="flex-1" :loading="saving" :disabled="!dirty" @click="onSave">Lưu</MButton>
       </div>

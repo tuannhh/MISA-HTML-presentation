@@ -19,6 +19,7 @@ import { createSharingService } from './services/sharingService.js';
 import { createPublicationService } from './services/publicationService.js';
 import { createStockImageService } from './services/stockImageService.js';
 import { createUrlSigner } from './lib/signedUrl.js';
+import { createExportStore } from './services/exportStore.js';
 
 export async function createContainer(config, pool, overrides = {}) {
   const repos = {
@@ -40,6 +41,9 @@ export async function createContainer(config, pool, overrides = {}) {
   const sessionStore = new MySqlSessionStore(pool);
   const hasher = createPasswordHasher({ threads: config.auth.hashThreads });
   const presentations = createPresentationService({ config, repos, storage, gemini, browser, signer, audit: repos.audit, stock });
+  // Bản xuất PDF/HTML chờ tải (tải GET thường để IDM/trình duyệt nhận đúng 1 tệp) — tệp nằm ở thư mục tạm.
+  const exportFiles = overrides.exportFiles || createExportStore({ dir: config.storage.tempDir });
+  await exportFiles.init();
   const services = {
     sessionStore,
     auth: createAuthService({ config, repos, audit: repos.audit, hasher }),
@@ -47,6 +51,7 @@ export async function createContainer(config, pool, overrides = {}) {
     templates: createTemplateService({ repos, storage, signer, audit: repos.audit }),
     sharing: createSharingService({ repos, decks: presentations, audit: repos.audit }),
     publications: createPublicationService({ config, repos, storage, decks: presentations, audit: repos.audit }),
+    exportFiles,
   };
   return { repos, services, storage, browser, sessionStore, hasher };
 }

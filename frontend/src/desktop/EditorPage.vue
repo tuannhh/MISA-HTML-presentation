@@ -39,6 +39,7 @@ import { LAYOUT_LABEL, LAYOUT_ICON, SPEC_LIMITS } from '@/lib/slideModel.js'
 import { plainText } from '@shared/deck/rich.js'
 import { RATIO_OPTIONS, ratioCss } from '@/lib/format.js'
 import { deckAccess, deckNav, NAV_ROUTE } from '@/lib/deckActions.js'
+import { HISTORY_SHORTCUTS } from '@/lib/editHistory.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,7 +57,7 @@ function onBuildAll(build) {
 // :code = mã ngắn 8 ký tự (API nhận cả mã ngắn lẫn UUID).
 const id = route.params.code || route.params.id
 const ed = useEditor(id, { onOutline: (d) => router.replace(deckPath(d, 'outline')) })
-const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, media, videoLibrary } = ed
+const { deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, media, videoLibrary, canUndo, canRedo } = ed
 useDeckUrl(deck, 'edit')
 const access = computed(() => (deck.value ? deckAccess(deck.value) : 'owner'))
 const isOwner = computed(() => access.value === 'owner')
@@ -64,7 +65,7 @@ const listPath = computed(() => NAV_ROUTE[deckNav(deck.value)])
 
 const frame = ref(null)
 const sm = useSlideMedia(draft, selected)
-const live = useLiveDeck(frame, { draft, deck, selected, assets: ed.assets, onMedia: sm.open, onSave: () => onSave(), onNotice: (t) => toast.info(t) })
+const live = useLiveDeck(frame, { draft, deck, selected, assets: ed.assets, onMedia: sm.open, onSave: () => onSave(), onHistory: (a) => (a === 'redo' ? ed.redo() : ed.undo()), onNotice: (t) => toast.info(t) })
 // Phần tử trang tự do đang chọn (chỉ khi thuộc trang đang mở).
 const selectedElId = computed(() => (live.selectedEl.value?.index === selected.value ? live.selectedEl.value.id : ''))
 const isFree = computed(() => slide.value?.layout === 'free')
@@ -240,6 +241,13 @@ onMounted(ed.load)
         <div class="w-full max-w-[420px]">
           <MInput v-model="draft.title" aria-label="Tên bài trình bày" :error="titleError" />
         </div>
+        <!-- Hoàn tác / Làm lại: không giới hạn bước; phím tắt dùng được cả khi đang ở khung xem trước -->
+        <MTooltip content="Hoàn tác" :shortcut="HISTORY_SHORTCUTS.undo">
+          <MButton variant="icon" aria-label="Hoàn tác" aria-keyshortcuts="Control+Z Meta+Z" :disabled="!canUndo" @click="ed.undo()"><template #icon><MIcon name="arrow-back-up" :size="20" /></template></MButton>
+        </MTooltip>
+        <MTooltip content="Làm lại" :shortcut="HISTORY_SHORTCUTS.redo">
+          <MButton variant="icon" aria-label="Làm lại" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y" :disabled="!canRedo" @click="ed.redo()"><template #icon><MIcon name="arrow-forward-up" :size="20" /></template></MButton>
+        </MTooltip>
         <span v-if="dirty" class="whitespace-nowrap text-[12px] text-[var(--mds-warning)]">● Chưa lưu</span>
         <MTooltip v-if="!isOwner" :content="`Bài của ${deck.authorName || 'người khác'} — thay đổi lưu thẳng vào bài gốc`">
           <MTag color="info" size="sm" class="whitespace-nowrap">Được chia sẻ · Chỉnh sửa</MTag>

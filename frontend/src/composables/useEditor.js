@@ -1,14 +1,19 @@
 // Logic trình soạn thảo dùng chung desktop/mobile: tải bài, bản nháp, lưu (khoá phiên bản), thao tác slide,
 // media (ảnh, video, YouTube, logo), thiết kế, chia sẻ, xuất.
-import { ref, computed, onBeforeUnmount } from 'vue';
-import { get, patch, del, post, download, ApiError } from '@/lib/api.js';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { get, patch, del, post, downloadExport, ApiError } from '@/lib/api.js';
 import { newSlide, duplicateSlide, ensureLayoutContent, prepareSpecForSave, clone, SPEC_LIMITS, BUILD_LAYOUTS } from '@/lib/slideModel.js';
 import { useMedia } from '@/composables/useMedia.js';
 import { withDesignDefaults } from '@/lib/design.js';
 import { decorsFor } from '@shared/deck/layers.js';
+import { createEditHistory, historyKey, isTextField } from '@/lib/editHistory.js';
 
 // Bản nháp chưa lưu được giữ tạm khi trang bị gỡ (vd. đổi bề mặt desktop ↔ mobile khi xoay/thu nhỏ cửa sổ).
 const pendingDrafts = new Map();
+// Lịch sử hoàn tác của bài vừa rời trang (cùng lý do trên) — chỉ giữ 1 bài; dùng lại khi bản nháp mở lại khớp bước đang đứng.
+let keptHistory = null;
+// Gõ/kéo liên tục trong khoảng này gộp thành 1 bước hoàn tác (giống Google Slides/PowerPoint: hoàn tác theo cụm, không từng ký tự).
+const HISTORY_IDLE_MS = 400;
 
 export function useEditor(id, { onOutline } = {}) {
   const deck = ref(null);
@@ -49,6 +54,70 @@ export function useEditor(id, { onOutline } = {}) {
 
   const snapshot = () => JSON.stringify({ t: draft.value?.title, s: draft.value?.spec });
 
+  /* ---- hoàn tác / làm lại (không giới hạn bước) ---- */
+  let history = createEditHistory();
+  const canUndo = ref(false);
+  const canRedo = ref(false);
+  let historyTimer = null;
+  const current = () => ({ title: draft.value.title, spec: draft.value.spec });
+  const syncHistory = () => {
+    canUndo.value = history.canUndo();
+    canRedo.value = history.canRedo();
+  };
+  // Ghi ngay thay đổi đang chờ gộp thành 1 bước (trước khi hoàn tác/lưu).
+  function commitHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+    if (!draft.value) return;
+    history.record(current());
+    syncHistory();
+  }
+  // Mọi thay đổi bản nháp (bảng bên, khung xem trước, thao tác trang) đều đi qua đây — không cần sửa từng chỗ thao tác.
+  // Bản nháp bị thay bằng bản máy chủ / bản hoàn tác cũng kích hoạt, nhưng record() bỏ qua khi trùng bước đang đứng.
+  watch(
+    () => draft.value,
+    () => {
+      if (!draft.value) return;
+      clearTimeout(historyTimer);
+      historyTimer = setTimeout(commitHistory, HISTORY_IDLE_MS);
+    },
+    { deep: true },
+  );
+  function resetHistory() {
+    clearTimeout(historyTimer);
+    historyTimer = null;
+    const kept = keptHistory;
+    keptHistory = null;
+    if (kept && kept.id === id && draft.value && kept.history.matches(current())) history = kept.history;
+    else history.reset(draft.value ? current() : null);
+    syncHistory();
+  }
+  function stepHistory(dir) {
+    if (!draft.value || deck.value?.status !== 'ready') return false;
+    clearTimeout(historyTimer);
+    historyTimer = null;
+    const r = dir < 0 ? history.undo(current()) : history.redo(current());
+    syncHistory();
+    if (!r) return false;
+    draft.value = r.state;
+    const n = r.state.spec.slides.length;
+    if (r.index >= 0) selected.value = Math.min(r.index, n - 1);
+    else if (selected.value >= n) selected.value = Math.max(0, n - 1);
+    return true;
+  }
+  const undo = () => stepHistory(-1);
+  const redo = () => stepHistory(1);
+  // Phím tắt ngoài khung xem trước (trong khung: engine gửi 'deck:history' → trang gọi undo/redo).
+  // Đang gõ trong ô nhập của ứng dụng (tên bài, nội dung ở bảng bên…) → trình duyệt tự hoàn tác chữ trong ô; trong hộp thoại → bỏ qua.
+  function onHistoryKey(e) {
+    const action = historyKey(e);
+    if (!action || e.defaultPrevented || isTextField(e.target) || e.target?.closest?.('[role="dialog"]')) return;
+    if (!draft.value || deck.value?.status !== 'ready') return;
+    e.preventDefault();
+    if (action === 'undo') undo();
+    else redo();
+  }
+
   function adopt(d) {
     deck.value = d;
     assets.value = d.assets || [];
@@ -74,6 +143,7 @@ export function useEditor(id, { onOutline } = {}) {
         draftVersion = kept.specVersion;
         selected.value = Math.min(kept.selected, kept.draft.spec.slides.length - 1);
       }
+      resetHistory();
       schedulePoll();
     } catch (err) {
       loadError.value = err;
@@ -105,6 +175,7 @@ export function useEditor(id, { onOutline } = {}) {
   }
 
   async function saveNow() {
+    commitHistory(); // cụm vừa gõ thành 1 bước riêng trước khi bản máy chủ (đã chuẩn hoá) thay bản nháp
     try {
       const spec = prepareSpecForSave(draft.value.spec);
       spec.title = draft.value.title.trim() || spec.title;
@@ -116,6 +187,8 @@ export function useEditor(id, { onOutline } = {}) {
       const typed = snapshot() !== sent ? clone(draft.value) : null;
       adopt(res);
       if (typed) draft.value = typed;
+      // Bản máy chủ chuẩn hoá (số "62" → 62…) thay bước đang đứng, không thành 1 bước hoàn tác riêng; vẫn hoàn tác tiếp được sau khi lưu.
+      else history.rebase(current());
       // Khung xem trước đã hiển thị bản nháp (dựng trực tiếp) → không cần tải lại khung sau khi lưu.
       return true;
     } catch (err) {
@@ -220,8 +293,8 @@ export function useEditor(id, { onOutline } = {}) {
   const assetUrl = (assetId) => media.assetUrl(assetId);
 
   /* ---- khác ---- */
-  const exportHtml = () => download(`/api/presentations/${id}/export.html`, `${deck.value.title}.html`);
-  const exportPdf = () => download(`/api/presentations/${id}/export.pdf`, `${deck.value.title}.pdf`);
+  const exportHtml = () => downloadExport(id, 'html');
+  const exportPdf = () => downloadExport(id, 'pdf');
   const remove = () => del(`/api/presentations/${id}`);
   const duplicate = async () => (await post(`/api/presentations/${id}/duplicate`)).data;
 
@@ -232,16 +305,23 @@ export function useEditor(id, { onOutline } = {}) {
     }
   };
   window.addEventListener('beforeunload', onBeforeUnload);
+  window.addEventListener('keydown', onHistoryKey);
   onBeforeUnmount(() => {
     if (dirty.value) pendingDrafts.set(id, { specVersion: draftVersion ?? deck.value.specVersion, draft: clone(draft.value), selected: selected.value });
+    if (draft.value) {
+      commitHistory();
+      keptHistory = { id, history };
+    }
     clearTimeout(pollTimer);
+    clearTimeout(historyTimer);
     window.removeEventListener('beforeunload', onBeforeUnload);
+    window.removeEventListener('keydown', onHistoryKey);
   });
 
   return {
     deck, draft, slide, selected, loading, saving, loadError, saveError, dirty, previewUrl, previewKey, assets, media, videoLibrary,
     load, save, discard, applyDeck, updateMeta, addSlide, copySlide, removeSlide, moveSlide, changeLayout, setBuildAll, setDecorAll,
-    uploadImage, assetUrl, exportHtml, exportPdf, remove, duplicate,
+    uploadImage, assetUrl, exportHtml, exportPdf, remove, duplicate, undo, redo, canUndo, canRedo,
   };
 }
 

@@ -14,10 +14,11 @@ const fin = (v, min, max) => (Number.isFinite(v) ? Math.min(max, Math.max(min, M
 
 /**
  * @param {Ref<HTMLIFrameElement>} frameRef
- * @param {{ draft: Ref, deck: Ref, selected: Ref<number>, assets: Ref<Array>, onMedia?: Function, onSave?: Function, onNotice?: Function }} o
+ * @param {{ draft: Ref, deck: Ref, selected: Ref<number>, assets: Ref<Array>, onMedia?: Function, onSave?: Function, onHistory?: Function, onNotice?: Function }} o
+ *   onHistory('undo' | 'redo') — Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (Ctrl+Y) bấm trong khung.
  *   onNotice(text) — báo ngắn cho người dùng (vd. trang đã đủ số phần tử).
  */
-export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, onSave, onNotice }) {
+export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, onSave, onHistory, onNotice }) {
   const ready = ref(false);
   // Phần tử trang tự do đang chọn trên khung: { index, id } | null
   const selectedEl = ref(null);
@@ -116,6 +117,9 @@ export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, 
         break;
       case 'deck:save':
         onSave?.();
+        break;
+      case 'deck:history':
+        if (d.action === 'undo' || d.action === 'redo') onHistory?.(d.action);
         break;
       case 'deck:el':
         if (d.action === 'remove') removeElement(idx, d.id);
