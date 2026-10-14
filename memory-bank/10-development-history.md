@@ -1,5 +1,31 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-14 — Soạn thảo: chữ không bị cắt, cỡ chữ pt, giãn dòng, độ rộng khung, ngắt dòng; bỏ chữ phụ khi dựng bài; link thư mục Google Drive
+
+- Yêu cầu (kèm ảnh bài "Diễn đàn quốc gia thường niên Văn hóa với doanh nghiệp 2026" trên Docker 8088): (1) bỏ phần chữ phụ khi dựng bài; (2) số
+  trang tuỳ chỉnh tối đa 100 — **chủ dự án cho tạm hoãn**, làm sau; (3) thêm nội dung thì bị cắt chữ — cho chỉnh khung nội dung; (4) nhập cỡ chữ
+  thay vì chỉ +/−; (5) chỉnh giãn dòng; (6) ngắt dòng tiêu đề còn trống bên phải mà chữ không lên được; (7) link thư mục Google Drive (Drive API).
+  Giữ nguyên bài của người dùng (không xoá/sửa; sao lưu DB + tệp trước mỗi lần triển khai: `../backups/20261014T052607Z`, `…T054156Z`).
+- (3) Gốc: `fitSlide` chỉ đo scroll, bỏ sót tràn lên trên (trang 5: `.im-glass` 761px trong `.body` 656px) → đo theo khung cắt 4 phía, `safe flex-end`,
+  tự co ngay khi gõ (`fitSoon`), co hết mức vẫn tràn → viền + nhãn đỏ "Chữ tràn khung…" (chỉ khung sửa) + tay nắm độ rộng khung `#mvw` (`moves.w`).
+  (4)(5) Thanh định dạng có ô "Cỡ … pt" (như PowerPoint) và "Giãn dòng" (`moves.l`), ở cả ô chữ thuần. (6) `text-wrap: balance` → `pretty` + giữ
+  liền khoảng số (`span.nb`). (1) Bỏ đoạn mô tả ở `OutlinePage`/`EditorPage` desktop + mobile; `JobProgress` còn 1 thanh tiến trình + 1 dòng trạng thái.
+  (7) `src/services/driveFolder.js` (liệt kê phân trang, thư mục con ≤ 2 cấp, lối tắt, xuất tệp Google, lọc loại/cỡ trước khi tải, hạn mức như tải
+  tệp lên, lỗi rõ ràng) + `ingestService.readDriveFolder` + `precheckSource(…, { driveFolders })`. Chi tiết: `05` §21, §22; bẫy: `09`.
+- Kiểm chứng: unit **238** (237 pass, 1 skip `pdftoppm` trong Git Bash — chạy riêng có Poppler: `visuals` 10/10) — mới: `drive-folder.test.js` (4),
+  `layers.test.js` (giãn dòng + độ rộng), `brand-rich.test.js` (khoảng số); build frontend OK. Drive thật (khoá trong `.env`, đã bật Drive API):
+  thư mục công khai 3 PPTX → 3 tư liệu + 56 ảnh trong 14 giây; thư mục ghi Zoom → 4 tệp ghi âm, bỏ `recording.conf`; mã giả → `SOURCE_FORBIDDEN`.
+  Trình duyệt (bản sao cục bộ chế độ sửa của bài người dùng, dựng từ spec chỉ đọc — không đụng bài thật): 10 trang không còn ô chữ bị cắt; trang 8
+  "Cam kết thực thi và hành động giai đoạn" / "2026–2035"; gõ 20 pt → hiện đúng 20 pt, 1 thông điệp lưu; giãn dòng 1,5 áp ngay; độ rộng khung
+  27,8% → 12,8% bằng phím, bấm đúp về mặc định; nhãn tràn hiện khi co hết mức. Docker 8088 dựng lại (`up -d --build --no-deps app`); smoke
+  (`SMOKE_BOOTSTRAP=1`) **TẤT CẢ ĐẠT**, tự dọn 4 tài khoản smoke.
+- Ghi chú (2) cho lần sau: `gemini-4-argon` có `outputTokenLimit` **32 768** (nhỏ hơn `gemini-3.8-flash` 65 536 — số liệu từ API models) nên đổi
+  model không giúp bài 100 trang (gọi thử argon xin dàn ý dài: quá 300 giây chưa trả header → hết giờ); hướng đề xuất: dựng bài theo **từng cụm trang** (ref `S{n}` toàn cục, ghép qua `composeDeckFromOutline`,
+  `Promise.allSettled` + dựng dự phòng cụm lỗi), nới `AUTO_MAX_SLIDES`/`SPEC_LIMITS.slides`/`outlineSlides`/validate 3–40 ở `useCreate`.
+- Chưa kiểm chứng trên trình duyệt: màn đang dựng bài / lập dàn ý (`JobProgress`) — chỉ hiện khi có job chạy (đã qua build, chưa tạo job thử để
+  không thêm bài vào tài khoản người dùng).
+
+
 ## 2026-10-14 — Cài Poppler (pdftoppm) cho máy dev Windows; xác nhận image server có sẵn
 
 - Yêu cầu: "xem có thư viện pdftoppm thì cài thêm nhé, để sau này triển khai trên server còn có".

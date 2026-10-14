@@ -111,7 +111,7 @@ Chỉ container **`app`** gọi ra Internet. MySQL và Nginx **không** cần ra
 | `docs.google.com` | 443 | Nhập link Google Slides / Docs / Sheets (xuất PPTX/DOCX/XLSX) | Tài liệu phải chia sẻ "Bất kỳ ai có đường liên kết" |
 | `drive.google.com`, `drive.usercontent.google.com` | 443 | Nhập link tệp Google Drive | Drive chuyển hướng tải tệp sang `drive.usercontent.google.com` |
 | `*.googleusercontent.com` | 443 | Google Docs/Drive chuyển hướng tới đây khi trả tệp xuất | Dùng wildcard nếu firewall hỗ trợ |
-| `www.googleapis.com` | 443 | Phương án dự phòng tải Google Docs/Drive qua Drive API | Chỉ khi có `GOOGLE_API_KEY` |
+| `www.googleapis.com` | 443 | **Link thư mục Google Drive** (liệt kê + tải tệp qua Drive API v3) và phương án dự phòng tải Google Docs/Drive | Chỉ khi có `GOOGLE_API_KEY` (dự án Google Cloud của khoá phải **bật Google Drive API**). Không mở tên miền này → link thư mục báo lỗi, link từng tệp vẫn chạy |
 | *(không cần)* `accounts.google.com` | — | Tài liệu Google **không** công khai bị chuyển hướng tới trang đăng nhập; không mở thì người dùng nhận lỗi "Không tải được tài liệu từ đường link" — đúng mong muốn | Không cần mở |
 | `www.youtube.com`, `i.ytimg.com` | 443 | Gắn video YouTube vào trang: lấy tiêu đề (oEmbed) + ảnh bìa | Video **không** đi qua máy chủ (phát trên trình duyệt, mục 3) |
 | **Link tư liệu bất kỳ** người dùng dán | 80/443 | Tab "Nhập từ link": tải trang/tệp công khai làm tư liệu | Không cố định tên miền. Firewall chỉ cho danh sách trắng thì chỉ các tên miền đã mở dùng được; còn lại người dùng nhận lỗi tải link. Ứng dụng **tự chặn** link tới IP nội bộ/loopback/metadata (chống SSRF) → link intranet MISA cũng không tải được, đây là chủ ý |

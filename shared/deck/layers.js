@@ -1,7 +1,9 @@
 // Tinh chỉnh tay trên trang có bố cục (người dùng làm trên khung soạn thảo — KHÔNG qua AI):
-//  1) moves — dời vị trí + đổi cỡ chữ từng ô chữ: { "<đường dẫn trường>": { x, y, s? } }, x/y = % bề rộng/cao khung, dịch tương đối
-//     so với chỗ bố cục đặt (giống kéo hộp chữ trong PowerPoint); s = hệ số cỡ chữ (1 = cỡ bố cục, 0,5–3). Renderer gắn data-mv/data-fz
-//     + style `zoom` (cỡ chữ, ô chữ tự xuống dòng theo cỡ mới) và `translate` (độc lập với `transform` của hiệu ứng) → mọi chế độ
+//  1) moves — dời vị trí, đổi cỡ chữ, giãn dòng, độ rộng khung từng ô chữ: { "<đường dẫn trường>": { x, y, s?, l?, w? } }
+//     x/y = % bề rộng/cao khung, dịch tương đối so với chỗ bố cục đặt (giống kéo hộp chữ trong PowerPoint); s = hệ số cỡ chữ
+//     (1 = cỡ bố cục, 0,5–3); l = giãn dòng (line-height không đơn vị 0,8–3, không có = theo bố cục); w = độ rộng khung chữ
+//     (% bề rộng khung 5–100, không có = theo bố cục — chữ tự xuống dòng theo khung mới). Renderer gắn data-mv/data-fz/data-lh/data-bw
+//     + style `zoom` (cỡ chữ), `line-height`, `width` và `translate` (độc lập với `transform` của hiệu ứng) → mọi chế độ
 //     (trình chiếu, HTML xuất, PDF, ảnh bìa) đều đúng vị trí, đúng cỡ.
 //  2) hide — tắt hoạ tiết trang trí của trang (quầng sáng, hình bìa, số phần lớn, dấu ngoặc kép…). Thay hoạ tiết bằng ảnh/hình khối
 //     = tắt hoạ tiết + chèn phần tử (elements) đúng chỗ hoạ tiết cũ.
@@ -17,6 +19,19 @@ export const SIZE_MAX = 3;
 export const cleanSize = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(Math.max(SIZE_MIN, Math.min(SIZE_MAX, n)) * 100) / 100 : 1;
+};
+export const LH_MIN = 0.8; // giãn dòng (line-height không đơn vị)
+export const LH_MAX = 3;
+export const BOX_MIN = 5; // độ rộng khung chữ, % bề rộng khung trang
+export const BOX_MAX = 100;
+// 0 / rỗng / không phải số = theo bố cục (không lưu).
+export const cleanLh = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.round(Math.max(LH_MIN, Math.min(LH_MAX, n)) * 100) / 100 : 0;
+};
+export const cleanBox = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.round(Math.max(BOX_MIN, Math.min(BOX_MAX, n)) * 10) / 10 : 0;
 };
 
 export const isMovePath = (p) => typeof p === 'string' && p.length <= 40 && MOVE_PATH_RE.test(p);
@@ -35,8 +50,12 @@ export function cleanMoves(raw) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     const m = { x: r2(Math.max(-MOVE_RANGE, Math.min(MOVE_RANGE, x))), y: r2(Math.max(-MOVE_RANGE, Math.min(MOVE_RANGE, y))) };
     const sz = v.s === undefined ? 1 : cleanSize(v.s);
+    const lh = cleanLh(v.l);
+    const bw = cleanBox(v.w);
     if (sz !== 1) m.s = sz;
-    if (Math.abs(m.x) < 0.05 && Math.abs(m.y) < 0.05 && sz === 1) continue; // về chỗ cũ, cỡ gốc = không lưu
+    if (lh) m.l = lh;
+    if (bw) m.w = bw;
+    if (Math.abs(m.x) < 0.05 && Math.abs(m.y) < 0.05 && sz === 1 && !lh && !bw) continue; // về chỗ cũ, mọi thứ theo bố cục = không lưu
     out[k] = m;
     n += 1;
   }
@@ -44,9 +63,10 @@ export function cleanMoves(raw) {
 }
 
 /**
- * Thuộc tính data-mv/data-fz + style cho ô chữ đã dời/đổi cỡ; '' nếu giữ nguyên. Ô chữ không có thuộc tính style khác.
- * `translate` (thuộc tính riêng, không phải transform — hiệu ứng xuất hiện của engine ghi đè transform) tính trong hệ toạ độ đã
- * `zoom` của chính ô → chia cho hệ số cỡ chữ để ô dịch đúng x/y px trên khung.
+ * Thuộc tính data-mv/data-fz/data-lh/data-bw + style cho ô chữ đã chỉnh tay; '' nếu giữ nguyên. Ô chữ không có thuộc tính style khác.
+ * `translate` (thuộc tính riêng, không phải transform — hiệu ứng xuất hiện của engine ghi đè transform) và `width` tính trong hệ
+ * toạ độ đã `zoom` của chính ô → chia cho hệ số cỡ chữ để ô dịch / rộng đúng px trên khung. Độ rộng khung bỏ max-width của bố cục
+ * (tiêu đề, phụ đề có trần riêng) và không co theo hàng flex — người dùng chủ động kéo rộng.
  */
 export function moveAttr(moves, path, W, H) {
   const m = moves && Object.prototype.hasOwnProperty.call(moves, path) ? moves[path] : null;
@@ -54,9 +74,16 @@ export function moveAttr(moves, path, W, H) {
   const x = Math.round(((m.x || 0) * W) / 100);
   const y = Math.round(((m.y || 0) * H) / 100);
   const s = m.s && m.s !== 1 ? cleanSize(m.s) : 1;
-  if (!x && !y && s === 1) return '';
-  const st = `${x || y ? `translate:${r2(x / s)}px ${r2(y / s)}px;` : ''}${s !== 1 ? `zoom:${s}` : ''}`;
-  return ` data-mv="${x} ${y}"${s !== 1 ? ` data-fz="${s}"` : ''} style="${st.replace(/;$/, '')}"`;
+  const l = cleanLh(m.l);
+  const bw = cleanBox(m.w);
+  if (!x && !y && s === 1 && !l && !bw) return '';
+  const st = [
+    x || y ? `translate:${r2(x / s)}px ${r2(y / s)}px` : '',
+    s !== 1 ? `zoom:${s}` : '',
+    l ? `line-height:${l}` : '',
+    bw ? `width:${r2((bw * W) / 100 / s)}px;max-width:none;flex-shrink:0` : '',
+  ].filter(Boolean).join(';');
+  return ` data-mv="${x} ${y}"${s !== 1 ? ` data-fz="${s}"` : ''}${l ? ` data-lh="${l}"` : ''}${bw ? ` data-bw="${bw}"` : ''} style="${st}"`;
 }
 
 // Hoạ tiết trang trí ẩn được theo từng trang. layouts: bố cục có hoạ tiết đó (null = mọi bố cục có cấu trúc).

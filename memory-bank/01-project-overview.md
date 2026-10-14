@@ -5,7 +5,7 @@
 **MISA Presentation** là ứng dụng web tạo **bài trình bày HTML có chuyển động** (phong cách Remotion/HyperFrames: chữ bay vào theo spring, đếm số, vẽ đường, nền mạng lưới động) từ tài liệu có sẵn bằng AI (Google Gemini, model mặc định `gemini-3.8-flash`).
 
 Tính năng chính:
-- Nhập nguồn theo 3 cách: **tải tệp** (.pptx, .docx, .pdf, .txt, .md, ảnh), **dán link** (Google Slides/Docs/Sheets/Drive công khai hoặc trang web công khai), **nhập nội dung** trực tiếp.
+- Nhập nguồn theo 3 cách: **tải tệp** (.pptx, .docx, .pdf, .txt, .md, ảnh), **dán link** (Google Slides/Docs/Sheets, tệp hoặc **thư mục** Google Drive công khai, hoặc trang web công khai), **nhập nội dung** trực tiếp.
 - **Hai bước**: AI lập **dàn ý** (nội dung sẽ hiển thị trên từng trang) → người dùng duyệt/sửa, gắn **ảnh, video tải lên, link YouTube** cho từng trang, chọn thiết kế → AI **dựng bài** theo đúng dàn ý.
 - AI chọn bố cục cho từng trang trong 16 layout (bìa, mở đầu phần, mục lục, ý chính, thẻ, con số, ảnh/video lớn, bộ sưu tập ảnh, dòng thời gian, quy trình, trích dẫn, so sánh, sơ đồ tổ chức, thông tin liên hệ, chương trình ưu đãi, trang kết); liên kết trong tư liệu được giữ (bấm mở tab mới); thông tin liên hệ/liên kết AI đưa vào phải có trong nguồn; sơ đồ tổ chức / lộ trình / quy trình đơn giản trong tư liệu được vẽ lại bằng bố cục động. Ảnh trong tài liệu nguồn được giữ lại và gắn vào trang phù hợp.
 - **Thiết kế**: tông màu Tự động / 14 mẫu theo nền sáng-tối / tự nhập 2 màu; 10 nền động chủ đề công nghệ; 5 phông đóng gói sẵn (Inter, Montserrat, Barlow, Roboto, Google Sans); logo (vị trí, kích thước, tách nền). Video trong slide: khung 16:9, bấm → tự phát toàn màn hình.

@@ -208,7 +208,12 @@ export function formatRange(raw, start, end, patch) {
 
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const escText = (v) => String(v ?? '').replace(/[&<>"']/g, (ch) => ESC[ch]);
-const lines = (t) => t.split('\n').map(escText).join('<br>');
+// Khoảng số (năm 2026–2035, giờ 8:30–11:00, số điện thoại 0912-345-678) không bị ngắt dòng ở dấu gạch: text-wrap: pretty coi dấu
+// gạch là chỗ ngắt được → tiêu đề dễ rớt mỗi "2035" xuống dòng. Bọc span.nb (theme.css: nowrap) — engine đọc chữ xuyên qua span
+// không có lớp .rt nên spec không đổi.
+const RANGE = /\d+(?:[.:,/]\d+)*(?:[–-]\d+(?:[.:,/]\d+)*)+/g;
+const keepRanges = (html) => html.replace(RANGE, '<span class="nb">$&</span>');
+const lines = (t) => t.split('\n').map((l) => keepRanges(escText(l))).join('<br>');
 export const colorCss = (c) => (!c ? '' : RICH_COLORS[c] ? RICH_COLORS[c].css : HEX.test(c) ? c.toUpperCase() : '');
 
 // Liên kết: mở tab mới, không cho trang đích truy cập trang trình chiếu (noopener) hay biết trang nguồn (noreferrer).

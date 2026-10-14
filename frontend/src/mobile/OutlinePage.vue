@@ -195,13 +195,7 @@ onMounted(ol.load)
     <div v-else-if="working" class="flex flex-col items-center gap-4 px-6 py-16 text-center" role="status">
       <MSpinner :size="40" />
       <p class="mds-mobile-readable text-[16px] font-semibold leading-6">{{ deck.status === 'outlining' ? `AI đang lập dàn ý “${deck.title}”` : `AI đang dựng “${deck.title}” theo dàn ý` }}</p>
-      <p class="text-[14px] leading-5 text-[var(--mds-text-secondary)]">
-        {{ deck.status === 'outlining'
-          ? 'Đọc tư liệu (kể cả PDF scan, ảnh, ghi âm) và đề xuất nội dung từng trang — thường mất 30 giây đến vài phút. Xong bạn sẽ được xem và sửa dàn ý trước khi dựng giao diện.'
-          : 'Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn, tạo ảnh minh hoạ AI (nếu bật) — thường 1–2 phút. Xong sẽ tự mở trình soạn thảo.' }}
-      </p>
       <JobProgress :queue="deck.queue" compact />
-      <p class="text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">Màn hình tự cập nhật. Bạn có thể rời đi, AI vẫn tiếp tục.</p>
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>
     </div>
 

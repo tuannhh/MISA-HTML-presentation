@@ -16,7 +16,7 @@ export const ACCEPT = SOURCE_ACCEPT;
 // Ảnh/video gửi kèm khi nhập nội dung.
 export const MAX_CREATE_MEDIA = 20;
 export const MAX_CREATE_VIDEOS = 10;
-// Nguồn = đường link (khớp MAX_SOURCE_LINKS): bài báo, trang web, Facebook công khai, Google Slides/Docs/Sheets/Drive.
+// Nguồn = đường link (khớp MAX_SOURCE_LINKS): bài báo, trang web, Facebook công khai, Google Slides/Docs/Sheets, tệp / thư mục Drive.
 export const MAX_SOURCE_LINKS = 5;
 const URL_RE = /https?:\/\/[^\s<>"'`]+/g;
 export const MEDIA_ACCEPT = `${IMAGE_ACCEPT},${VIDEO_ACCEPT}`;

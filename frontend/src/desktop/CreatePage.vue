@@ -88,7 +88,7 @@ async function onSubmit() {
                   type="url"
                   inputmode="url"
                   :aria-label="`Link ${i + 1}`"
-                  :placeholder="i === 0 ? 'https://amis.misa.vn/… · bài báo · Facebook · Google Slides/Docs/Drive' : 'https://…'"
+                  :placeholder="i === 0 ? 'https://amis.misa.vn/… · bài báo · Facebook · Google Slides/Docs · tệp / thư mục Drive' : 'https://…'"
                   :error="errors[`url:${row.id}`]"
                   :aria-invalid="errors[`url:${row.id}`] ? 'true' : undefined"
                   clearable
@@ -101,7 +101,7 @@ async function onSubmit() {
                 <span class="text-[12px] text-[var(--mds-text-secondary)]">{{ form.urls.length }}/{{ MAX_SOURCE_LINKS }} link</span>
               </div>
               <p v-if="errors.urls" class="text-[12px] text-[var(--mds-danger)]">{{ errors.urls }}</p>
-              <p class="text-[12px] text-[var(--mds-text-secondary)]">Bài báo, trang web (kể cả *.misa.vn), bài đăng/trang Facebook công khai, Google Slides/Docs/Sheets hoặc tệp trên Google Drive (đã chia sẻ “Bất kỳ ai có đường liên kết”). AI đọc chữ và tự lấy ảnh trong bài viết — chỉ ảnh hợp nội dung được đặt lên slide, ảnh còn lại vẫn có trong mục “Ảnh trong bài” để bạn tự chọn thêm.</p>
+              <p class="text-[12px] text-[var(--mds-text-secondary)]">Bài báo, trang web (kể cả *.misa.vn), bài đăng/trang Facebook công khai, Google Slides/Docs/Sheets, tệp hoặc thư mục trên Google Drive (đã chia sẻ “Bất kỳ ai có đường liên kết”; thư mục: đọc tối đa {{ MAX_UPLOAD_FILES }} tệp, gồm cả thư mục con). AI đọc chữ và tự lấy ảnh trong bài viết — chỉ ảnh hợp nội dung được đặt lên slide, ảnh còn lại vẫn có trong mục “Ảnh trong bài” để bạn tự chọn thêm.</p>
             </div>
           </FormField>
 

@@ -96,4 +96,4 @@ Một tiến trình Node duy nhất phục vụ cả API lẫn SPA tĩnh (`dist/
 |---|---|---|
 | Container | Docker, `docker-compose.yml` (mysql + app) | Image app: node:24-bookworm-slim + chromium + fonts-noto/dejavu + tini, chạy user `node` |
 | AI | Google Gemini REST `generateContent` | Header `x-goog-api-key`, `responseMimeType: application/json` + `responseSchema` |
-| Google Drive API (tuỳ chọn) | `GOOGLE_API_KEY` | Dự phòng khi link export Google Docs/Slides bị chặn |
+| Google Drive API v3 (tuỳ chọn) | `GOOGLE_API_KEY` | Liệt kê + tải tệp trong **thư mục Google Drive** công khai (`src/services/driveFolder.js`); dự phòng khi link export Google Docs/Slides bị chặn |

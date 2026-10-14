@@ -9,6 +9,7 @@ import { open, readFile } from 'node:fs/promises';
 import JSZip from 'jszip';
 import { sniff, sniffVideo, decodeText, IMAGE_TYPES, AUDIO_TYPES, AUDIO_MIME } from '../lib/fileType.js';
 import { safeFetch, assertPublicUrl } from '../lib/safeFetch.js';
+import { isDriveFolderLink, driveFolderRef, fetchDriveFolder, DRIVE_HINT } from './driveFolder.js';
 import { badRequest, tooLarge, unprocessable, HttpError } from '../lib/httpError.js';
 import { safeHref } from '../../shared/deck/rich.js';
 import { decodeEntities } from '../lib/html.js';
@@ -384,7 +385,6 @@ const G_SLIDES = /^https:\/\/docs\.google\.com\/presentation\/d\/([\w-]{10,})/;
 const G_DOCS = /^https:\/\/docs\.google\.com\/document\/d\/([\w-]{10,})/;
 const G_SHEETS = /^https:\/\/docs\.google\.com\/spreadsheets\/d\/([\w-]{10,})/;
 const G_DRIVE = /^https:\/\/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=)([\w-]{10,})/;
-const G_DRIVE_FOLDER = /^https:\/\/drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?folders\/|folderview\?)/;
 
 const DRIVE_MIME = {
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -436,7 +436,33 @@ export function readWebPage(html, pageUrl, limits) {
   return { pieces: full ? [{ label, text: clip(full, limits.maxTextChars) }] : [], media: [], images: [], web: { pageUrl, title: label, candidates } };
 }
 
+/**
+ * Thư mục Google Drive: tải các tệp trong thư mục (driveFolder.js) rồi đọc từng tệp như tệp tải lên. Tệp hỏng / không đọc được
+ * → bỏ qua tệp đó (thư mục thường lẫn tệp khác loại); không đọc được tệp nào → báo lỗi.
+ */
+async function readDriveFolder(url, limits, apiKey, fetchImpl) {
+  const folder = await fetchDriveFolder(url, { apiKey, limits, fetch: fetchImpl });
+  const out = EMPTY();
+  let read = 0;
+  for (const f of folder.files) {
+    let part;
+    try {
+      part = await readBuffer(f.buffer, f.name, limits);
+    } catch (err) {
+      if (!(err instanceof HttpError)) throw err;
+      continue;
+    }
+    // Ảnh lẻ trong thư mục: như ảnh tải lên (AI xem cả ảnh để cắt/vẽ lại sơ đồ), ghi rõ nguồn để AI chọn ảnh hợp nội dung.
+    const hint = `ảnh trong thư mục Google Drive "${folder.name}" — tệp "${f.name}"`;
+    merge(out, { ...part, images: part.images.map((im) => (im.standalone ? { ...im, hint } : im)) });
+    read += 1;
+  }
+  if (!read) throw unprocessable(`Không đọc được tệp nào trong thư mục Google Drive. ${DRIVE_HINT}`, 'SOURCE_EMPTY');
+  return out;
+}
+
 async function fetchDocument(url, limits, googleApiKey, fetchImpl = safeFetch) {
+  if (isDriveFolderLink(url)) return readDriveFolder(url, limits, googleApiKey, fetchImpl);
   const candidates = googleCandidates(url, googleApiKey) || [url];
   let lastErr = null;
   for (const candidate of candidates) {
@@ -469,8 +495,9 @@ async function fetchDocument(url, limits, googleApiKey, fetchImpl = safeFetch) {
 /**
  * Kiểm tra nhanh đầu vào (trước khi trả 202) — lỗi rõ ràng trả ngay cho người dùng.
  * files: tệp multer trên đĩa ({ path, originalname, size }). Trả thêm `files` đã nhận diện loại để job dùng lại.
+ * driveFolders: máy chủ có khoá Google (GOOGLE_API_KEY) → nhận link thư mục Google Drive; không có → báo dán link từng tệp.
  */
-export async function precheckSource({ files, url, urls, text }, limits) {
+export async function precheckSource({ files, url, urls, text }, limits, { driveFolders = false } = {}) {
   const list = Array.isArray(files) ? files : [];
   // Link: `urls` (lặp lại được — tối đa MAX_SOURCE_LINKS) và/hoặc `url` (1 link, client cũ); ô trống bỏ qua.
   const rawLinks = [...(Array.isArray(urls) ? urls : [urls]), url].map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean);
@@ -504,8 +531,10 @@ export async function precheckSource({ files, url, urls, text }, limits) {
         throw rawLinks.length > 1 && err instanceof HttpError ? new HttpError(err.status, err.code, `Link ${i + 1}: ${err.message}`) : err;
       }
       u.hash = '';
-      if (G_DRIVE_FOLDER.test(u.toString())) {
-        throw badRequest(`${rawLinks.length > 1 ? `Link ${i + 1}: ` : ''}Link thư mục Google Drive chưa hỗ trợ — hãy dán link của từng tệp trong thư mục`, 'UNSUPPORTED_LINK');
+      if (isDriveFolderLink(u.toString())) {
+        const at = rawLinks.length > 1 ? `Link ${i + 1}: ` : '';
+        if (!driveFolders) throw badRequest(`${at}Máy chủ chưa bật đọc thư mục Google Drive — hãy dán link của từng tệp trong thư mục`, 'UNSUPPORTED_LINK');
+        if (!driveFolderRef(u.toString())) throw badRequest(`${at}Link thư mục Google Drive không hợp lệ — hãy mở thư mục rồi sao chép lại link`, 'INVALID_URL');
       }
       if (!seen.has(u.toString())) {
         seen.add(u.toString());

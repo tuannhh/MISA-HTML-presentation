@@ -27,8 +27,9 @@ Bài trình bày được lưu dưới dạng **spec JSON** (`presentations.spec
                /* chỉ ở MEDIA_LAYOUTS: cover, section, bullets, image, quote — thay chỗ ô ảnh, khung 16:9 */,
       "variant": "<biến thể trình bày của layout — §9; '' = mặc định>",
       "elements": [ /* phần tử tự do; ở layout khác free = lớp CHÈN ĐÈ lên trang (logo, chữ, ảnh, hình) — §13 */ ],
-      "moves": { "<đường dẫn ô chữ>": { "x", "y" /* % rộng/cao trang, ±100, so với chỗ bố cục đặt */, "s" /* cỡ chữ ×0,5–3, mặc định 1 */ } }
-               /* chỉnh tay vị trí + cỡ chữ từng ô (không ở layout free; ≤ 40 mục) — §15 */,
+      "moves": { "<đường dẫn ô chữ>": { "x", "y" /* % rộng/cao trang, ±100, so với chỗ bố cục đặt */, "s" /* cỡ chữ ×0,5–3, mặc định 1 */,
+                 "l" /* giãn dòng 0,8–3, không có = theo bố cục */, "w" /* độ rộng khung chữ, % bề rộng trang 5–100, không có = theo bố cục */ } }
+               /* chỉnh tay vị trí + cỡ chữ + giãn dòng + độ rộng khung từng ô (không ở layout free; ≤ 40 mục) — §15, §22 */,
       "hide": [ "glow|grid|bg|art|secno|qmark|vs|icons|nums|arrows" ] /* hoạ tiết trang trí đã tắt — §15 */,
       "notes": "ghi chú người trình bày" }
   ]
@@ -312,7 +313,8 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
 - Bôi chữ trên khung → thanh công cụ nổi (`#rtb` trong engine): 10 màu theo theme + ô chọn màu bất kỳ, **Đậm**, **VIẾT HOA / thường / Viết Hoa Đầu Từ**, **Giữ liền** (không ngắt dòng giữa cụm), Xoá định dạng. Kết quả ghi thành thẻ `⟦…⟧` (§1) vào chuỗi.
 - **Enter = xuống dòng** ở trường nhiều dòng (`data-ml`: tiêu đề, mô tả, nội dung thẻ, trích dẫn…); trường 1 dòng Enter = xong. Ô số liệu (`data-pl`) chỉ nhận chữ thường.
 - Bảng nội dung bên phải hiện **chữ thuần** (`plainText`); sửa ở đó giữ định dạng cũ theo vị trí (`repaintRich`). Renderer: `span.rt[data-rc|data-rb|data-rn]` + `style` chỉ ghép từ giá trị đã kiểm; `\n` → `<br>`; cụm `highlight` so trên chữ thuần.
-- Ngắt dòng hợp lý: `text-wrap: balance` cho tiêu đề/nhãn, `pretty` cho đoạn văn, `n` để giữ liền cụm từ.
+- Ngắt dòng hợp lý: `text-wrap: pretty` cho tiêu đề/nhãn/đoạn văn (từ 2026-10-14 — `balance` cũ chia đều độ dài dòng nên tiêu đề 2 dòng chừa trống
+  bên phải mà chữ không lên được, §22), `n` để giữ liền cụm từ; khoảng số (`2026–2035`, `8:30–11:00`) tự giữ liền (`span.nb`).
 
 ### Chọn bố cục & ảnh/logo
 - **Kiểu trình bày** (`variant`, §9): chip trên bảng nội dung (`VARIANT_LABELS`), chip mờ khi nội dung không hợp kiểu (`fits`). **Phong cách** toàn bài (`STYLE_OPTIONS`) ở tab Màu sắc.
@@ -361,7 +363,8 @@ Tinh thần: **tự động là chính** (AI nhận diện và đặt hình đú
 - Mỗi ô chữ có `data-e` (đường dẫn, vd. `title`, `items.2.text`, `stats.0.value`) dời được bằng **tay nắm** `#mvg` của engine (rê chuột lên chữ;
   điện thoại: chạm vào chữ). Nhóm nút: tay nắm (kéo; hút về chỗ cũ / đường giữa trang trong ±14px khung, Shift = giữ thẳng hàng, Alt = không hút, bấm đúp = về chỗ cũ,
   phím mũi tên nhích 6px / Shift 40px) + **A+ / A−** (±10%, Shift ±25%, 50–300%). Khung thấp (< 420px, điện thoại) → nhóm nút nằm ngang dưới ô chữ, né thanh định dạng `#rtb`; màn cảm ứng nút 44px.
-- Engine gửi `deck:move {index, path, x%, y%, s}` → `editPaths.applyFrameMove` (allowlist `isMovePath`, kẹp ±100% và 0,5–3, mục về gốc bị xoá) → dựng lại.
+- Engine gửi `deck:move {index, path, x%, y%, s, l, w}` → `editPaths.applyFrameMove` (allowlist `isMovePath`, kẹp ±100% và 0,5–3, mục về gốc bị xoá) → dựng lại.
+  Cỡ chữ (pt), giãn dòng, độ rộng khung: §22.
 - Lưu: `specService.cleanSlide` → `cleanMoves` (≤ 40 mục, đường dẫn hợp lệ; layout `free` bỏ). Đổi layout (`useEditor.changeLayout`) xoá `moves`; đổi chỗ / xoá mục
   trong danh sách (`SlideFields.move/removeAt`) gọi `shiftMoves` để vị trí đi theo mục.
 - Renderer (`moveAttr`, mọi chế độ — trình chiếu, xuất HTML/PDF): `data-mv="xpx ypx"` + `data-fz` + `style="translate:(x/s)px (y/s)px;zoom:s"`.
@@ -475,7 +478,7 @@ Yêu cầu chủ dự án: dán link (bài báo, Facebook, Google Drive, misa.vn
 
 - **Đầu vào** (`ingestService.precheckSource`): trường `urls` lặp lại (multer → mảng; 1 giá trị → chuỗi) và/hoặc `url` (client cũ). Bỏ ô trống,
   bỏ link trùng (so sau khi bỏ `#…`); > `MAX_SOURCE_LINKS` → 400 `TOO_MANY_LINKS`; link sai/nội bộ → `INVALID_URL`/`SSRF_BLOCKED` kèm
-  "Link n:"; link **thư mục** Google Drive → 400 `UNSUPPORTED_LINK` (chưa hỗ trợ — dán link từng tệp). `sourceLabel`: 1 link = URL, nhiều
+  "Link n:"; link **thư mục** Google Drive → đọc qua Drive API (§21; máy chủ không có `GOOGLE_API_KEY` → 400 `UNSUPPORTED_LINK`). `sourceLabel`: 1 link = URL, nhiều
   link = "3 link: amis.misa.vn, misa.vn, facebook.com". Vẫn đúng 1 loại nguồn (link không trộn với tệp/văn bản).
 - **Đọc từng link** (`ingestLinks`, tuần tự): Google Slides/Docs/Sheets/tệp Drive như cũ (ảnh nhúng PPTX/DOCX, PDF → cắt hình). Trang HTML
   (`readWebPage`): chữ = `htmlToText` (đường dẫn tương đối tính theo **địa chỉ sau chuyển hướng**) + "Mô tả trang: <og:description>" khi
@@ -503,7 +506,65 @@ Yêu cầu chủ dự án: dán link (bài báo, Facebook, Google Drive, misa.vn
   chặn code: ảnh `qr` phải gần vuông (tỷ lệ cạnh ≤ 1,6) mới vào trang Liên hệ/Ưu đãi — trước đó băng rôn quảng cáo "MISA đồng hành cùng hộ
   kinh doanh" (có QR) trên misa.vn bị gắn làm QR trang Liên hệ của bài AMIS Kho Hàng.
 - **Giới hạn đã biết**: chỉ HTML tĩnh — trang dựng hoàn toàn bằng JavaScript (SPA) không lấy được chữ/ảnh; Facebook chỉ 1 ảnh og + mô tả
-  (thường bị cắt ngắn), bài trong nhóm/riêng tư → `SOURCE_FORBIDDEN`; thư mục Drive chưa hỗ trợ; trang mã hoá khác UTF-8 có thể lỗi dấu
+  (thường bị cắt ngắn), bài trong nhóm/riêng tư → `SOURCE_FORBIDDEN`; trang mã hoá khác UTF-8 có thể lỗi dấu
   (như trước). Bản quyền ảnh thuộc trang nguồn — người dùng tự chịu trách nhiệm khi trình chiếu/xuất bản.
 - `MAX_LINK_IMAGES=0` → chỉ lấy chữ từ link (như trước bản này).
 
+## 21. Link thư mục Google Drive (2026-10-14)
+
+Yêu cầu chủ dự án: "Làm tiếp phần hỗ trợ link thư mục Google Drive nhé. Sử dụng Google Drive API nếu cần". Thư mục = **như tải tệp lên**
+(cùng hạn mức, cùng bộ đọc), chỉ khác nguồn tệp.
+
+- **Nhận link** (`src/services/driveFolder.js`): `drive.google.com/drive/[u/N/]folders/<id>`, `folderview?id=`, `embeddedfolderview?id=`;
+  `resourcekey` trên link (thư mục chia sẻ trước 2021) gửi kèm header `X-Goog-Drive-Resource-Keys: <id>/<key>`. Mã chỉ `[\w-]{10,200}` (chặn chèn
+  vào truy vấn `q`). `precheckSource(…, { driveFolders })`: `presentationService` truyền `Boolean(config.google.apiKey)` — không có khoá → 400
+  `UNSUPPORTED_LINK` "Máy chủ chưa bật đọc thư mục Google Drive — hãy dán link của từng tệp"; link thư mục không đọc được mã → `INVALID_URL`.
+- **Liệt kê** (Drive API v3, khoá `GOOGLE_API_KEY` ở query `key=`, `supportsAllDrives` + `includeItemsFromAllDrives` cho Drive dùng chung):
+  `files/<id>` (tên thư mục; link "thư mục" trỏ tới 1 tệp → đọc tệp đó) → `files?q='<id>' in parents and trashed = false` phân trang 200,
+  `orderBy=folder,name_natural`; thư mục con **≤ 2 cấp**, ≤ 30 thư mục, ≤ 1 000 mục; lối tắt → tệp/thư mục đích (+ khoá đích). Thư mục con
+  không mở được (chia sẻ riêng) → bỏ qua thư mục con đó; thư mục gốc lỗi → báo lỗi.
+- **Lọc trước khi tải** (không tải tệp vô ích): Google Slides/Docs/Sheets → xuất PPTX/DOCX/XLSX (`/export`, Drive chỉ xuất ≤ 10 MB); PDF, PPTX,
+  DOCX, XLSX, ODP/ODT, TXT/MD/CSV/TSV (tệp `text/*` phải có đuôi đó hoặc không đuôi — Drive gắn `text/plain` cho cả `recording.conf` của Zoom),
+  ảnh PNG/JPEG/GIF/WebP/AVIF, ghi âm/ghi hình MP3/M4A/WAV/OGG/FLAC/AAC/MP4/WebM (`alt=media`); Biểu mẫu, Bản vẽ, zip, video khác → bỏ.
+  Thứ tự ưu tiên khi vượt hạn mức: **tài liệu → ảnh → ghi âm/ghi hình**, trong nhóm giữ thứ tự Drive.
+- **Hạn mức** = tải tệp lên: ≤ `MAX_UPLOAD_FILES` tệp, tổng ≤ `MAX_UPLOAD_MB` (dung lượng Drive báo trước → bỏ tệp quá cỡ không cần tải;
+  `maxBytes` = phần còn lại), ảnh ≤ `MAX_IMAGE_UPLOAD_MB`; cả lượt tải ≤ 8 phút, mỗi tệp ≤ 5 phút. Tệp tải tuần tự (giữ RAM thấp).
+- **Đọc** (`ingestService.readDriveFolder`): mỗi tệp qua `readBuffer` như tệp tải lên — nhãn tư liệu = đường dẫn trong thư mục ("Ảnh/san-khau.jpg",
+  tệp Google: "Kế hoạch (Google Slides)"); slide/văn bản giữ tệp gốc (`docs`) để render trang cắt sơ đồ; ảnh lẻ `standalone` (AI xem cả ảnh như
+  ảnh tải lên) với gợi ý `ảnh trong thư mục Google Drive "<thư mục>" — tệp "<đường dẫn>"`. Tệp hỏng/không đọc được → bỏ qua tệp đó.
+- **Lỗi** (không bao giờ chứa khoá): thư mục không công khai / không tồn tại → 422 `SOURCE_FORBIDDEN` ("Bất kỳ ai có đường liên kết – Người xem");
+  khoá chưa bật Drive API / sai khoá (`SERVICE_DISABLED`, `accessNotConfigured`, `API_KEY_INVALID`…) → 503 `DRIVE_UNAVAILABLE` (báo quản trị viên);
+  429 / `*RateLimitExceeded` → 503 `DRIVE_BUSY`; hai lỗi này dừng cả thư mục (tệp sau cũng sẽ lỗi). Thư mục trống → `SOURCE_EMPTY` "trống";
+  không có tệp hợp loại → `SOURCE_EMPTY` + danh sách loại hỗ trợ; mọi tệp đều bị chặn → `SOURCE_FORBIDDEN` "Các tệp trong thư mục…". Nhiều link →
+  "Link n (drive.google.com): …" như §20.
+- Mạng: cần `www.googleapis.com:443` (`docs/DEVOPS-NETWORK.md` §2.2). Đã chạy thật với thư mục công khai (3 PPTX → chữ + 56 ảnh, 14 giây; thư mục
+  ghi Zoom → 4 tệp ghi âm, bỏ `recording.conf`).
+
+## 22. Soạn thảo: chữ không bị cắt, cỡ chữ (pt), giãn dòng, độ rộng khung, ngắt dòng (2026-10-14)
+
+Yêu cầu chủ dự án (ảnh chụp bài "Diễn đàn quốc gia… 2026"): thêm chữ thì bị cắt/thiếu; chỉnh được khung nội dung; nhập cỡ chữ thay vì chỉ
+A+/A−; chỉnh giãn dòng; tiêu đề "Cam kết thực thi và hành động…" còn trống bên phải mà chữ "động" không lên được dòng trên.
+
+- **Gốc cắt chữ**: `fitSlide` chỉ đo `scrollHeight > clientHeight` — tràn **lên trên / sang trái** (khối căn `flex-end`, hoặc căn giữa trong hàng
+  grid cố định — bài người dùng: `.im-glass` cao 761px trong `.body` 656px, tràn 105px lên trên) không tạo scroll nên không co, phần đầu bị
+  `overflow:hidden` cắt. Sửa: `fitTargets` (phần tử có chữ trực tiếp, leo lên khối; tổ tiên có `overflow≠visible` tới `.body`) + `clipped` (khung
+  chữ vượt khung cắt ±tol ở **4 phía**); `.im-full` dùng `justify-content: safe flex-end` (tràn thì bám mép trên thay vì đẩy lên).
+- **Tự co khi gõ**: sự kiện input gọi `fitSoon` (rAF, 1 lần/khung hình) → co cả trang ngay khi gõ, không đợi lưu. Co hết mức (`--k` ≤ 0,5) vẫn tràn →
+  chế độ sửa thêm `.slide.ovf`: viền đỏ đứt quanh `.body` + nhãn "Chữ tràn khung — bớt chữ, giảm cỡ chữ / giãn dòng, hoặc dời ô chữ" (chỉ khung sửa).
+- **Cỡ chữ (pt) + Giãn dòng** ở đầu thanh `#rtb` (`buildBoxCtl`): ô số "Cỡ … pt" (gõ + Enter, chọn trong danh sách 10–96, ↑/↓ ±1 pt, Shift ±4) và
+  danh sách "Giãn dòng" (Mặc định (x) / 0,9 … 3). pt như PowerPoint: `pt = px khung × 540 / H` (`PT`). Lưu vẫn là hệ số `s` so với cỡ bố cục
+  (`setPt`: s = pt / (cỡ nền đã gồm `--k` × PT)); trang co lại sau khi chữ to lên → `setPt` thử + co lại trang ≤ 4 lượt rồi mới lưu **1 lần**
+  (1 bước hoàn tác) để cỡ hiển thị đúng số đã gõ. Ô chữ thuần (`data-pl`, số liệu) chỉ có 2 điều khiển này (`#rtb.plain`); phần tử trang tự do
+  không có (`.nobox`). Tooltip A+/A− ghi "Cỡ chữ N pt (X% cỡ bố cục)".
+- **Độ rộng khung chữ**: tay nắm `#mvw` ở mép phải ô chữ (kéo ngang; ←/→ ±1%, Shift ±5%; bấm đúp = theo bố cục) → `moves.w` (% bề rộng trang 5–100).
+  Renderer: `width:(w×W/100/s)px;max-width:none;flex-shrink:0` (chia `s` vì `zoom`; bỏ trần max-width của tiêu đề/phụ đề; không co theo hàng flex).
+- **Lưu**: engine luôn gửi `deck:move {x, y, s, l, w}` đủ giá trị (0 = theo bố cục) → `applyFrameMove(spec, i, path, x, y, s, l, w)` (undefined =
+  giữ giá trị cũ; mọi thứ về mặc định → xoá mục) → `cleanMoves` (`cleanLh` 0,8–3, `cleanBox` 5–100, 0/sai kiểu = không lưu) → `moveAttr`
+  (`data-lh`, `data-bw`, `line-height`, `width`). `shiftMoves` mang cả `l`/`w` theo mục khi đổi chỗ / xoá. Bảng "Hoạ tiết & vị trí" (`DecorPanel`):
+  nút "Đặt lại vị trí, cỡ chữ & khung".
+- **Ngắt dòng**: mọi `text-wrap: balance` → `pretty` (`balance` chia đều độ dài các dòng → dòng 1 ngắn, chừa trống bên phải). `pretty` lại hay ngắt sau
+  dấu gạch của khoảng năm ("…giai đoạn 2026–" / "2035") → `rich.js keepRanges` bọc khoảng số `\d+([.:,/]\d+)*([–-]\d+…)+` trong `span.nb`
+  (`white-space:nowrap`); engine đọc chữ xuyên span không có lớp `.rt` nên spec không đổi; chữ/mã có gạch (COVID-19, Wi-Fi) không bị bọc.
+- **Màn dựng bài / lập dàn ý** (`JobProgress`, desktop + mobile `OutlinePage`/`EditorPage`): bỏ đoạn chữ phụ ("Đọc tư liệu (kể cả PDF scan…",
+  "Chọn bố cục, biểu tượng…", "Màn hình tự cập nhật…"); thanh tiến trình theo thời gian đã chạy / dự kiến (3–95%, chưa có dự kiến → thanh chạy
+  vô định, tôn trọng giảm chuyển động) + 1 dòng trạng thái `aria-live` ("Đang chờ đến lượt — vị trí thứ N…" / "Đã chạy X · dự kiến còn …").

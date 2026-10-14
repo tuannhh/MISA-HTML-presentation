@@ -4,7 +4,7 @@
 import { SPEC_LIMITS as L } from '../../../shared/deck/limits.js';
 import { hasRich, canonicalRich, cutRich, plainText, hrefWeight } from '../../../shared/deck/rich.js';
 import { CONTACT_LIMITS as CL } from '../../../shared/deck/contact.js';
-import { isMovePath, MOVE_LIMIT, MOVE_RANGE, DECORS, cleanHide, cleanSize } from '../../../shared/deck/layers.js';
+import { isMovePath, MOVE_LIMIT, MOVE_RANGE, DECORS, cleanHide, cleanSize, cleanLh, cleanBox } from '../../../shared/deck/layers.js';
 import { newElement } from '../../../shared/deck/free.js';
 
 const clean = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
@@ -144,11 +144,12 @@ const num = (v, min, max) => {
 };
 
 /**
- * Ô chữ được kéo dời / đổi cỡ trên khung (engine gửi 'deck:move'): x/y = % khung so với chỗ bố cục đặt, size = hệ số cỡ chữ
- * (không gửi = giữ cỡ hiện có); về chỗ cũ + cỡ gốc = xoá mục.
+ * Ô chữ được chỉnh tay trên khung (engine gửi 'deck:move'): x/y = % khung so với chỗ bố cục đặt, size = hệ số cỡ chữ,
+ * lh = giãn dòng (0 = theo bố cục), box = độ rộng khung % (0 = theo bố cục). Không gửi (undefined/null) = giữ giá trị hiện có.
+ * Về chỗ cũ + mọi thứ theo bố cục = xoá mục.
  * @returns {boolean} true nếu bản nháp thay đổi
  */
-export function applyFrameMove(spec, index, path, x, y, size) {
+export function applyFrameMove(spec, index, path, x, y, size, lh, box) {
   const s = at(spec?.slides, index);
   if (!s || s.layout === 'free' || !isMovePath(path)) return false;
   const X = num(x, -MOVE_RANGE, MOVE_RANGE);
@@ -157,14 +158,20 @@ export function applyFrameMove(spec, index, path, x, y, size) {
   const moves = { ...(s.moves || {}) };
   const old = moves[path];
   const S = size === undefined || size === null ? old?.s ?? 1 : cleanSize(size);
-  const reset = Math.abs(X) < 0.05 && Math.abs(Y) < 0.05 && S === 1;
+  const LH = lh === undefined || lh === null ? cleanLh(old?.l) : cleanLh(lh);
+  const BX = box === undefined || box === null ? cleanBox(old?.w) : cleanBox(box);
+  const reset = Math.abs(X) < 0.05 && Math.abs(Y) < 0.05 && S === 1 && !LH && !BX;
   if (reset) {
     if (!old) return false;
     delete moves[path];
   } else {
-    if (old && old.x === X && old.y === Y && (old.s ?? 1) === S) return false;
+    if (old && old.x === X && old.y === Y && (old.s ?? 1) === S && cleanLh(old.l) === LH && cleanBox(old.w) === BX) return false;
     if (!old && Object.keys(moves).length >= MOVE_LIMIT) return false;
-    moves[path] = S === 1 ? { x: X, y: Y } : { x: X, y: Y, s: S };
+    const m = { x: X, y: Y };
+    if (S !== 1) m.s = S;
+    if (LH) m.l = LH;
+    if (BX) m.w = BX;
+    moves[path] = m;
   }
   if (Object.keys(moves).length) s.moves = moves;
   else delete s.moves;

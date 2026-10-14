@@ -45,9 +45,9 @@ function resetMoves() {
       <div v-if="slide.layout !== 'free'" class="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--mds-border)] pt-2">
         <span class="flex items-center gap-1.5 text-[12px] text-[var(--mds-text-secondary)]">
           <MIcon name="arrows-move" :size="16" />
-          {{ moved ? `${moved} ô chữ đã chỉnh vị trí / cỡ chữ` : 'Rê chuột lên chữ trên khung: kéo tay nắm bên trái để dời, A+ / A− để đổi cỡ chữ' }}
+          {{ moved ? `${moved} ô chữ đã chỉnh vị trí / cỡ chữ / giãn dòng / độ rộng khung` : 'Bấm vào chữ trên khung: tay nắm bên trái để dời, mép phải để kéo rộng khung; ô Cỡ (pt) và Giãn dòng trên thanh định dạng' }}
         </span>
-        <MButton v-if="moved" variant="ghost" @click="resetMoves"><template #icon><MIcon name="refresh" :size="16" /></template>Đặt lại vị trí & cỡ chữ</MButton>
+        <MButton v-if="moved" variant="ghost" @click="resetMoves"><template #icon><MIcon name="refresh" :size="16" /></template>Đặt lại vị trí, cỡ chữ & khung</MButton>
       </div>
     </div>
   </FormField>

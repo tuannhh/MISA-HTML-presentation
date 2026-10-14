@@ -327,3 +327,26 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - **Thử bằng trang thật** (`tmp/try-links.mjs` gọi `ingestSource` không qua AI) trước khi tốn lượt Gemini: thấy ngay ảnh nào được chọn, mô tả gửi
   AI và thời gian tải.
 
+## Soạn thảo: tràn chữ, cỡ chữ, ngắt dòng + thư mục Drive (2026-10-14)
+
+- **Tràn lên trên không tạo scroll**: khối căn đáy (`justify-content: flex-end`) hoặc căn giữa trong hàng grid cố định mà cao hơn khung → phần
+  thừa nằm ở **phía trên / bên trái** gốc toạ độ, `scrollHeight` vẫn bằng `clientHeight` → `fitSlide` cũ (chỉ so scroll) tưởng vừa, `overflow:hidden`
+  cắt mất dòng đầu (bài "Diễn đàn quốc gia…" trang 5). Phải so **khung chữ với khung cắt ở 4 phía** (`fitTargets` + `clipped`) và dùng
+  `safe flex-end` / `safe center` cho khối có thể cao hơn khung.
+- **`text-wrap: balance`** chia đều độ dài mọi dòng → tiêu đề 2 dòng có dòng 1 ngắn, bên phải trống mà chữ không lên được ("…và hành / động…").
+  Dùng `pretty` (chỉ tránh dòng cuối mồ côi). `pretty` coi dấu gạch nối/gạch ngang là chỗ ngắt → khoảng năm bị tách "2026–" / "2035": bọc
+  khoảng số trong `span.nb` (`rich.js keepRanges`). Span thêm vào chữ có định dạng phải **không có lớp `.rt`** (engine `domChars` chỉ đọc định
+  dạng từ `.rt`, span khác đi xuyên qua) — nếu không, sửa chữ trên khung sẽ ghi rác vào spec.
+- **Cỡ chữ theo pt bị trang tự co "ăn bớt"**: `zoom` nhân lên cỡ đã gồm `--k` của trang; chữ to lên → `fitSlide` giảm `--k` → cỡ thật nhỏ hơn số
+  vừa gõ (gõ 20 → hiện 18,5). `setPt` thử cỡ + co lại trang vài lượt (chưa lưu) rồi mới `commitMove` 1 lần — gửi `deck:move` nhiều lần = nhiều
+  bước hoàn tác.
+- **Đo chữ trong khung xem trước bị ẩn**: `innerText` của phần tử ở trang không hiện (visibility hidden) = `''`; rAF không chạy khi tab nền
+  không vẽ (tự co khi gõ chậm lại) — kiểm tra bằng `textContent` / đợi trang hiện, đừng kết luận "không chạy".
+- **Drive API với API key**: chỉ đọc được thư mục/tệp chia sẻ "Bất kỳ ai có đường liên kết"; 404 = chưa chia sẻ **hoặc** không tồn tại (Drive
+  không phân biệt — báo chung "chưa chia sẻ công khai"). Thư mục chia sẻ trước 2021 cần `resourcekey` (header `X-Goog-Drive-Resource-Keys`).
+  Tệp Google gốc không có `size`, chỉ xuất được ≤ 10 MB (`exportSizeLimitExceeded` → bỏ tệp). Drive gắn `text/plain` cho cả tệp cấu hình
+  (`recording.conf` của Zoom) → lọc theo đuôi tệp. Kiểm khoá có bật Drive API: gọi `files/<mã giả>` → 404 `notFound` = đã bật, 403
+  `accessNotConfigured`/`SERVICE_DISABLED` = chưa bật (không in khoá ra log).
+- **`safeFetch` mang nguyên header qua chuyển hướng** (kể cả sang tên miền khác) → khoá Google để ở query `key=` (không đặt header
+  `x-goog-api-key`), header chỉ chứa thứ không bí mật (resourcekey vốn nằm trên link chia sẻ).
+

@@ -217,10 +217,7 @@ onMounted(ed.load)
 
     <div v-else-if="deck?.status === 'generating'" class="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
       <MSpinner :size="40" />
-      <div>
-        <h1 class="text-[18px] font-semibold leading-6">AI đang dựng “{{ deck.title }}” theo dàn ý</h1>
-        <p class="mt-1 max-w-[520px] text-[13px] text-[var(--mds-text-secondary)]">Chọn bố cục, biểu tượng, sắp xếp số liệu và đặt ảnh/video bạn đã gắn, tạo ảnh minh hoạ AI (nếu bật) — thường 1–2 phút. Bạn có thể rời trang, bài vẫn tiếp tục được dựng.</p>
-      </div>
+      <h1 class="text-[18px] font-semibold leading-6">AI đang dựng “{{ deck.title }}” theo dàn ý</h1>
       <JobProgress :queue="deck.queue" />
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>
     </div>

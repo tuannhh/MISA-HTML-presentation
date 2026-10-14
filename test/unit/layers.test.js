@@ -107,6 +107,43 @@ test('cỡ chữ: cleanMoves kẹp 0,5–3, mục chỉ đổi cỡ vẫn giữ;
   assert.match(html(n), /class="title"[^>]*data-fz="1\.5" style="zoom:1\.5"/);
 });
 
+test('giãn dòng + độ rộng khung chữ: cleanMoves kẹp, moveAttr (width chia hệ số cỡ chữ, bỏ max-width), applyFrameMove giữ/xoá', () => {
+  assert.deepEqual(
+    cleanMoves({ title: { l: 9, w: 300 }, subtitle: { x: 0, y: 0, l: 0, w: 0 }, kicker: { l: 0.2, w: 1 }, caption: { l: 'x', w: -5 }, 'items.0.text': { l: 1.234, w: 45.66 } }),
+    { title: { x: 0, y: 0, l: 3, w: 100 }, kicker: { x: 0, y: 0, l: 0.8, w: 5 }, 'items.0.text': { x: 0, y: 0, l: 1.23, w: 45.7 } },
+    'l/w = 0 / sai kiểu = theo bố cục (không lưu); mục chỉ đổi giãn dòng / độ rộng vẫn giữ',
+  );
+  assert.equal(moveAttr({ title: { x: 0, y: 0, l: 1.5 } }, 'title', 2560, 1440), ' data-mv="0 0" data-lh="1.5" style="line-height:1.5"');
+  assert.equal(
+    moveAttr({ title: { x: 0, y: 0, w: 50 } }, 'title', 2560, 1440),
+    ' data-mv="0 0" data-bw="50" style="width:1280px;max-width:none;flex-shrink:0"',
+  );
+  assert.equal(
+    moveAttr({ title: { x: 10, y: 0, s: 2, l: 1.2, w: 50 } }, 'title', 2560, 1440),
+    ' data-mv="256 0" data-fz="2" data-lh="1.2" data-bw="50" style="translate:128px 0px;zoom:2;line-height:1.2;width:640px;max-width:none;flex-shrink:0"',
+    'width tính trong hệ toạ độ đã zoom → chia hệ số cỡ chữ (640px × zoom 2 = 1280px = 50% khung)',
+  );
+  const spec = { slides: [{ layout: 'bullets', items: [{}] }] };
+  assert.equal(applyFrameMove(spec, 0, 'title', 0, 0, 1, 1.5, 0), true);
+  assert.deepEqual(spec.slides[0].moves, { title: { x: 0, y: 0, l: 1.5 } });
+  assert.equal(applyFrameMove(spec, 0, 'title', 0, 0, 1, 1.5, 0), false, 'không đổi');
+  assert.equal(applyFrameMove(spec, 0, 'title', 0, 0, 1, undefined, 62.25), true, 'không gửi giãn dòng → giữ');
+  assert.deepEqual(spec.slides[0].moves.title, { x: 0, y: 0, l: 1.5, w: 62.3 });
+  assert.equal(applyFrameMove(spec, 0, 'title', 3, 0), true, 'chỉ dời → giữ cỡ, giãn dòng, độ rộng');
+  assert.deepEqual(spec.slides[0].moves.title, { x: 3, y: 0, l: 1.5, w: 62.3 });
+  assert.equal(applyFrameMove(spec, 0, 'title', 0, 0, 1, 0, 62.3), true, 'giãn dòng về mặc định');
+  assert.deepEqual(spec.slides[0].moves.title, { x: 0, y: 0, w: 62.3 });
+  assert.equal(applyFrameMove(spec, 0, 'title', 0, 0, 1, 0, 0), true);
+  assert.equal(spec.slides[0].moves, undefined, 'mọi thứ theo bố cục → bỏ trường');
+  const { spec: n } = normalizeSpec({ title: 'T', slides: [{ layout: 'bullets', title: 'A', items: [{ title: 'x' }], moves: { title: { x: 0, y: 0, l: 1.1, w: 80 }, 'items.0.title': { l: 99 } } }] });
+  assert.deepEqual(n.slides[0].moves, { title: { x: 0, y: 0, l: 1.1, w: 80 }, 'items.0.title': { x: 0, y: 0, l: 3 } });
+  assert.match(html(n), /class="title"[^>]*data-lh="1\.1" data-bw="80" style="line-height:1\.1;width:2048px;max-width:none;flex-shrink:0"/);
+  // Đổi chỗ mục → giãn dòng / độ rộng đi theo mục.
+  const sh = { moves: { 'items.0.title': { x: 0, y: 0, l: 2 }, 'items.1.title': { x: 0, y: 0, w: 30 } } };
+  shiftMoves(sh, 'items', { from: 0, to: 1 });
+  assert.deepEqual(sh.moves, { 'items.1.title': { x: 0, y: 0, l: 2 }, 'items.0.title': { x: 0, y: 0, w: 30 } });
+});
+
 test('applyFrameMove: chỉ đường dẫn cho phép, kẹp số, ≈0 = xoá; không quá giới hạn; trang tự do bỏ qua', () => {
   const spec = { slides: [{ layout: 'bullets', items: [{}, {}] }, { layout: 'free', elements: [] }] };
   assert.equal(applyFrameMove(spec, 0, 'title', 12.345, -400), true);

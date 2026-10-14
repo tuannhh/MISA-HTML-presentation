@@ -90,7 +90,7 @@ async function onSubmit() {
           </div>
           <MButton v-if="form.urls.length < MAX_SOURCE_LINKS" variant="secondary" class="self-start" :disabled="submitting" @click="onAddUrl"><template #icon><MIcon name="plus" :size="16" /></template>Thêm link ({{ form.urls.length }}/{{ MAX_SOURCE_LINKS }})</MButton>
           <p v-if="errors.urls" class="text-[13px] text-[var(--mds-danger)]">{{ errors.urls }}</p>
-          <p class="text-[13px] text-[var(--mds-text-secondary)]">Bài báo, trang web (cả *.misa.vn), Facebook công khai, Google Slides/Docs/Drive. AI tự lấy ảnh hợp nội dung đặt lên slide.</p>
+          <p class="text-[13px] text-[var(--mds-text-secondary)]">Bài báo, trang web (cả *.misa.vn), Facebook công khai, Google Slides/Docs, tệp hoặc thư mục Google Drive công khai. AI tự lấy ảnh hợp nội dung đặt lên slide.</p>
         </div>
       </FormField>
       <template v-else>

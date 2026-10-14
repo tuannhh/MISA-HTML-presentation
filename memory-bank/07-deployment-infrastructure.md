@@ -26,7 +26,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `GEMINI_MODEL` | | `gemini-3.8-flash` | |
 | `GEMINI_TIMEOUT_MS` / `GEMINI_BASE_URL` | | 240000 / `https://generativelanguage.googleapis.com/v1beta` | |
 | `GEMINI_MEDIA_TIMEOUT_MS` | | 900000 | Lượt chuyển thể ghi âm dài / đọc PDF lớn, tải tệp lên Files API |
-| `GOOGLE_API_KEY` | | | Tuỳ chọn, Drive API cho link Google |
+| `GOOGLE_API_KEY` | | | Tuỳ chọn. Drive API v3: **link thư mục Google Drive** (bắt buộc — không có thì link thư mục báo 400) + dự phòng tải Google Docs/Drive. Dự án Google Cloud của khoá phải bật Google Drive API; mạng ra `www.googleapis.com:443` |
 | `GEMINI_IMAGE_MODEL` / `GEMINI_IMAGE_SIZE` / `GEMINI_IMAGE_TIMEOUT_MS` | | `gemini-3.1-flash-lite-image` / `1K` / 90000 | Model tạo ảnh (Nano Banana 2 Lite) |
 | `AI_IMAGES` | | true | Bật/tắt toàn bộ tính năng ảnh AI (tự tạo khi dựng bài + nút Tạo bằng AI) |
 | `AI_IMAGES_PER_DECK` / `AI_IMAGES_CONCURRENCY` | | 6 / 3 | Số ảnh AI tự tạo tối đa khi dựng 1 bài / số ảnh tạo song song |

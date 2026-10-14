@@ -53,6 +53,14 @@ test('rich: HTML an toàn (escape chữ, style chỉ từ giá trị kiểm), xu
   assert.ok(hl.includes('data-rc="amber"'));
 });
 
+test('rich: khoảng số (năm, giờ, số điện thoại) không ngắt dòng ở dấu gạch; chữ/mã có gạch giữ nguyên', () => {
+  assert.equal(richHtml('Cam kết giai đoạn 2026–2035'), 'Cam kết giai đoạn <span class="nb">2026–2035</span>');
+  assert.equal(richHtml('8:30–11:00 · 1.000-2.000 người · 0912-345-678'), '<span class="nb">8:30–11:00</span> · <span class="nb">1.000-2.000</span> người · <span class="nb">0912-345-678</span>');
+  assert.equal(richHtml('⟦accent⟧2026–2035⟦/⟧'), '<span class="rt" data-rc="accent" style="color:var(--accent);"><span class="nb">2026–2035</span></span>');
+  assert.equal(richHtml("COVID-19, Wi-Fi 6, năm 2026 và 'A'-1"), "COVID-19, Wi-Fi 6, năm 2026 và &#39;A&#39;-1");
+  assert.equal(plainText('Giai đoạn 2026–2035'), 'Giai đoạn 2026–2035', 'chữ thuần (đếm độ dài, xuất) không đổi');
+});
+
 test('normalizeSpec: chữ có định dạng tính độ dài theo chữ hiển thị; quá dài → cắt giữ định dạng (strict báo lỗi)', () => {
   const title = `⟦accent,b⟧${'a'.repeat(50)}⟦/⟧`;
   const { spec, errors } = normalizeSpec({ title: 'T', slides: [{ layout: 'bullets', title, items: [{ title: '⟦coral⟧Rủi ro⟦/⟧\nmới', text: 'x' }] }] }, { strict: true });

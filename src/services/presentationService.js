@@ -148,7 +148,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     let ticket = null;
     try {
       choice = parseThemeChoice(input);
-      src = await precheckSource({ files: input.files, url: input.url, urls: input.urls, text: input.text }, config.limits);
+      src = await precheckSource({ files: input.files, url: input.url, urls: input.urls, text: input.text }, config.limits, { driveFolders: Boolean(config.google.apiKey) });
       userMedia = await precheckMedia(input.media, input.posters, config.limits);
       const total = [...(input.files || []), ...(input.media || [])].reduce((n, f) => n + (f.size || 0), 0);
       if (total > config.limits.maxUploadMb * 1048576) throw tooLarge(`Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB`, 'UPLOAD_TOO_LARGE');

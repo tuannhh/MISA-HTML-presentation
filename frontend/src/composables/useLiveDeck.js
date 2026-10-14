@@ -107,8 +107,9 @@ export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, 
         break;
       }
       case 'deck:move':
-        // Ô chữ của trang có bố cục được kéo dời (x/y % khung) / đổi cỡ (s) — đường dẫn theo danh sách cho phép, số bị kẹp.
-        if (draft.value) applyFrameMove(draft.value.spec, idx, d.path, d.x, d.y, d.s);
+        // Ô chữ của trang có bố cục được kéo dời (x/y % khung) / đổi cỡ (s) / giãn dòng (l) / độ rộng khung (w) — đường dẫn theo
+        // danh sách cho phép, số bị kẹp.
+        if (draft.value) applyFrameMove(draft.value.spec, idx, d.path, d.x, d.y, d.s, d.l, d.w);
         break;
       case 'deck:deco':
         if (typeof d.key === 'string' && typeof d.action === 'string') decoAction(idx, d.key, d.action, d.box);
