@@ -71,6 +71,13 @@ npm run dev:api                  # API http://localhost:3000 (node --watch)
 npm run dev                      # Vite http://localhost:5173 (proxy /api, /deck-assets → 3000)
 ```
 
+**Công cụ ngoài cho dev local** (Docker image đã có sẵn — chỉ cần khi chạy API/test ngoài Docker; thiếu thì app tự bỏ qua bước tương ứng):
+- Poppler (`pdftoppm` render trang PDF để cắt sơ đồ/ảnh giao diện; `pdftotext` đối chiếu liên kết/liên hệ trong PDF):
+  Windows `winget install --id oschwartz10612.Poppler --exact` (bản zip portable, thêm `…\WinGet\Packages\oschwartz10612.Poppler_…\poppler-<ver>\Library\bin` vào PATH người dùng — mở shell mới mới nhận);
+  macOS `brew install poppler`; Debian/Ubuntu `apt-get install poppler-utils`. Kiểm: `pdftoppm -v`.
+- LibreOffice (`soffice`, render PPTX/DOCX/ODP/ODT) — tuỳ chọn; thiếu → log `soffice_missing`, chỉ PDF được nhận diện hình.
+- Máy chủ cài không qua Docker: cài `chromium poppler-utils` + LibreOffice headless + phông như `Dockerfile` (dòng `apt-get install`).
+
 > Trên máy phát triển hiện tại `.env` đang trỏ `APP_BASE_URL=http://localhost:8088` cho bản Docker; Origin của Vite (5173) vẫn được chấp nhận vì kiểm tra cả `host` hiện tại qua proxy. Nếu gặp `BAD_ORIGIN` khi dev, đặt `APP_BASE_URL` đúng địa chỉ đang mở.
 
 ## Triển khai Docker (1 máy chủ)
@@ -122,7 +129,7 @@ Tệp nguồn nằm tạm ở `STORAGE_DIR/uploads` (volume) — khởi động 
 
 | Lệnh | Nội dung |
 |---|---|
-| `npm test` | Unit (node:test): SSRF, magic bytes, tenantScope, URL ký, chuẩn hoá spec, chống XSS renderer, hàng đợi, jobTracker, passwordHasher, lỗi trình duyệt… (224 test; 1 skip khi máy thiếu `pdftoppm`) |
+| `npm test` | Unit (node:test): SSRF, magic bytes, tenantScope, URL ký, chuẩn hoá spec, chống XSS renderer, hàng đợi, jobTracker, passwordHasher, lỗi trình duyệt… (232 test; test `extractVisuals` tự skip khi máy thiếu `pdftoppm`) |
 | `BASE=http://localhost:8088 node test/smoke/smoke.mjs` | Smoke end-to-end trên server đang chạy: admin cấp tài khoản, CSRF, tạo bài (Gemini thật), cách ly tenant, public/duplicate, lưu + 409, xuất HTML/PDF, admin. In "TẤT CẢ ĐẠT" |
 | `npm run test:integration` | MySQL thật, DB tạm tên duy nhất/tệp (`IT_DB_*`, xem `test/integration/README.md`): race SQL, changelog idempotent, phục hồi bản sao (A04), công khai + bản gốc (A06), dọn smoke (A01), **xuất bản** (publish/cập nhật/gỡ/đồng thời/STALE/admin). Không dựng được DB → FAIL (trừ `IT_OPTIONAL=1`) |
 | `SMOKE_BOOTSTRAP=1 BASE=http://localhost:<APP_PORT> node test/smoke/smoke.mjs` | Smoke trên **compose project riêng** (không chạy vào stack có dữ liệu): tự tạo admin `smoke-admin-<stamp>` mật khẩu ngẫu nhiên, dọn tài khoản `smoke-*-<stamp>` trong `finally` (`scripts/smoke-cleanup.js`). Có sẵn admin → `SMOKE_ADMIN_EMAIL/PASSWORD` (tài khoản tạo ra chỉ bị khoá) |

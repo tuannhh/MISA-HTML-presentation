@@ -1,5 +1,12 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-14 — Cài Poppler (pdftoppm) cho máy dev Windows; xác nhận image server có sẵn
+
+- Yêu cầu: "xem có thư viện pdftoppm thì cài thêm nhé, để sau này triển khai trên server còn có".
+- Server: `Dockerfile` đã cài `poppler-utils` — trong container 8088 có `pdftoppm`/`pdftotext` 22.12.0 + LibreOffice; chạy `test/unit/visuals.test.js` trong container dùng 1 lần từ image `misa-presentation:latest` (mount `test/` chỉ đọc): **10/10, 0 skip** (gồm `extractVisuals` render PDF thật). Không cần đổi image.
+- Máy dev Windows: `winget install oschwartz10612.Poppler` 25.07.0 (zip ~16 MB, GitHub `oschwartz10612/poppler-windows`, SHA256 do winget kiểm; thư mục `bin` vào PATH người dùng). Unit **232/232, 0 skip** (trước: 1 skip vì thiếu `pdftoppm`).
+- Tài liệu: `07` thêm mục công cụ ngoài cho dev local (Windows/macOS/Linux) + máy chủ không qua Docker; `09` ghi Git Bash có `pdftotext` nhưng không có `pdftoppm`.
+
 ## 2026-10-14 — Nguồn link: tối đa 5 link + tự lấy ảnh trong trang
 
 - Yêu cầu: nguồn là đường link (báo, Facebook, Google Drive, website MISA, `*.misa.vn`…) thì tự phát hiện + trích ảnh trong bài để đưa vào slide — không cần lấy hết, chỉ ảnh hợp nội dung; cho nhập tối đa 5 link.

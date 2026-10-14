@@ -285,7 +285,7 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - Quy tắc chung `svg * { transform-box: fill-box; transform-origin: center }` (theme.css) làm lệch hình có thuộc tính `transform` vẽ theo toạ độ SVG gốc (logo Gọi/Viber) → `.bico *` đặt lại `view-box` + `0 0`. SVG nhúng ngoài deck (form `ContactFields`) cũng phải đặt lại.
 - `href=` phải đứng CUỐI thuộc tính `⟦…⟧` (URL có dấu phẩy). Regex thẻ cho thuộc tính dài tới 600 ký tự; trần chuỗi thô trừ phần `href=` (`hrefWeight`) — sửa ở `specService.str` thì sửa cả `editPaths.cutR`.
 - Dàn ý chứa `[nhãn](URL)` → mọi chỗ đưa chữ dàn ý cho AI dựng bài / so độ dài phải `stripLinks` (đã làm ở `outlineForModel`, `composeDeckFromOutline`, `OutlineSlideCard`).
-- `pdftotext` thiếu trên máy dev Windows → `collectSourceFacts` chỉ log cảnh báo; đối chiếu số điện thoại trong PDF chỉ đủ khi có poppler (Docker có).
+- `pdftotext` thiếu (máy dev chưa cài Poppler) → `collectSourceFacts` chỉ log cảnh báo; đối chiếu số điện thoại trong PDF chỉ đủ khi có poppler (Docker có; Windows cài bằng winget — `07`). Git Bash có sẵn `/mingw64/bin/pdftotext` nhưng **không có `pdftoppm`** — `which pdftotext` thấy có chưa chắc đủ bộ.
 - Công cụ chụp màn hình của khung trình duyệt trong app không vẽ nội dung iframe sandbox (cả cấu hình cũ) — kiểm tra khung sửa bằng cách mở thẳng `/api/presentations/<mã>/preview?edit=1`.
 
 ### Kiểu chữ tiêu đề (2026-10-12)
