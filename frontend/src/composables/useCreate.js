@@ -1,4 +1,4 @@
-// Logic form "Tạo bài trình bày" dùng chung desktop/mobile: nguồn (nhiều tệp/link/văn bản), tỷ lệ, tông màu
+// Logic form "Tạo bài trình bày" dùng chung desktop/mobile: nguồn (nhiều tệp / tối đa 5 link / văn bản), tỷ lệ, tông màu
 // (nền tối/sáng + Tự động / mẫu / tuỳ chỉnh 2 màu), số trang (tự động/tuỳ chỉnh), yêu cầu thêm.
 // Nhập nội dung: chữ là cơ sở nội dung, ảnh/video gửi kèm (media) là thứ BẮT BUỘC đưa vào bài — AI đặt vào trang hợp nội dung.
 // Giới hạn khớp server (MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_CREATE_MEDIA, AUTO_MAX_SLIDES). Tạo xong → bước duyệt dàn ý.
@@ -16,6 +16,9 @@ export const ACCEPT = SOURCE_ACCEPT;
 // Ảnh/video gửi kèm khi nhập nội dung.
 export const MAX_CREATE_MEDIA = 20;
 export const MAX_CREATE_VIDEOS = 10;
+// Nguồn = đường link (khớp MAX_SOURCE_LINKS): bài báo, trang web, Facebook công khai, Google Slides/Docs/Sheets/Drive.
+export const MAX_SOURCE_LINKS = 5;
+const URL_RE = /https?:\/\/[^\s<>"'`]+/g;
 export const MEDIA_ACCEPT = `${IMAGE_ACCEPT},${VIDEO_ACCEPT}`;
 const isVideoFile = (f) => /^video\//.test(f.type || '') || /\.(mp4|webm|mov|m4v)$/i.test(f.name || '');
 
@@ -26,7 +29,7 @@ let seq = 0;
 
 export function useCreate() {
   const form = reactive({
-    mode: 'file', files: [], media: [], url: '', text: '', ratio: '16:9', tone: 'dark', theme: 'auto', primary: '', secondary: '',
+    mode: 'file', files: [], media: [], urls: [{ id: 'u0', value: '' }], text: '', ratio: '16:9', tone: 'dark', theme: 'auto', primary: '', secondary: '',
     slideMode: 'auto', slideCount: 12, instructions: '', title: '',
     // AI tạo ảnh minh hoạ (Nano Banana 2 Lite) cho trang cần ảnh mà chưa có ảnh thật — mặc định bật.
     aiImages: true,
@@ -49,12 +52,22 @@ export function useCreate() {
     if (form.mode === 'file' && !form.files.length) errors.file = 'Chọn ít nhất 1 tệp tư liệu';
     if (form.mode === 'file' && totalBytes.value > MAX_UPLOAD_MB * MB) errors.file = `Tổng dung lượng tối đa ${MAX_UPLOAD_MB} MB`;
     if (form.mode === 'url') {
-      try {
-        const u = new URL(form.url.trim());
-        if (!['http:', 'https:'].includes(u.protocol)) throw new Error();
-      } catch {
-        errors.url = 'Nhập đường link hợp lệ bắt đầu bằng http:// hoặc https://';
+      // Lỗi từng ô theo mã ô (errors['url:<id>']); ô trống bỏ qua, cần ít nhất 1 link.
+      const seen = new Set();
+      for (const row of form.urls) {
+        const v = row.value.trim();
+        if (!v) continue;
+        try {
+          const u = new URL(v);
+          if (!['http:', 'https:'].includes(u.protocol)) throw new Error();
+          u.hash = '';
+          if (seen.has(u.href)) errors[`url:${row.id}`] = 'Link này đã nhập ở ô khác';
+          seen.add(u.href);
+        } catch {
+          errors[`url:${row.id}`] = 'Nhập đường link hợp lệ bắt đầu bằng http:// hoặc https://';
+        }
       }
+      if (!form.urls.some((r) => r.value.trim())) errors[`url:${form.urls[0].id}`] = 'Nhập ít nhất 1 đường link';
     }
     if (form.mode === 'text' && form.text.trim().length < 20) errors.text = 'Nhập ít nhất 20 ký tự';
     if (form.mode === 'text' && form.text.length > MAX_TEXT_CHARS) errors.text = `Tối đa ${MAX_TEXT_CHARS.toLocaleString('vi-VN')} ký tự`;
@@ -77,7 +90,7 @@ export function useCreate() {
     try {
       const fd = new FormData();
       if (form.mode === 'file') for (const f of form.files) fd.append('files', f.file, f.file.name);
-      if (form.mode === 'url') fd.set('url', form.url.trim());
+      if (form.mode === 'url') for (const row of form.urls) if (row.value.trim()) fd.append('urls', row.value.trim());
       if (form.mode === 'text') {
         fd.set('text', form.text.trim());
         // Ảnh bìa video gắn theo vị trí của video trong danh sách media (server ghép "poster-<vị trí>.jpg").
@@ -202,9 +215,35 @@ export function useCreate() {
   }
   onBeforeUnmount(() => form.media.forEach((m) => m.url && URL.revokeObjectURL(m.url)));
 
+  // Ô link: thêm (≤ MAX_SOURCE_LINKS) / xoá (luôn còn 1 ô). Trả mã ô mới để giao diện đặt con trỏ vào.
+  let urlSeq = 0;
+  function addUrl(value = '') {
+    if (form.urls.length >= MAX_SOURCE_LINKS) return null;
+    const id = `u${++urlSeq}`;
+    form.urls.push({ id, value });
+    return id;
+  }
+  function removeUrl(id) {
+    delete errors[`url:${id}`];
+    form.urls = form.urls.length > 1 ? form.urls.filter((r) => r.id !== id) : [{ id: form.urls[0].id, value: '' }];
+  }
+  // Dán nhiều link cùng lúc (mỗi dòng 1 link, hoặc cách nhau dấu cách) vào 1 ô → tách ra các ô; quá MAX_SOURCE_LINKS → báo số link bỏ.
+  function pasteUrls(id, event) {
+    const found = (event.clipboardData?.getData('text') || '').match(URL_RE) || [];
+    if (found.length < 2) return;
+    event.preventDefault();
+    const row = form.urls.find((r) => r.id === id);
+    if (!row) return;
+    row.value = found[0];
+    let dropped = 0;
+    for (const u of found.slice(1)) if (!addUrl(u)) dropped += 1;
+    delete errors.urls;
+    if (dropped) errors.urls = `Chỉ nhận tối đa ${MAX_SOURCE_LINKS} link — đã bỏ ${dropped} link thừa`;
+  }
+
   return {
     form, errors, submitting, progress, submitError, totalBytes, validate, submit, fileList, onSelectFiles, onOversized, removeFile,
-    mediaSummary, addingMedia, addMedia, removeMedia,
+    mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls,
   };
 }
 

@@ -205,10 +205,14 @@ mạch kể chuyện mới: bối cảnh/vấn đề → nội dung chính theo 
 - infographic, chart (biểu đồ số liệu), diagram (sơ đồ quy trình/kiến trúc/mô hình/tổ chức/tư duy — khối hình nối mũi tên), table (bảng),
   screenshot (ảnh chụp màn hình phần mềm/web), document (ảnh chụp/scan văn
   bản), slide (ảnh một trang trình bày đã thiết kế), logo, icon, illustration (hình vẽ, minh hoạ 3D, clipart), background (ảnh nền,
-  hoạ tiết), qr (mã QR — ô vuông đen trắng có 3 ô định vị ở góc), other (không rõ, hoặc ảnh không kèm hình xem trước).
+  hoạ tiết), qr (mã QR — ô vuông đen trắng có 3 ô định vị ở góc — chiếm GẦN HẾT ảnh; băng rôn/poster/slide có chèn 1 mã QR nhỏ
+  là slide/infographic), other (không rõ, hoặc ảnh không kèm hình xem trước).
 - Ảnh slide/infographic/screenshot có chứa hình người bên trong VẪN là slide/infographic/screenshot, không phải photo.
 - Ảnh có mô tả "ẢNH GIAO DIỆN PHẦN MỀM" (cắt từ trang tài liệu) LUÔN là screenshot; ảnh có mô tả "SƠ ĐỒ" (cắt từ trang tài liệu)
   LUÔN là diagram.
+- Ảnh có mô tả "ảnh trên trang web": chỉ ảnh minh hoạ ĐÚNG nội dung chính của trang (ảnh trong bài viết, sản phẩm/sự kiện/con người
+  được nói tới; xem chú thích, mục chứa ảnh) mới phân loại theo hình thật; ảnh quảng cáo, ảnh của tin/bài khác, ảnh đại diện tác
+  giả, ảnh trang trí không liên quan → other (không gắn vào trang). Gắn ảnh vào trang có nội dung khớp với ảnh.
 Gắn vào trang (images) ảnh loại photo, screenshot và diagram; ảnh qr CHỈ gắn vào trang contact/offer (1 ảnh = mã QR của trang).
 Mọi loại khác là TƯ LIỆU: đọc kỹ chữ, số liệu trong ảnh và đưa vào nội dung (thường thành stats/timeline/process/comparison/cards)
 — tuyệt đối không gắn vào trang.

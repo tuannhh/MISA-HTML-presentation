@@ -16,7 +16,7 @@
 8. **Bí mật:** không log/không trả về API key, mật khẩu, token, chữ ký URL. Không commit `.env`.
 9. **Tệp:** chỉ ghi qua `storageService` với key từ `assetKey()`; không dùng tên tệp client làm đường dẫn.
 10. **Lược đồ DB (theo chuẩn MISA Backend §05):** mỗi thay đổi = 1 changelog mới trong `startup/database/changelogs/` (idempotent, KHÔNG hạ cấp lược đồ mới hơn khi chạy lại) **đồng thời** cập nhật `schema.sql` để baseline luôn là bản đầy đủ mới nhất (cài mới không phải chạy lại từng changelog) + `03`. Không đổi/xoá changelog đã chạy trừ khi chỉ làm chặt tính idempotent.
-11. **Gọi mạng ra ngoài** theo URL người dùng: bắt buộc qua `safeFetch`.
+11. **Gọi mạng ra ngoài** theo URL người dùng: bắt buộc qua `safeFetch` — kể cả URL **lấy ra từ nội dung** người dùng đưa (ảnh trong trang web, link trong tài liệu). Hàm tải nhận `fetch` qua tham số (mặc định `safeFetch`) để unit test giả lập, không mở cổng local (safeFetch chặn localhost). Không dùng Chromium để mở trang ngoài.
 
 ## Frontend
 

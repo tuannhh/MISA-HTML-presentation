@@ -2,6 +2,7 @@
 import { deckPath } from '@/lib/deckPath.js'
 // Tạo bài trình bày (desktop): nguồn nội dung → tuỳ chọn (tỷ lệ, tông màu, số trang) → AI lập dàn ý (chạy nền);
 // chuyển sang bước duyệt dàn ý để theo dõi tiến trình, sửa nội dung, gắn media, chọn thiết kế.
+import { nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import DesktopShell from './DesktopShell.vue'
 import FormField from '@/shared/FormField.vue'
@@ -17,14 +18,24 @@ import MTextarea from '@/components/mds/MTextarea.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import CreateMediaPicker from '@/shared/CreateMediaPicker.vue'
-import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
+import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_SOURCE_LINKS, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
 
 const router = useRouter()
-const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia } = useCreate()
+const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls } = useCreate()
+
+// Thêm ô link mới → đặt con trỏ vào ô đó.
+async function onAddUrl() {
+  const id = addUrl()
+  await nextTick()
+  if (id) document.getElementById(`src-url-${id}`)?.focus()
+}
 
 async function onSubmit() {
   const res = await submit()
-  if (res) router.push(deckPath(res, 'outline'))
+  if (res) return router.push(deckPath(res, 'outline'))
+  // Lỗi ở ô link → đặt con trỏ vào ô lỗi đầu tiên.
+  const bad = form.mode === 'url' && form.urls.find((r) => errors[`url:${r.id}`])
+  if (bad) document.getElementById(`src-url-${bad.id}`)?.focus()
 }
 </script>
 
@@ -67,8 +78,31 @@ async function onSubmit() {
             <p v-if="errors.file" class="text-[12px] text-[var(--mds-danger)]">{{ errors.file }}</p>
           </div>
 
-          <FormField v-else-if="form.mode === 'url'" label="Đường link tài liệu" required hint="Google Slides/Docs/Sheets/Drive (đã chia sẻ “Bất kỳ ai có đường liên kết”) hoặc trang web công khai.">
-            <MInput v-model="form.url" type="url" inputmode="url" placeholder="https://docs.google.com/presentation/d/…" :error="errors.url" clearable />
+          <FormField v-else-if="form.mode === 'url'" group label="Đường link tư liệu" required :hint="`Tối đa ${MAX_SOURCE_LINKS} link · dán nhiều link cùng lúc (mỗi dòng 1 link) vào 1 ô cũng được`">
+            <div class="flex flex-col gap-2">
+              <div v-for="(row, i) in form.urls" :key="row.id" class="flex items-start gap-2">
+                <MInput
+                  :id="`src-url-${row.id}`"
+                  v-model="row.value"
+                  class="min-w-0 flex-1"
+                  type="url"
+                  inputmode="url"
+                  :aria-label="`Link ${i + 1}`"
+                  :placeholder="i === 0 ? 'https://amis.misa.vn/… · bài báo · Facebook · Google Slides/Docs/Drive' : 'https://…'"
+                  :error="errors[`url:${row.id}`]"
+                  :aria-invalid="errors[`url:${row.id}`] ? 'true' : undefined"
+                  clearable
+                  @paste="pasteUrls(row.id, $event)"
+                />
+                <MButton v-if="form.urls.length > 1" variant="icon" class="mt-0.5" :aria-label="`Xoá link ${i + 1}`" @click="removeUrl(row.id)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
+              </div>
+              <div class="flex flex-wrap items-center gap-3">
+                <MButton v-if="form.urls.length < MAX_SOURCE_LINKS" variant="ghost" :disabled="submitting" @click="onAddUrl"><template #icon><MIcon name="plus" :size="16" /></template>Thêm link</MButton>
+                <span class="text-[12px] text-[var(--mds-text-secondary)]">{{ form.urls.length }}/{{ MAX_SOURCE_LINKS }} link</span>
+              </div>
+              <p v-if="errors.urls" class="text-[12px] text-[var(--mds-danger)]">{{ errors.urls }}</p>
+              <p class="text-[12px] text-[var(--mds-text-secondary)]">Bài báo, trang web (kể cả *.misa.vn), bài đăng/trang Facebook công khai, Google Slides/Docs/Sheets hoặc tệp trên Google Drive (đã chia sẻ “Bất kỳ ai có đường liên kết”). AI đọc chữ và tự lấy ảnh trong bài viết — chỉ ảnh hợp nội dung được đặt lên slide, ảnh còn lại vẫn có trong mục “Ảnh trong bài” để bạn tự chọn thêm.</p>
+            </div>
           </FormField>
 
           <template v-else>

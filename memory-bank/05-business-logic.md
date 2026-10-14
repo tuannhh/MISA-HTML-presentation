@@ -94,7 +94,8 @@ POST /api/presentations (multipart)
         .odt/.odp → chữ + ảnh ; .csv/.tsv/.txt → giải mã UTF-8 / UTF-16 BOM / Windows-1258 (decodeText), CSV ghi chú "bảng dữ liệu"
         .doc/.xls/.ppt (OLE), HEIC, Keynote… → 415 kèm hướng dẫn "Lưu thành .docx/.xlsx/.pptx" / đổi JPEG (KHÔNG đọc định dạng cũ)
         .pdf / ghi âm → media (giữ trên đĩa) ; .txt/.md → text ; ảnh → ảnh
-        URL → safeFetch (chống SSRF, trần = MAX_UPLOAD_MB); Google Docs/Slides/Sheets → link export (hoặc Drive API)
+        URL (≤ 5 link, đọc lần lượt; 1 link lỗi → dừng, thông điệp "Link n (host): …") → safeFetch (chống SSRF, trần = MAX_UPLOAD_MB);
+          Google Docs/Slides/Sheets → link export (hoặc Drive API); trang web → chữ + mô tả og + ẢNH của nội dung chính (§20)
         text → cắt theo MAX_TEXT_CHARS
       normalizeExtractedImages → sharp → WebP ≤1920px, tối đa MAX_IMAGES_PER_DECK → lưu storage + bảng assets
       mediaService.prepareMedia (PDF + ghi âm):
@@ -466,3 +467,43 @@ Giống "Xuất bản" của CMS: chủ bài bấm **Xuất bản** → link `<P
   - Áp dụng: (1) bước dàn ý — sau `verifyOutlineFacts`, bằng chứng = corpus tư liệu (log `outline_ready.recased`); (2) bước dựng — sau `applyOutlineLinks`, bằng chứng = chữ dàn ý (log `build_ready.recased`): tiêu đề, mô tả, kicker, ô gốc, tiêu đề mục/bước/cột, nhãn, CTA. Prompt (dàn ý, dựng bài, 1 bước) có `CASE_RULE`.
   - Bài cũ: nút "Sửa tiêu đề đang Viết Hoa Từng Chữ" ở tab Phông chữ (trình soạn thảo) chạy `sentenceCaseSpec` trên bản nháp, toast số chỗ đã sửa, người dùng Lưu như mọi thay đổi.
 - **Viết hoa toàn bộ = tuỳ chọn hiển thị** `design.font.titleCase = 'upper'` (không lưu khi mặc định; strict báo lỗi giá trị lạ). Renderer gắn `data-tcase` lên `<html>` (engine cập nhật khi xem trước), CSS `text-transform: uppercase` cho `.title, .cv-title, .sec-t, .cl-t`. Chữ gốc không đổi → chuyển qua lại không mất dữ liệu; HTML/PDF xuất cùng kiểu.
+
+## 20. Nguồn = đường link: tối đa 5 link + tự lấy ảnh trong trang (2026-10-14)
+
+Yêu cầu chủ dự án: dán link (bài báo, Facebook, Google Drive, misa.vn, *.misa.vn…) → hệ thống tự phát hiện + trích ảnh trong bài, AI chỉ đưa
+ảnh **hợp nội dung** lên slide (không cần lấy hết); tối đa **5 link** mỗi lần tạo.
+
+- **Đầu vào** (`ingestService.precheckSource`): trường `urls` lặp lại (multer → mảng; 1 giá trị → chuỗi) và/hoặc `url` (client cũ). Bỏ ô trống,
+  bỏ link trùng (so sau khi bỏ `#…`); > `MAX_SOURCE_LINKS` → 400 `TOO_MANY_LINKS`; link sai/nội bộ → `INVALID_URL`/`SSRF_BLOCKED` kèm
+  "Link n:"; link **thư mục** Google Drive → 400 `UNSUPPORTED_LINK` (chưa hỗ trợ — dán link từng tệp). `sourceLabel`: 1 link = URL, nhiều
+  link = "3 link: amis.misa.vn, misa.vn, facebook.com". Vẫn đúng 1 loại nguồn (link không trộn với tệp/văn bản).
+- **Đọc từng link** (`ingestLinks`, tuần tự): Google Slides/Docs/Sheets/tệp Drive như cũ (ảnh nhúng PPTX/DOCX, PDF → cắt hình). Trang HTML
+  (`readWebPage`): chữ = `htmlToText` (đường dẫn tương đối tính theo **địa chỉ sau chuyển hướng**) + "Mô tả trang: <og:description>" khi
+  thân trang chưa có; **Facebook** (không đăng nhập, thân trang là khung đăng nhập) → chỉ tiêu đề + mô tả + ảnh og; không có mô tả lẫn ảnh →
+  422 `SOURCE_FORBIDDEN` ("chưa công khai"). Trang < 40 ký tự chữ **và** không có ảnh → `SOURCE_EMPTY`. 1 link lỗi → cả lượt `failed`, thông
+  điệp mở đầu "Link n (host):" (không âm thầm bỏ tư liệu người dùng đã chọn).
+- **Tìm ảnh** (`src/services/webSource.js`, HTML tĩnh — không chạy JavaScript): bỏ `<script|style|svg|template>` (giữ `<noscript>` vì hay chứa
+  ảnh thật của trang lazy-load) → **khối nội dung chính** `mainRegion`: ưu tiên khối có lớp nội dung bài (`entry-content`, `fck_detail`,
+  `articleBody`…, đếm thẻ để lấy đủ khối lồng nhau) → `<article>` → `<main>`, trong cùng mức chọn khối nhiều chữ nhất (≥ 300 ký tự); không có
+  → cả trang trừ `header/nav/footer/aside`. Mỗi `<img>`/`<source srcset>`: URL = ảnh lớn nhất trong `data-srcset|data-lazy-srcset|srcset` →
+  `data-src|data-lazy-src|data-original|…` → `src` (bỏ `data:`). Bỏ ảnh rác: `.svg`, tên tệp/lớp CSS kiểu logo/icon/avatar/emoji/ads/share/
+  spacer/1x1…, alt có "logo", `width`/`height` số < 120. Chống trùng `imageKey` (bỏ query khi có đuôi ảnh, bỏ hậu tố WordPress `-300x200`),
+  gặp lại thì bổ sung alt/chú thích còn thiếu (`<source>` đứng trước `<img>` của `<picture>`). Kèm mỗi ảnh: `<figcaption>` của `<figure>`
+  chứa ảnh, alt có nghĩa (bỏ alt dạng mã tệp), tiêu đề mục `<h1–4>` gần nhất phía trước. Ảnh `og:image`/`twitter:image` xếp **cuối**.
+- **Tải ảnh** (`fetchImages`, qua cùng `safeFetch`): tổng ≤ `MAX_LINK_IMAGES` (24, ≤ `MAX_IMAGES_PER_DECK`), **chia công bằng** giữa các trang
+  (`shareBudget` water-filling theo số ứng viên; lượt 2 dồn phần dư của trang thiếu ảnh đạt chuẩn cho trang còn ứng viên); mỗi ảnh ≤ 15 MB /
+  20 giây, 4 ảnh song song, `Referer` = trang nguồn (CDN chặn hotlink), cả lượt ≤ 90 giây. Nhận khi đúng ảnh (magic bytes) + sharp đọc
+  được + cạnh ngắn ≥ 200px + tỷ lệ cạnh ≤ 4 (bỏ dải băng mảnh); ảnh lỗi → thử ứng viên kế. Ảnh các link **xen kẽ** (link1 ảnh1, link2 ảnh1…)
+  vì AI chỉ xem trước ~30 ảnh đầu.
+- **AI chọn ảnh**: ảnh vào danh sách IMGn như ảnh tư liệu (mô tả 1 dòng `webImageHint`: "ảnh trên trang web "<tiêu đề>" — chú thích: … —
+  thuộc mục "…"" / "ảnh tiêu biểu của trang (og:image)"). Prompt: ảnh trên trang web chỉ phân loại theo hình thật khi minh hoạ đúng nội dung
+  chính; ảnh quảng cáo, ảnh tin/bài khác, ảnh đại diện tác giả, trang trí → `other` (không gắn). Gắn vào trang theo §9 (photo / screenshot /
+  diagram); ảnh còn lại vẫn nằm trong "Ảnh trong bài" để người dùng tự chọn ở bước duyệt dàn ý / trình soạn thảo.
+- **Mã QR** (chặt hơn, áp cho mọi nguồn): prompt `qr` = mã QR chiếm gần hết ảnh (băng rôn/poster có chèn QR nhỏ là slide/infographic) + chốt
+  chặn code: ảnh `qr` phải gần vuông (tỷ lệ cạnh ≤ 1,6) mới vào trang Liên hệ/Ưu đãi — trước đó băng rôn quảng cáo "MISA đồng hành cùng hộ
+  kinh doanh" (có QR) trên misa.vn bị gắn làm QR trang Liên hệ của bài AMIS Kho Hàng.
+- **Giới hạn đã biết**: chỉ HTML tĩnh — trang dựng hoàn toàn bằng JavaScript (SPA) không lấy được chữ/ảnh; Facebook chỉ 1 ảnh og + mô tả
+  (thường bị cắt ngắn), bài trong nhóm/riêng tư → `SOURCE_FORBIDDEN`; thư mục Drive chưa hỗ trợ; trang mã hoá khác UTF-8 có thể lỗi dấu
+  (như trước). Bản quyền ảnh thuộc trang nguồn — người dùng tự chịu trách nhiệm khi trình chiếu/xuất bản.
+- `MAX_LINK_IMAGES=0` → chỉ lấy chữ từ link (như trước bản này).
+

@@ -148,7 +148,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     let ticket = null;
     try {
       choice = parseThemeChoice(input);
-      src = await precheckSource({ files: input.files, url: input.url, text: input.text }, config.limits);
+      src = await precheckSource({ files: input.files, url: input.url, urls: input.urls, text: input.text }, config.limits);
       userMedia = await precheckMedia(input.media, input.posters, config.limits);
       const total = [...(input.files || []), ...(input.media || [])].reduce((n, f) => n + (f.size || 0), 0);
       if (total > config.limits.maxUploadMb * 1048576) throw tooLarge(`Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB`, 'UPLOAD_TOO_LARGE');
@@ -176,7 +176,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     }
 
     // Chạy nền; client theo dõi trạng thái bằng GET /api/presentations/:id.
-    const job = { url: input.url, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages };
+    const job = { urls: src.urls, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages };
     ticket
       .run(jobs.wrap(id, 'outline', () => generateOutline(user.id, id, job)))
       .catch((err) => logger.error('outline_unhandled', { id, err }))
@@ -352,7 +352,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       });
       const userImageIds = new Set(required.map((u) => u.asset));
       // Mã QR trong tư liệu (AI đã xem, phân loại 'qr'): chỉ gắn vào trang Liên hệ / Ưu đãi (ảnh trang đó = mã QR), không làm ảnh minh hoạ.
-      const qrs = new Set(assetIds.filter((aid, i) => modelImages[i].preview && kindOf.get(aid) === 'qr'));
+      // Chốt chặn: ảnh mã QR gần vuông (tỷ lệ cạnh ≤ 1,6) — băng rôn quảng cáo có chèn QR (hay gặp ở ảnh trang web) không phải mã QR của trang.
+      const qrs = new Set(assetIds.filter((aid, i) => modelImages[i].preview && kindOf.get(aid) === 'qr' && Math.max(images[i].width, images[i].height) <= 1.6 * Math.min(images[i].width, images[i].height)));
       for (const sl of draft.slides) {
         const isContact = CONTACT_LAYOUTS.includes(sl.layout);
         sl.images = sl.images.filter((im) => (isContact ? qrs.has(im.asset) || userImageIds.has(im.asset) : !qrs.has(im.asset)));

@@ -11,6 +11,8 @@ import { sniff, sniffVideo, decodeText, IMAGE_TYPES, AUDIO_TYPES, AUDIO_MIME } f
 import { safeFetch, assertPublicUrl } from '../lib/safeFetch.js';
 import { badRequest, tooLarge, unprocessable, HttpError } from '../lib/httpError.js';
 import { safeHref } from '../../shared/deck/rich.js';
+import { decodeEntities } from '../lib/html.js';
+import { pageMeta, findPageImages, fetchImages, isFacebook, webImageHint } from './webSource.js';
 
 const MAX_ZIP_ENTRIES = 5000;
 const MAX_ZIP_UNCOMPRESSED = 400 * 1048576;
@@ -30,16 +32,7 @@ const unsupported = (name, kind) =>
     KIND_HINT[kind] ? `${name ? `Tệp "${name}"` : 'Tệp'} ${KIND_HINT[kind]}` : `${name ? `Tệp "${name}": định dạng` : 'Định dạng'} chưa hỗ trợ. ${SUPPORTED_HINT}`,
   );
 
-function decodeXml(s) {
-  return s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&amp;/g, '&');
-}
+const decodeXml = decodeEntities;
 
 // Ghép chữ trong từng đoạn (<a:p>/<w:p>) — giữ ranh giới đoạn để AI hiểu cấu trúc.
 function paragraphs(xml, pTag, tTag) {
@@ -391,6 +384,7 @@ const G_SLIDES = /^https:\/\/docs\.google\.com\/presentation\/d\/([\w-]{10,})/;
 const G_DOCS = /^https:\/\/docs\.google\.com\/document\/d\/([\w-]{10,})/;
 const G_SHEETS = /^https:\/\/docs\.google\.com\/spreadsheets\/d\/([\w-]{10,})/;
 const G_DRIVE = /^https:\/\/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=)([\w-]{10,})/;
+const G_DRIVE_FOLDER = /^https:\/\/drive\.google\.com\/(?:drive\/(?:u\/\d+\/)?folders\/|folderview\?)/;
 
 const DRIVE_MIME = {
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -421,13 +415,34 @@ const title0 = (url) => {
   return decodeURIComponent(new URL(url).pathname.split('/').pop() || '') || new URL(url).hostname;
 };
 
-async function fetchDocument(url, limits, googleApiKey) {
+/**
+ * Trang web → chữ (kèm mô tả og:description khi thân trang chưa có) + danh sách ẢNH ỨNG VIÊN của nội dung chính (chưa tải —
+ * ingestLinks chia hạn mức ảnh giữa các link rồi mới tải). Facebook (không đăng nhập): thân trang là khung đăng nhập → chỉ dùng
+ * tiêu đề + mô tả + ảnh og của bài đăng/trang công khai.
+ */
+export function readWebPage(html, pageUrl, limits) {
+  const meta = pageMeta(html);
+  const fb = isFacebook(pageUrl);
+  const { title, text } = htmlToText(html, pageUrl);
+  const body = fb ? meta.title || '' : text;
+  const desc = meta.description && !body.includes(meta.description.slice(0, 80)) ? meta.description : '';
+  const full = [desc ? `Mô tả trang: ${desc}` : '', body].filter(Boolean).join('\n').trim();
+  const candidates = (limits.maxLinkImages ?? 24) > 0 ? findPageImages(html, pageUrl, { ogOnly: fb }) : [];
+  if (fb && !desc && !candidates.length) {
+    throw unprocessable('Bài đăng Facebook chưa công khai hoặc phải đăng nhập mới xem được. Hãy dùng bài đăng/trang ở chế độ Công khai.', 'SOURCE_FORBIDDEN');
+  }
+  if (full.length < 40 && !candidates.length) throw unprocessable('Trang web không có đủ nội dung văn bản để tạo bài trình bày', 'SOURCE_EMPTY');
+  const label = (meta.title || title || pageUrl).slice(0, 200);
+  return { pieces: full ? [{ label, text: clip(full, limits.maxTextChars) }] : [], media: [], images: [], web: { pageUrl, title: label, candidates } };
+}
+
+async function fetchDocument(url, limits, googleApiKey, fetchImpl = safeFetch) {
   const candidates = googleCandidates(url, googleApiKey) || [url];
   let lastErr = null;
   for (const candidate of candidates) {
     try {
       // Cùng trần tổng tư liệu với tệp tải lên (Google Slides nhiều ảnh xuất PPTX dễ vượt 50 MB); xuất tệp lớn có thể chậm.
-      const res = await safeFetch(candidate, { timeoutMs: 300000, maxBytes: limits.maxUploadMb * 1048576 });
+      const res = await fetchImpl(candidate, { timeoutMs: 300000, maxBytes: limits.maxUploadMb * 1048576 });
       if (res.status >= 400) {
         lastErr = res.status === 401 || res.status === 403 || res.status === 404
           ? unprocessable('Không truy cập được tài liệu. Hãy đặt chia sẻ "Bất kỳ ai có đường liên kết" rồi thử lại.', 'SOURCE_FORBIDDEN')
@@ -440,11 +455,8 @@ async function fetchDocument(url, limits, googleApiKey) {
         lastErr = unprocessable('Tài liệu Google chưa được chia sẻ công khai. Hãy đặt "Bất kỳ ai có đường liên kết – Người xem".', 'SOURCE_FORBIDDEN');
         continue;
       }
-      if (ct.includes('text/html')) {
-        const { title, text } = htmlToText(res.body.toString('utf8'), candidate);
-        if (text.length < 40) throw unprocessable('Trang web không có đủ nội dung văn bản để tạo bài trình bày', 'SOURCE_EMPTY');
-        return { pieces: [{ label: title || url, text: clip(text, limits.maxTextChars) }], media: [], images: [] };
-      }
+      // Trang web: đường dẫn tương đối (liên kết, ảnh) tính theo địa chỉ cuối cùng sau chuyển hướng.
+      if (ct.includes('text/html')) return readWebPage(res.body.toString('utf8'), String(res.finalUrl || candidate), limits);
       return await readBuffer(res.body, title0(url), limits);
     } catch (err) {
       if (err instanceof HttpError && err.code !== 'SOURCE_FORBIDDEN' && err.code !== 'SOURCE_ERROR') throw err;
@@ -458,9 +470,11 @@ async function fetchDocument(url, limits, googleApiKey) {
  * Kiểm tra nhanh đầu vào (trước khi trả 202) — lỗi rõ ràng trả ngay cho người dùng.
  * files: tệp multer trên đĩa ({ path, originalname, size }). Trả thêm `files` đã nhận diện loại để job dùng lại.
  */
-export async function precheckSource({ files, url, text }, limits) {
+export async function precheckSource({ files, url, urls, text }, limits) {
   const list = Array.isArray(files) ? files : [];
-  const given = [list.length ? list : null, url, text].filter((v) => v !== undefined && v !== null && v !== '').length;
+  // Link: `urls` (lặp lại được — tối đa MAX_SOURCE_LINKS) và/hoặc `url` (1 link, client cũ); ô trống bỏ qua.
+  const rawLinks = [...(Array.isArray(urls) ? urls : [urls]), url].map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean);
+  const given = [list.length ? list : null, rawLinks.length ? rawLinks : null, text].filter((v) => v !== undefined && v !== null && v !== '').length;
   if (given !== 1) throw badRequest('Chọn đúng 1 loại nguồn: tệp tài liệu, đường link hoặc nội dung nhập tay', 'SOURCE_REQUIRED');
   if (list.length) {
     if (list.length > limits.maxUploadFiles) throw badRequest(`Tối đa ${limits.maxUploadFiles} tệp mỗi lần tạo`, 'TOO_MANY_FILES');
@@ -478,9 +492,29 @@ export async function precheckSource({ files, url, text }, limits) {
     const label = names.length === 1 ? names[0] : `${names.length} tệp: ${names.join(', ')}`;
     return { sourceKind: 'file', sourceLabel: label.slice(0, 300), files: checked };
   }
-  if (url) {
-    const u = assertPublicUrl(String(url).trim());
-    return { sourceKind: 'url', sourceLabel: u.toString().slice(0, 300) };
+  if (rawLinks.length) {
+    const max = limits.maxSourceLinks ?? 5;
+    const seen = new Set();
+    const links = [];
+    for (const [i, raw] of rawLinks.entries()) {
+      let u;
+      try {
+        u = assertPublicUrl(raw);
+      } catch (err) {
+        throw rawLinks.length > 1 && err instanceof HttpError ? new HttpError(err.status, err.code, `Link ${i + 1}: ${err.message}`) : err;
+      }
+      u.hash = '';
+      if (G_DRIVE_FOLDER.test(u.toString())) {
+        throw badRequest(`${rawLinks.length > 1 ? `Link ${i + 1}: ` : ''}Link thư mục Google Drive chưa hỗ trợ — hãy dán link của từng tệp trong thư mục`, 'UNSUPPORTED_LINK');
+      }
+      if (!seen.has(u.toString())) {
+        seen.add(u.toString());
+        links.push(u.toString());
+      }
+    }
+    if (links.length > max) throw badRequest(`Tối đa ${max} đường link mỗi lần tạo`, 'TOO_MANY_LINKS');
+    const label = links.length === 1 ? links[0] : `${links.length} link: ${links.map((l) => new URL(l).hostname.replace(/^www\./, '')).join(', ')}`;
+    return { sourceKind: 'url', sourceLabel: label.slice(0, 300), urls: links };
   }
   const t = String(text).trim();
   if (t.length < 20) throw badRequest('Nội dung quá ngắn — nhập ít nhất 20 ký tự', 'TEXT_TOO_SHORT');
@@ -527,15 +561,93 @@ export async function precheckMedia(media, posters, limits) {
   return out;
 }
 
-/** Thu thập nội dung đầy đủ (chạy nền). files = kết quả `precheckSource().files`. */
-export async function ingestSource({ files, url, text }, { limits, googleApiKey }) {
+/** Thu thập nội dung đầy đủ (chạy nền). files = kết quả `precheckSource().files`, urls = `precheckSource().urls`. */
+export async function ingestSource({ files, url, urls, text }, { limits, googleApiKey, fetch: fetchImpl = safeFetch }) {
   if (files?.length) {
     const out = EMPTY();
     for (const f of files) merge(out, await readUploaded(f, limits));
     return out;
   }
-  if (url) return fetchDocument(assertPublicUrl(String(url).trim()).toString(), limits, googleApiKey);
+  const links = urls?.length ? urls : url ? [url] : [];
+  if (links.length) return ingestLinks(links, { limits, googleApiKey, fetchImpl });
   return { pieces: [{ label: 'Nội dung nhập tay', text: clip(String(text).trim(), limits.maxTextChars) }], media: [], images: [] };
+}
+
+// Chia `budget` cho các phần theo nhu cầu `wants` (water-filling): phần ít ảnh lấy đủ, phần dư dồn cho trang nhiều ảnh.
+export function shareBudget(wants, budget) {
+  const got = wants.map(() => 0);
+  let left = budget;
+  let open = wants.map((_, i) => i).filter((i) => wants[i] > 0);
+  while (open.length && left > 0) {
+    const share = Math.max(1, Math.floor(left / open.length));
+    const next = [];
+    for (const i of open) {
+      const give = Math.min(wants[i] - got[i], share, left);
+      got[i] += give;
+      left -= give;
+      if (got[i] < wants[i]) next.push(i);
+    }
+    open = next;
+  }
+  return got;
+}
+
+// Xen kẽ ảnh của các link (link 1 ảnh 1, link 2 ảnh 1, …): AI chỉ xem trước ~30 ảnh đầu → mỗi link đều có ảnh được xem.
+const interleave = (lists) => {
+  const out = [];
+  for (let k = 0; lists.some((l) => k < l.length); k += 1) for (const l of lists) if (k < l.length) out.push(l[k]);
+  return out;
+};
+
+/**
+ * Nhiều link (≤ MAX_SOURCE_LINKS): đọc lần lượt từng link (1 link lỗi → báo rõ link nào, dừng — không âm thầm bỏ tư liệu), rồi
+ * tải ảnh trong các trang web: tổng ≤ MAX_LINK_IMAGES ảnh, chia công bằng giữa các trang, phần thiếu (trang ít ảnh đạt chuẩn)
+ * nhường trang khác ở lượt 2; cả lượt tải ảnh ≤ 90 giây.
+ */
+async function ingestLinks(links, { limits, googleApiKey, fetchImpl }) {
+  const parts = [];
+  for (const [i, link] of links.entries()) {
+    try {
+      parts.push(await fetchDocument(assertPublicUrl(String(link).trim()).toString(), limits, googleApiKey, fetchImpl));
+    } catch (err) {
+      if (!(links.length > 1 && err instanceof HttpError)) throw err;
+      const host = URL.canParse(link) ? ` (${new URL(link).hostname})` : '';
+      throw new HttpError(err.status, err.code, `Link ${i + 1}${host}: ${err.message}`);
+    }
+  }
+  const pages = parts.filter((p) => p.web?.candidates.length);
+  const budget = Math.min(limits.maxLinkImages ?? 24, limits.maxImagesPerDeck ?? 60);
+  if (pages.length && budget > 0) {
+    const deadline = Date.now() + 90000;
+    const maxBytes = Math.min(limits.maxImageUploadMb ?? 15, 15) * 1048576;
+    const state = pages.map(() => ({ images: [], next: 0 }));
+    let quotas = shareBudget(pages.map((p) => p.web.candidates.length), budget);
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (const [k, p] of pages.entries()) {
+        const s = state[k];
+        if (quotas[k] <= s.images.length || s.next >= p.web.candidates.length) continue;
+        const got = await fetchImages(p.web.candidates, { fetch: fetchImpl, referer: p.web.pageUrl, max: quotas[k] - s.images.length, start: s.next, maxBytes, deadline });
+        s.images.push(...got.images);
+        s.next = got.next;
+      }
+      // Lượt 2: hạn mức còn dư (trang thiếu ảnh đạt chuẩn) chia cho các trang còn ứng viên chưa thử.
+      const spare = budget - state.reduce((n, s) => n + s.images.length, 0);
+      if (spare <= 0) break;
+      const extra = shareBudget(pages.map((p, k) => p.web.candidates.length - state[k].next), spare);
+      quotas = state.map((s, k) => s.images.length + extra[k]);
+    }
+    pages.forEach((p, k) => {
+      p.images = state[k].images.map((im) => ({ name: im.name, hint: webImageHint(p.web.title, im), buffer: im.buffer }));
+    });
+  }
+  const out = EMPTY();
+  for (const p of parts) {
+    out.pieces.push(...p.pieces);
+    out.media.push(...p.media);
+    out.docs.push(...(p.docs || []));
+  }
+  out.images = interleave(parts.map((p) => p.images));
+  return out;
 }
 
 /**

@@ -27,7 +27,7 @@ export function presentationRoutes({ service, templates, sharing, publications, 
     ...UTF8_NAMES,
     // Đếm byte thực nhận của CẢ request (tư liệu + media + ảnh bìa): trần = tổng tệp + phần dư cho ảnh bìa video.
     storage: cappedDiskStorage({ destination: config.storage.uploadDir, maxBytes: maxSourceBytes + 20 * 1048576, message: `Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB` }),
-    limits: { fileSize: maxSourceBytes, files: config.limits.maxUploadFiles + config.limits.maxCreateMedia + config.limits.maxVideosPerDeck, fields: 20, fieldSize: config.limits.maxTextChars * 4 },
+    limits: { fileSize: maxSourceBytes, files: config.limits.maxUploadFiles + config.limits.maxCreateMedia + config.limits.maxVideosPerDeck, fields: 20 + config.limits.maxSourceLinks, fieldSize: config.limits.maxTextChars * 4 },
   }).fields([
     { name: 'files', maxCount: config.limits.maxUploadFiles },
     { name: 'file', maxCount: 1 },
@@ -78,7 +78,7 @@ export function presentationRoutes({ service, templates, sharing, publications, 
   });
 
   r.post('/', auth, limits.generate, capSourceBody, upload, async (req, res) => {
-    const body = pick(req.body, ['url', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title', 'aiImages']);
+    const body = pick(req.body, ['url', 'urls', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title', 'aiImages']);
     // 'file' (1 tệp) giữ cho client cũ; giao diện mới gửi 'files' (nhiều tệp).
     const files = [...(req.files?.files || []), ...(req.files?.file || [])];
     const result = await service.create(req.user, { ...body, files, media: req.files?.media || [], posters: req.files?.posters || [] }, req.ip);

@@ -1,7 +1,9 @@
 // Băm/so mật khẩu bcrypt trên nhóm worker_threads cố định (không thêm thư viện, định dạng hash $2a$/$2b$ giữ nguyên).
 // Lý do: bcryptjs thuần JS — đo trong container 12 vòng ≈ 210 ms/lần; 8 lần đăng nhập cùng lúc làm luồng chính đứng ~0,8 giây,
 // mọi request khác (mở bài, lưu…) chờ theo. Worker chạy song song trên nhiều nhân, luồng chính không bị chặn.
-// Worker bị unref: không giữ tiến trình sống khi tắt; worker chết giữa chừng → việc đang làm báo lỗi, worker mới thay thế.
+// Worker chỉ ref khi đang làm việc: rảnh thì không giữ tiến trình sống (script CLI không gọi close() vẫn tự thoát), đang băm thì
+// tiến trình chờ xong. Gắn listener 'message' tự ref lại worker → unref SAU khi gắn listener. Worker chết giữa chừng → việc đang làm
+// báo lỗi, worker mới thay thế.
 import { Worker } from 'node:worker_threads';
 
 const WORKER_URL = new URL('./passwordWorker.js', import.meta.url);
@@ -16,17 +18,18 @@ export function createPasswordHasher({ threads = 2 } = {}) {
 
   function spawn() {
     const w = new Worker(WORKER_URL);
-    w.unref();
     const slot = { worker: w, busy: null };
     w.on('message', ({ id, result, error }) => {
       const job = pending.get(id);
       pending.delete(id);
       slot.busy = null;
+      w.unref();
       if (job) (error ? job.reject(new Error(error)) : job.resolve(result));
       pump();
     });
     w.on('error', (err) => fail(slot, err));
     w.on('exit', (code) => fail(slot, new Error(`password worker thoát (mã ${code})`)));
+    w.unref();
     return slot;
   }
 
@@ -53,6 +56,7 @@ export function createPasswordHasher({ threads = 2 } = {}) {
       const job = queue.shift();
       slot.busy = job.msg.id;
       pending.set(job.msg.id, job);
+      slot.worker.ref();
       slot.worker.postMessage(job.msg);
     }
   }

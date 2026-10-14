@@ -118,6 +118,9 @@ export function loadConfig() {
       maxImageUploadMb: int('MAX_IMAGE_UPLOAD_MB', 15, { min: 1, max: 50 }),
       maxTextChars: int('MAX_TEXT_CHARS', 200000, { min: 1000, max: 2000000 }),
       maxImagesPerDeck: int('MAX_IMAGES_PER_DECK', 60, { min: 0, max: 300 }),
+      // Nguồn = đường link: số link tối đa mỗi lần tạo; tổng ảnh lấy từ các trang web (chia đều giữa các link; 0 = không lấy ảnh).
+      maxSourceLinks: int('MAX_SOURCE_LINKS', 5, { min: 1, max: 10 }),
+      maxLinkImages: int('MAX_LINK_IMAGES', 24, { min: 0, max: 60 }),
       // Video tải lên gắn vào slide (mỗi tệp) và số video tối đa/bài.
       maxVideoMb: int('MAX_VIDEO_MB', 150, { min: 1, max: 2000 }),
       maxVideosPerDeck: int('MAX_VIDEOS_PER_DECK', 10, { min: 0, max: 50 }),

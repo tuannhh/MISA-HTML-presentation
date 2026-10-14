@@ -41,6 +41,8 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `MAX_SOURCE_CHARS` | | 400000 | Tổng ký tự tư liệu (văn bản + bản chuyển thể) gửi bước dựng bài |
 | `MAX_TEXT_CHARS` | | 200000 | |
 | `MAX_IMAGES_PER_DECK` | | 60 | Ảnh rút từ tài liệu nguồn |
+| `MAX_SOURCE_LINKS` | | 5 | Số đường link tối đa mỗi lần tạo bài (1–10) |
+| `MAX_LINK_IMAGES` | | 24 | Tổng ảnh lấy từ các trang web nguồn (chia đều giữa các link, ≤ `MAX_IMAGES_PER_DECK`); `0` = chỉ lấy chữ (`05` §20) |
 | `MAX_VIDEO_MB` / `MAX_VIDEOS_PER_DECK` | | 150 / 10 | Video tải lên chèn vào slide (MP4/MOV/WebM) — dung lượng 1 tệp / số video mỗi bài |
 | `MAX_CREATE_MEDIA` | | 20 | Số ảnh/video gửi kèm tối đa khi tạo bài (luôn được đưa vào bài) |
 | `PDF_UI_SHOTS` | | true | Nhận diện + cắt **sơ đồ** và **ảnh giao diện phần mềm** từ tư liệu nguồn để đưa vào bài (tên biến giữ từ bản cũ) |

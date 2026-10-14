@@ -42,3 +42,27 @@ test('close(): việc đang chờ và việc mới bị từ chối, không treo
   await h.close();
   await assert.rejects(h.hash('MatKhau123', 4), /đã đóng/);
 });
+
+test('script CLI không gọi close(): chờ băm xong rồi tự thoát (worker rảnh không giữ tiến trình — create-admin từng treo)', async () => {
+  const { execFile } = await import('node:child_process');
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  // Tệp .mjs tạm (không dùng `-e --input-type`: worker kế thừa execArgv và từ chối cờ đó).
+  const dir = mkdtempSync(join(tmpdir(), 'hasher-cli-'));
+  const file = join(dir, 'cli.mjs');
+  const url = new URL('../../src/lib/passwordHasher.js', import.meta.url).href;
+  writeFileSync(file, `import { createPasswordHasher } from ${JSON.stringify(url)};
+const h = createPasswordHasher({ threads: 1 });
+console.log(await h.hash('MatKhau123', 4));
+`);
+  try {
+    const { err, stdout } = await new Promise((resolve) => {
+      execFile(process.execPath, [file], { timeout: 15000 }, (e, out) => resolve({ err: e, stdout: out }));
+    });
+    assert.equal(err, null, `tiến trình không tự thoát hoặc lỗi: ${err?.killed ? 'treo quá 15 giây' : err?.message}`);
+    assert.match(stdout, /^\$2[ab]\$04\$/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -298,8 +298,32 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - **node:test chạy song song các hook `before` gốc** trong 1 tệp → tách "dựng DB" và "dựng app" thành 2 hook thì app có thể lên trước DB. Dùng `useHttpApp` (`test/integration/helpers/httpApp.mjs`): 1 hook duy nhất.
 - **Chromium mồ côi giữ tiến trình**: việc nền (thumbnail sau khi dựng) gọi `browser.getBrowser()` SAU `close()` → mở Chromium mới không ai đóng, test treo vô hạn (DB đã xoá, tiến trình không thoát). `browserService` có cờ `closed`: sau close → 503 `RENDER_UNAVAILABLE`, không mở lại.
 - **Hàng chụp ảnh bìa không trần (lộ khi đo tải)**: mỗi lần lưu → 1 lượt `browser.screenshotSlides` với HTML nhúng phông dựng SẴN trước khi chờ. 500 người lưu ~4 lần/giây > sức chụp ~2,4 ảnh/giây → hàng nghìn lượt chờ, RAM 0,4 → 2,8 GB, xuất PDF (cùng semaphore trình duyệt, FIFO) chờ > 180 giây, app vẫn 200% CPU 20 phút sau khi hết tải. Việc nền phải gộp theo khoá + chạy lần lượt + dựng dữ liệu nặng khi tới lượt (`coalescingQueue`); việc người dùng chờ phải có trần hàng.
-- **bcryptjs (JS thuần) chặn luồng chính**: 12 vòng ≈ 210 ms/lần trong container; 8 lần đăng nhập cùng lúc → luồng chính đứng ~0,8 s, mọi request khác chờ. Băm/so chạy trên worker_threads (`src/lib/passwordHasher.js`, `PASSWORD_HASH_THREADS`); định dạng hash không đổi. Test hoặc script dựng `createAuthService` không truyền `hasher` → tự tạo pool (worker `unref`, không giữ tiến trình).
+- **bcryptjs (JS thuần) chặn luồng chính**: 12 vòng ≈ 210 ms/lần trong container; 8 lần đăng nhập cùng lúc → luồng chính đứng ~0,8 s, mọi request khác chờ. Băm/so chạy trên worker_threads (`src/lib/passwordHasher.js`, `PASSWORD_HASH_THREADS`); định dạng hash không đổi. Test hoặc script dựng `createAuthService` không truyền `hasher` → tự tạo pool. **Bẫy `unref`** (2026-10-14): gọi `worker.unref()` rồi mới `worker.on('message')` → gắn listener tự ref lại worker, tiến trình không bao giờ thoát (`create-admin.js` treo → smoke `SMOKE_BOOTSTRAP=1` kẹt vô hạn); unref sau khi gắn listener mà không ref lúc làm việc → tiến trình thoát trước khi nhận kết quả. Đúng: gắn listener → `unref()`; `ref()` khi giao việc, `unref()` khi xong (test `password-hasher.test.js` chạy tiến trình con không gọi `close()`).
 - **`.env` của Docker có `CHROME_PATH=/usr/bin/chromium`** — chạy test trên Windows mà dùng nguyên cấu hình → PDF lỗi. Harness tích hợp tự lùi về dò Chrome/Edge khi đường dẫn không tồn tại; server trả 503 `RENDER_UNAVAILABLE` (không còn 500).
 - **Git Bash đổi đường dẫn** dạng `/data/...` trong tham số `docker exec` thành `C:/Program Files/Git/data/...` → script `scripts/ops/*.sh` đặt `MSYS_NO_PATHCONV=1`.
 - **Compose gốc cứng `image: misa-presentation:latest`**: dựng stack đo tải/thử nghiệm bằng `docker compose build` sẽ GHI ĐÈ image đang chạy production local. Stack đo tải dùng override `image: misa-presentation:loadtest` + `-p mp-load` + cổng riêng (8093; 8091 đã bị chiếm trên máy dev).
 - `express-session` với `cookie.secure=true` **không gửi cookie** khi request đến bằng http thường (kể cả sau proxy mà thiếu `X-Forwarded-Proto` / `TRUST_PROXY` sai) → đăng nhập "thành công" nhưng không có phiên. `TRUST_PROXY` = đúng số lớp proxy (cổng vào TLS → nginx → app = 2).
+
+## Nguồn link + ảnh trong trang web (2026-10-14)
+
+- **Ảnh lazy-load:** `src` của ảnh trong bài thường là GIF 1×1 base64 (vnexpress, WordPress lazy) — ảnh thật ở `data-src` / `data-srcset` /
+  `data-lazy-src` hoặc trong `<noscript>`. `bestSrc` ưu tiên ảnh lớn nhất của các thuộc tính srcset, rồi `data-*`, `src` cuối; bỏ `data:`.
+  Đừng bỏ `<noscript>` khi tìm ảnh (khác `htmlToText`).
+- **`<picture>`:** `<source data-srcset>` đứng TRƯỚC `<img alt>` của cùng ảnh → chống trùng giữ mục đầu nên phải **bổ sung** alt/chú thích từ
+  mục sau (`findPageImages.add`), nếu không ảnh mất mô tả.
+- **Cùng ảnh nhiều cỡ:** `?w=1200&h=0` (CDN báo) và hậu tố WordPress `-300x200.jpg` → `imageKey` bỏ query khi đường dẫn có đuôi ảnh + bỏ hậu tố
+  cỡ; ảnh sinh theo tham số (`/img.php?id=1`) giữ query.
+- **`width="100%"`:** `parseInt` = 100 → bị coi là ảnh nhỏ < 120px. Chỉ tính `width/height` khi là số thuần.
+- **Alt dạng mã tệp** ("wm1-wm1-1791946565839-…") không mang nghĩa → bỏ (giữ alt có khoảng trắng / chữ tiếng Việt).
+- **Facebook:** không đăng nhập thì thân trang là khung đăng nhập — `htmlToText` cho chữ rác; chỉ dùng thẻ `og:` (UA mặc định của safeFetch vẫn
+  nhận được og). `og:image` của **trang** là ảnh đại diện (logo) → AI xếp `logo`, không gắn; của **bài đăng** là ảnh bài.
+- **Băng rôn có mã QR** (ảnh trang web hay gặp): AI từng xếp `qr` → gắn làm QR của trang Liên hệ. Đã siết prompt (`qr` = mã QR chiếm gần hết
+  ảnh) + chốt chặn tỷ lệ cạnh ≤ 1,6 trong `generateOutline`.
+- **Đường dẫn tương đối** sau chuyển hướng (http→https, rút gọn link, `facebook.com/share/…`) phải tính theo `res.finalUrl`, không theo URL gốc.
+- **AI chỉ xem trước ~30 ảnh đầu** (`MODEL_IMAGE_PREVIEWS`): ghép ảnh nhiều link nối đuôi thì link sau (nhất là sau 1 Google Slides nhiều ảnh)
+  không được xem → `ingestLinks` xen kẽ ảnh giữa các link.
+- **multer + trường lặp:** `fd.append('urls', …)` nhiều lần → `req.body.urls` là mảng, **1 lần → chuỗi**; precheck nhận cả hai. Trần
+  `limits.fields` của multer = 20 + `MAX_SOURCE_LINKS` (đếm cả các trường chữ khác).
+- **Thử bằng trang thật** (`tmp/try-links.mjs` gọi `ingestSource` không qua AI) trước khi tốn lượt Gemini: thấy ngay ảnh nào được chọn, mô tả gửi
+  AI và thời gian tải.
+
