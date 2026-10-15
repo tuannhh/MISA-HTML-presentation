@@ -101,7 +101,8 @@ Chỉ container **`app`** gọi ra Internet. MySQL và Nginx **không** cần ra
 
 | Tên miền | Cổng | Dùng cho | Biến cấu hình |
 |---|---|---|---|
-| `generativelanguage.googleapis.com` | 443 | Gemini AI: lập dàn ý, dựng bài, đọc PDF/ghi âm (Files API `/upload/v1beta/files`), tạo ảnh minh hoạ AI, khoanh vùng ảnh giao diện. **Không mở thì ứng dụng không tạo được bài.** | `GEMINI_API_KEY`, `GEMINI_BASE_URL` (mặc định `https://generativelanguage.googleapis.com/v1beta` — đổi được nếu MISA có cổng AI trung gian) |
+| `oauth2.googleapis.com`, `aiplatform.googleapis.com` (+ `<region>-aiplatform.googleapis.com` nếu chọn region) | 443 | **Từ 15/10/2026**: Gemini qua Agent Platform — xin token từ file khoá + gọi model (`DEVOPS-AGENT-PLATFORM.md` §5) |
+| `generativelanguage.googleapis.com` | 443 | (Chỉ khi rollback `GEMINI_PROVIDER=developer-api`) Gemini AI: lập dàn ý, dựng bài, đọc PDF/ghi âm (Files API `/upload/v1beta/files`), tạo ảnh minh hoạ AI, khoanh vùng ảnh giao diện. **Không mở thì ứng dụng không tạo được bài.** | `GEMINI_API_KEY`, `GEMINI_BASE_URL` (mặc định `https://generativelanguage.googleapis.com/v1beta` — đổi được nếu MISA có cổng AI trung gian) |
 
 ### 2.2. Theo tính năng (không mở → riêng tính năng đó báo lỗi, phần còn lại vẫn chạy)
 
@@ -163,7 +164,7 @@ Không muốn mở các tên miền này trên máy chủ: build image ở máy 
 - [ ] `.env`: `IP_ALLOWLIST` = dải IP văn phòng + VPN MISA.
 - [ ] `.env`: `TRUST_PROXY` đúng số lớp proxy (mục 1.2); `APP_BASE_URL` = địa chỉ người dùng truy cập; HTTPS thì `SESSION_COOKIE_SECURE=true`.
 - [ ] Chỉ mở cổng Nginx/LB ra mạng người dùng; cổng app và MySQL không mở.
-- [ ] Firewall chiều ra cho container `app`: `generativelanguage.googleapis.com:443` (bắt buộc) + các tên miền mục 2.2 theo tính năng muốn dùng.
+- [ ] Firewall chiều ra cho container `app`: `oauth2.googleapis.com:443` + `aiplatform.googleapis.com:443` (bắt buộc; `generativelanguage.googleapis.com:443` nếu rollback developer-api) + các tên miền mục 2.2 theo tính năng muốn dùng.
 - [ ] DNS công cộng phân giải được từ máy chủ.
 - [ ] Chạy các lệnh kiểm tra mục 1.4 từ 1 máy ngoài danh sách và 1 máy trong mạng MISA.
 - [ ] Giám sát: `/api/health` (sống), `/api/health/ready` (DB sẵn sàng); theo dõi log `ip_blocked`, `ip_allowlist_empty`.

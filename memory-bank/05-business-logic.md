@@ -103,7 +103,7 @@ POST /api/presentations (multipart)
         ước lượng token (PDF ~560/trang, ghi âm ~32/giây) ≤ 120k và không PDF quá lớn → TRỰC TIẾP: đính kèm vào lượt dựng bài
         ngược lại → HAI BƯỚC: mỗi ghi âm / mỗi cụm PDF (≤100 trang, ≤45MB, cắt bằng pdf-lib) được Gemini chuyển thành
           văn bản trước (ghi âm: bản chuyển thể có người nói/số liệu/trích dẫn; PDF: chép markdown + OCR bản scan), song song 3
-        vận chuyển: inline base64 khi nhỏ (tổng ≤ 8MB/lượt trực tiếp, ≤ 14MB/lượt chuyển văn bản), lớn hơn → Gemini Files API
+        vận chuyển: inline base64 khi nhỏ (tổng ≤ 8MB/lượt trực tiếp, ≤ 14MB/lượt chuyển văn bản), lớn hơn → Gemini Files API (developer-api) | Agent Platform không có Files API: luôn inline, mỗi request ≤ `AGENT_INLINE_MAX` 48 MB — tổng tư liệu vượt → 2 bước; WAV lớn cắt đoạn (`wavSegments`), ghi âm nén > 48 MB → 422 `AUDIO_TOO_LARGE`, cụm PDF không tách được > 48 MB → 422 `PDF_TOO_LARGE`
           (resumable upload, chờ ACTIVE, luôn DELETE sau khi dùng)
       fitPieces: ghép tư liệu văn bản ≤ MAX_SOURCE_CHARS, chia công bằng giữa các tệp (tệp dài không "nuốt" tệp ngắn)
       geminiService.generateOutline: prompt tiếng Việt + responseSchema + ảnh xem trước 1280px (≤30 ảnh, ≤6MB) để AI đọc chữ

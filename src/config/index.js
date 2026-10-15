@@ -2,6 +2,7 @@
 // không tự đọc process.env. Fail-fast khi thiếu/sai cấu hình nhạy cảm ở production.
 import path from 'node:path';
 import { parseIpAllowlist } from '../lib/ipAllowlist.js';
+import { loadServiceAccount } from '../lib/googleAuth.js';
 
 const DEV_SESSION_SECRET = 'dev-only-session-secret-change-me';
 const RATIOS = ['16:9', '4:3', '2:1', '3:1'];
@@ -71,13 +72,19 @@ export function loadConfig() {
       connectionLimit: int('DB_POOL_SIZE', 10, { min: 1, max: 100 }),
     }),
     gemini: Object.freeze({
+      // Nền tảng gọi Gemini: 'agent-platform' = Gemini Enterprise Agent Platform (Vertex AI cũ) bằng file khoá service account;
+      // 'developer-api' = Gemini Developer API bằng GEMINI_API_KEY (giữ để rollback, không cần build lại).
+      provider: str('GEMINI_PROVIDER', 'developer-api'),
+      credentialsFile: str('GOOGLE_APPLICATION_CREDENTIALS'),
+      project: str('GOOGLE_CLOUD_PROJECT'),
+      location: str('GOOGLE_CLOUD_LOCATION', 'global'),
       apiKey: str('GEMINI_API_KEY'),
       model: str('GEMINI_MODEL', 'gemini-3.8-flash'),
       timeoutMs: int('GEMINI_TIMEOUT_MS', 240000, { min: 10000, max: 900000 }),
       // Chuyển thể ghi âm dài / đọc PDF lớn chậm hơn nhiều so với dựng bài.
       mediaTimeoutMs: int('GEMINI_MEDIA_TIMEOUT_MS', 900000, { min: 60000, max: 1800000 }),
       baseUrl: str('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
-      // Tạo ảnh minh hoạ (Nano Banana 2 Lite) — ảnh 1K theo câu lệnh; dùng chung GEMINI_API_KEY.
+      // Tạo ảnh minh hoạ (Nano Banana 2 Lite) — ảnh 1K theo câu lệnh; dùng chung xác thực của GEMINI_PROVIDER.
       imageModel: str('GEMINI_IMAGE_MODEL', 'gemini-3.1-flash-lite-image'),
       imageSize: str('GEMINI_IMAGE_SIZE', '1K'),
       imageTimeoutMs: int('GEMINI_IMAGE_TIMEOUT_MS', 90000, { min: 10000, max: 300000 }),
@@ -158,6 +165,28 @@ export function loadConfig() {
   return config;
 }
 
+// Agent Platform: thiếu biến / file khoá không đọc được / không phải service account / project lệch → dừng khởi động (fail-fast),
+// không có trạng thái "chạy nhưng AI lỗi âm thầm". Developer API: bắt buộc GEMINI_API_KEY (trừ môi trường test).
+function geminiErrors(g, isTest) {
+  // Test không gọi Google thật (AI giả/stub) — không đòi khoá hay file khoá.
+  if (isTest) return [];
+  if (g.provider === 'developer-api') return !g.apiKey ? ['Thiếu GEMINI_API_KEY (GEMINI_PROVIDER=developer-api)'] : [];
+  if (g.provider !== 'agent-platform') return [`GEMINI_PROVIDER không hợp lệ: "${g.provider}" (agent-platform | developer-api)`];
+  const errors = [];
+  if (!g.credentialsFile) errors.push('Thiếu GOOGLE_APPLICATION_CREDENTIALS (đường dẫn file khoá service account)');
+  if (!g.project) errors.push('Thiếu GOOGLE_CLOUD_PROJECT');
+  if (!/^[a-z0-9-]{1,63}$/.test(g.location)) errors.push(`GOOGLE_CLOUD_LOCATION không hợp lệ: "${g.location}"`);
+  if (g.credentialsFile) {
+    try {
+      const sa = loadServiceAccount(g.credentialsFile);
+      if (g.project && sa.project_id !== g.project) errors.push(`File khoá thuộc project "${sa.project_id}", khác GOOGLE_CLOUD_PROJECT "${g.project}"`);
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+  return errors;
+}
+
 function validate(config) {
   const errors = [];
   if (!config.session.secret) errors.push('Thiếu SESSION_SECRET');
@@ -166,7 +195,7 @@ function validate(config) {
   }
   if (config.isProd && config.session.secret.length < 32) errors.push('SESSION_SECRET phải dài tối thiểu 32 ký tự');
   if (config.isProd && !config.db.password) errors.push('Thiếu DB_PASSWORD');
-  if (!config.isTest && !config.gemini.apiKey) errors.push('Thiếu GEMINI_API_KEY');
+  errors.push(...geminiErrors(config.gemini, config.isTest));
   // Production: địa chỉ truy cập và cờ cookie phải khớp — https mà cookie không secure thì phiên lộ qua HTTP; http mà cookie secure thì không đăng nhập được.
   if (config.isProd) {
     const https = /^https:/i.test(config.appBaseUrl);

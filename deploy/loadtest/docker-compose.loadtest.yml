@@ -9,6 +9,7 @@ services:
   app:
     image: misa-presentation:loadtest
     environment:
+      GEMINI_PROVIDER: developer-api
       GEMINI_API_KEY: fake-load-key
       GEMINI_BASE_URL: http://fakeai:4010/v1beta
       PIXABAY_API_KEY: ""

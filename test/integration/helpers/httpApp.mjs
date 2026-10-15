@@ -72,7 +72,7 @@ export async function startHttpApp(config, db, { aiDelayMs = 0, generationConcur
   const cfg = {
     ...config,
     isTest: true,
-    gemini: { ...config.gemini, apiKey: 'fake-key', baseUrl: ai.baseUrl, timeoutMs: 15000, mediaTimeoutMs: 15000, imageTimeoutMs: 15000 },
+    gemini: { ...config.gemini, provider: 'developer-api', apiKey: 'fake-key', baseUrl: ai.baseUrl, timeoutMs: 15000, mediaTimeoutMs: 15000, imageTimeoutMs: 15000 },
     aiImages: { ...config.aiImages, enabled: true, perDeck: 1 },
     auth: { ...config.auth, bcryptRounds: 4 },
     publish: { baseUrl: PUBLISH_BASE, host: new URL(PUBLISH_BASE).hostname },

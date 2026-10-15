@@ -8,7 +8,7 @@ Trình duyệt (Vue 3 SPA, MDS 2.0)
    ▼
 Node 24 + Express 5  ──► MySQL 8.4 (users, presentations, assets, sessions, audit_logs)
    │   ├─ ingestService  : đọc nhiều tệp pptx/docx/pdf/ảnh/ghi âm/text/URL (chống SSRF, zip bomb)
-   │   ├─ mediaService   : PDF/ghi âm → Gemini (trực tiếp hoặc 2 bước; Files API; cắt PDF bằng pdf-lib)
+   │   ├─ mediaService   : PDF/ghi âm → Gemini (trực tiếp hoặc 2 bước; Files API ở developer-api, inline ≤ 48 MB/request ở agent-platform; cắt PDF bằng pdf-lib, cắt WAV theo thời lượng)
    │   ├─ geminiService  : gọi Gemini generateContent (JSON schema) → dàn ý (bước 1) / bài trình bày theo dàn ý (bước 2)
    │   ├─ outlineService : chuẩn hoá dàn ý, ghép kết quả AI với dàn ý đã duyệt, gắn media (hàm thuần)
    │   ├─ specService    : chuẩn hoá spec + thiết kế (allowlist + giới hạn độ dài)

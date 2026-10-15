@@ -1,0 +1,14 @@
+# Gọi Gemini qua Gemini Enterprise Agent Platform (tên cũ Vertex AI) bằng file khoá service account — docs/DEVOPS-AGENT-PLATFORM.md.
+# File khoá nằm NGOÀI repo/image, mount chỉ đọc vào container (user `node` phải đọc được):
+#   GCP_KEY_FILE=/opt/misa-presentation/secrets/gcp-agent-platform.json GOOGLE_CLOUD_PROJECT=<project> \
+#   docker compose -f docker-compose.yml -f deploy/agent-platform/docker-compose.agent-platform.yml up -d
+# Rollback về Gemini Developer API: chạy lại KHÔNG có tệp này (+ GEMINI_API_KEY trong .env) — không cần build lại.
+services:
+  app:
+    environment:
+      GEMINI_PROVIDER: agent-platform
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/gcp-agent-platform.json
+      GOOGLE_CLOUD_PROJECT: ${GOOGLE_CLOUD_PROJECT:?Đặt GOOGLE_CLOUD_PROJECT (project chứa service account)}
+      GOOGLE_CLOUD_LOCATION: ${GOOGLE_CLOUD_LOCATION:-global}
+    volumes:
+      - ${GCP_KEY_FILE:?Đặt GCP_KEY_FILE = đường dẫn file khoá trên máy chủ}:/run/secrets/gcp-agent-platform.json:ro

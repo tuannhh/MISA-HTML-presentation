@@ -1,5 +1,25 @@
 # 10 — Lịch sử phát triển
 
+## 2026-10-15 — Gemini chuyển sang Gemini Enterprise Agent Platform (file khoá service account)
+
+- Yêu cầu: bỏ Gemini API key, gọi Gemini qua Agent Platform (tên cũ Vertex AI) bằng file JSON service account trong kho khoá MISA Image editor;
+  test xem chuyển đổi có vấn đề gì. Đối chiếu GitHub trước khi làm: local `8d9ff70` = `origin/main`.
+- Mới `src/lib/googleAuth.js` (JWT RS256 bằng `node:crypto` → token OAuth, cache + làm mới sớm 5 phút, 1 lượt xin khi gọi đồng thời, không log khoá/token).
+  `config`: `GEMINI_PROVIDER` (`agent-platform` | `developer-api` = rollback), `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLOUD_PROJECT`,
+  `GOOGLE_CLOUD_LOCATION` (mặc định `global`); fail-fast khi thiếu biến, file khoá hỏng, `project_id` lệch. `geminiService`: URL
+  `…/projects/{p}/locations/{loc}/publishers/google/models/{m}:generateContent` + Bearer, 401 → làm mới token, log `gemini_retry`.
+  `mediaService`: không Files API → inline ≤ 48 MB/request, cắt WAV theo thời lượng (`wavSegments`), `AUDIO_TOO_LARGE` / `PDF_TOO_LARGE`.
+- Triển khai: `deploy/agent-platform/docker-compose.agent-platform.yml` (mount khoá chỉ đọc vào `/run/secrets/`), `docs/DEVOPS-AGENT-PLATFORM.md`,
+  `docs/ROLLBACK-GEMINI-API.md` (về Developer API: đổi cấu hình hoặc về image cũ — phải bỏ tệp override vì `environment:` thắng `.env`),
+  `.env.example`, README, RUNBOOK, DEVOPS-NETWORK, memory-bank `02`, `05`, `07`, `08`, `09`. `.env` dev đã thêm cấu hình agent-platform +
+  `COMPOSE_FILE` kèm tệp override (khoá chép về `C:/Users/A04-0035/.secrets/misa-presentation/`).
+- Kiểm chứng: spike token + văn bản/JSON schema/âm thanh/ảnh ở `global` đều 200; PDF inline 150 MB qua. Unit **257/257** (mới
+  `agent-platform.test.js` 7 test), tích hợp HTTP (MySQL tạm, đã xoá) **44/44**. Docker riêng `mp-ap` (cổng 8094, không có `GEMINI_API_KEY`,
+  đã xoá): smoke **TẤT CẢ ĐẠT** (dàn ý 17 s, dựng bài 30 s, 2 ảnh AI ~3,5 s, xuất HTML/PDF); tư liệu: PDF + WAV trực tiếp 45 s, PDF 60 MB hai bước
+  21 s, WAV 60 MB cắt 2 đoạn + PDF 67 s. So với Developer API: tốc độ tương đương. Lần smoke đầu dựng bài 507 s (2 timeout thử lại âm thầm)
+  → thêm log `gemini_retry`, chạy lại bình thường.
+- Nhánh `feature/gemini-agent-platform` (chưa gộp `main`). Chưa làm: stack dữ liệu Docker 8088 vẫn chạy image cũ (Developer API) — chờ chủ dự án đồng ý dựng lại với tệp override.
+
 ## 2026-10-14 — Hoàn tác / Làm lại không giới hạn (Ctrl/⌘+Z, Ctrl/⌘+Shift+Z); tải PDF/HTML chỉ ra 1 tệp (IDM)
 
 - Yêu cầu: (1) Ctrl+Z hoàn tác không giới hạn, Ctrl+Shift+Z (⌘⇧Z trên Mac) làm lại bước liền kề; (2) máy có IDM bấm tải PDF → vừa IDM tải

@@ -81,6 +81,7 @@
 ## Bí mật
 
 - `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `SESSION_SECRET`, mật khẩu DB chỉ nằm trong `.env` (gitignore). `.env.example` chỉ có placeholder.
+- **File khoá service account Agent Platform** (chứa private key): ngoài repo/image/volume dữ liệu, mount chỉ đọc vào `/run/secrets/`, chỉ user `node` đọc được (`docs/DEVOPS-AGENT-PLATFORM.md` §3). App chỉ đọc file lúc khởi động + tạo service; `googleAuth.js` không log khoá/token, lỗi chỉ ghi mã (`invalid_grant`…). Token Bearer gửi qua header, không qua URL. Service account chỉ có `roles/aiplatform.user`.
 - Gọi Gemini bằng header `x-goog-api-key` (không đặt khoá trên URL → không lọt vào log proxy).
 - Log `config_loaded` che secret `***`; log HTTP không ghi query string (chứa chữ ký ảnh); audit không ghi mật khẩu/token.
 - Lỗi 500 trả thông điệp chung; stack trace chỉ có trong log server.

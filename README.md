@@ -13,10 +13,12 @@ Tài liệu đầy đủ: [`memory-bank/`](memory-bank/README.md).
 cp .env.example .env
 ```
 
-Điền trong `.env`: `SESSION_SECRET` (≥ 32 ký tự ngẫu nhiên), `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`, `GEMINI_API_KEY`, `APP_BASE_URL` (URL người dùng truy cập) và `APP_PORT` nếu cổng 8080 đã bận.
+Điền trong `.env`: `SESSION_SECRET` (≥ 32 ký tự ngẫu nhiên), `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`, Gemini (`GEMINI_PROVIDER=agent-platform` + `GCP_KEY_FILE`/`GOOGLE_CLOUD_PROJECT` — xem `docs/DEVOPS-AGENT-PLATFORM.md`; hoặc `GEMINI_API_KEY` với `developer-api`), `APP_BASE_URL` (URL người dùng truy cập) và `APP_PORT` nếu cổng 8080 đã bận.
 
 ```bash
-docker compose up -d --build
+# Gemini qua Agent Platform (mặc định từ 15/10/2026): kèm tệp override mount file khoá chỉ đọc
+docker compose -f docker-compose.yml -f deploy/agent-platform/docker-compose.agent-platform.yml up -d --build
+# Rollback về Gemini Developer API: docker compose -f docker-compose.yml up -d --build   (GEMINI_PROVIDER=developer-api + GEMINI_API_KEY, bỏ COMPOSE_FILE — docs/ROLLBACK-GEMINI-API.md)
 ```
 
 Tạo tài khoản quản trị đầu tiên (mật khẩu tạm in ra **một lần**, bắt buộc đổi khi đăng nhập):

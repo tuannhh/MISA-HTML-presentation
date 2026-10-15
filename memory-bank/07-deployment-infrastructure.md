@@ -22,9 +22,13 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `DB_HOST/PORT/NAME/USER/PASSWORD` | ✅ | | MySQL |
 | `MYSQL_ROOT_PASSWORD` | ✅ (compose) | | Root MySQL container |
 | `DB_POOL_SIZE` | | 10 | |
-| `GEMINI_API_KEY` | ✅ | | Khoá Gemini — **không bao giờ commit/log** |
+| `GEMINI_PROVIDER` | | `developer-api` | `agent-platform` (khuyến nghị từ 15/10/2026 — Gemini Enterprise Agent Platform, file khoá service account) hoặc `developer-api` (khoá API, rollback). Chi tiết `docs/DEVOPS-AGENT-PLATFORM.md`, rollback `docs/ROLLBACK-GEMINI-API.md` |
+| `GOOGLE_APPLICATION_CREDENTIALS` | ✅ khi agent-platform | | Đường dẫn file khoá service account (Docker: tệp override tự đặt `/run/secrets/gcp-agent-platform.json`). File khoá **không bao giờ commit/log/bake vào image** |
+| `GCP_KEY_FILE` | ✅ khi Docker + agent-platform | | Đường dẫn file khoá trên máy chủ, chỉ để compose mount (`deploy/agent-platform/docker-compose.agent-platform.yml`) |
+| `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION` | ✅ / | — / `global` | Project phải trùng `project_id` trong file khoá (lệch → không khởi động) |
+| `GEMINI_API_KEY` | ✅ khi developer-api | | Khoá Gemini Developer API — **không bao giờ commit/log** |
 | `GEMINI_MODEL` | | `gemini-3.8-flash` | |
-| `GEMINI_TIMEOUT_MS` / `GEMINI_BASE_URL` | | 240000 / `https://generativelanguage.googleapis.com/v1beta` | |
+| `GEMINI_TIMEOUT_MS` / `GEMINI_BASE_URL` | | 240000 / `https://generativelanguage.googleapis.com/v1beta` | `GEMINI_BASE_URL` chỉ dùng cho developer-api (test trỏ AI giả) |
 | `GEMINI_MEDIA_TIMEOUT_MS` | | 900000 | Lượt chuyển thể ghi âm dài / đọc PDF lớn, tải tệp lên Files API |
 | `GOOGLE_API_KEY` | | | Tuỳ chọn. Drive API v3: **link thư mục Google Drive** (bắt buộc — không có thì link thư mục báo 400) + dự phòng tải Google Docs/Drive. Dự án Google Cloud của khoá phải bật Google Drive API; mạng ra `www.googleapis.com:443` |
 | `GEMINI_IMAGE_MODEL` / `GEMINI_IMAGE_SIZE` / `GEMINI_IMAGE_TIMEOUT_MS` | | `gemini-3.1-flash-lite-image` / `1K` / 90000 | Model tạo ảnh (Nano Banana 2 Lite) |
@@ -62,7 +66,7 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 ## Môi trường phát triển (Windows/macOS/Linux)
 
 ```bash
-cp .env.example .env            # điền SESSION_SECRET, DB_PASSWORD, MYSQL_ROOT_PASSWORD, GEMINI_API_KEY
+cp .env.example .env            # điền SESSION_SECRET, DB_PASSWORD, MYSQL_ROOT_PASSWORD + Gemini (GOOGLE_APPLICATION_CREDENTIALS/GOOGLE_CLOUD_PROJECT hoặc GEMINI_API_KEY)
 # Với dev local: DB_HOST=127.0.0.1, DB_PORT=3307, NODE_ENV=development, STORAGE_DIR=./data/storage,
 # CHROME_PATH trỏ tới Chrome/Edge trên máy, APP_BASE_URL=http://localhost:5173
 npm install

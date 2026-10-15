@@ -43,7 +43,7 @@
 - Với item phức tạp như slide, Gemini từ chối schema có `maxItems` ≥ ~5 ("Request contains an invalid argument", không nói rõ lý do). Đã kiểm chứng: 3 qua, 5 trở lên lỗi. Số trang khống chế bằng prompt + `description` của mảng + `capSlides()` phía server. Unit test chặn việc thêm lại.
 
 ### Dữ liệu inline ~20 MB / request
-- Request `generateContent` có giới hạn tổng ~20 MB, base64 phình ~33%. Tệp lớn đi qua **Files API** (`mediaService`): upload resumable (`x-goog-upload-url`), chờ `state=ACTIVE`, dùng `fileData.fileUri`, **luôn DELETE** sau khi dùng (tệp tự hết hạn 48 giờ nếu sót). PDF tối đa ~50 MB/1000 trang mỗi tệp → cắt cụm bằng pdf-lib.
+- (Developer API) Request `generateContent` có giới hạn tổng ~20 MB, base64 phình ~33%. **Agent Platform** (từ 15/10/2026) không có Files API nhưng nhận inline lớn hơn nhiều — đo được PDF inline 150 MB; 300 MB thì tiến trình Node hết bộ nhớ khi dựng chuỗi JSON (base64 ~400 MB) trước khi tới Google → app giới hạn 48 MB/request và chia nhỏ. Tệp lớn đi qua **Files API** (`mediaService`): upload resumable (`x-goog-upload-url`), chờ `state=ACTIVE`, dùng `fileData.fileUri`, **luôn DELETE** sau khi dùng (tệp tự hết hạn 48 giờ nếu sót). PDF tối đa ~50 MB/1000 trang mỗi tệp → cắt cụm bằng pdf-lib.
 - Định dạng ghi âm đã thử với API thật (inline + Files API): mp3, m4a (`audio/mp4`), wav, ogg, webm, flac, aac, aiff.
 
 ### Logger che trường có chữ "key/token"
@@ -366,3 +366,19 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
   trước (engine `askHistory` gửi nốt nội dung + `blur`) thì slide mới hiện bước vừa hoàn tác; không thì chữ cũ trên DOM ghi đè lại bản nháp.
 - Test `useEditor` với máy chủ giả: dữ liệu mở bài phải là bản **đã chuẩn hoá** (`prepareSpecForSave`) như máy chủ thật — bản thô làm bước sau lưu
   khác ở mọi trang (chuẩn hoá) → chuyển nhầm về trang 1 khi hoàn tác.
+
+## Gemini qua Agent Platform (2026-10-15)
+
+- **Không có Files API** (`supportsFiles: false`): mọi tư liệu gửi inline, tối đa `AGENT_INLINE_MAX` = 48 MB/request (`mediaService`). WAV lớn
+  cắt theo thời lượng (`wavSegments`, đọc lười từng đoạn); ghi âm nén (MP3/M4A…) > 48 MB → 422 `AUDIO_TOO_LARGE`; 1 cụm PDF > 48 MB → `PDF_TOO_LARGE`.
+  Đừng nâng trần lên ~300 MB: Node hết bộ nhớ khi dựng chuỗi JSON base64 trước khi request rời máy.
+- **Thử lại im lặng làm "treo" 8 phút**: lần smoke đầu dựng bài mất 507 s = 2 lần timeout 240 s + 1 lần thành công 27 s, log không có gì. Nay mỗi
+  lần thử lại ghi `gemini_retry` (`provider`, `attempt`, `reason`, `ms`) — thấy bài chậm thì grep log này trước.
+- **Token**: 401 từ `aiplatform` → `invalidate()` rồi thử lại 1 lần; `invalid_grant` khi xin token = khoá bị thu hồi hoặc đồng hồ máy lệch.
+  Logger che mọi trường có chữ "token" → số token sử dụng hiện `***` (cố ý, không phải lỗi).
+- **File khoá trên ổ mạng (UNC `\storage\…`)**: Docker Desktop không bind-mount được, Git Bash còn đổi hỏng đường dẫn → chép về máy
+  (`C:/Users/<user>/.secrets/misa-presentation/`, ACL chỉ user hiện tại) rồi trỏ `GCP_KEY_FILE` vào đó. Container chạy user `node` (UID 1000) phải đọc được.
+- **`COMPOSE_FILE` trên Windows**: phân cách bằng `;` + `COMPOSE_PATH_SEPARATOR=;` (`.env` dev đã đặt). Trong Git Bash, MSYS tự đổi biến môi trường
+  có `;`/`:` thành đường dẫn POSIX → chạy `docker compose` trong `MSYS2_ENV_CONV_EXCL='*' MSYS_NO_PATHCONV=1 bash -c '…'` hoặc dùng PowerShell.
+- `GEMINI_PROVIDER=agent-platform` mà thiếu tệp override compose → container nhận đường dẫn Windows của `GOOGLE_APPLICATION_CREDENTIALS` trong `.env`
+  → fail-fast `ENOENT` (đúng thiết kế). Test tích hợp/đo tải ép `provider: 'developer-api'` để không cần file khoá.

@@ -8,7 +8,7 @@ Tài liệu liên quan: mạng/IP/domain công khai — [`DEVOPS-NETWORK.md`](DE
 ```
 Người dùng (mạng/VPN MISA) ─HTTPS─▶ Cổng vào MISA (TLS) ─▶ Nginx (deploy/nginx, profile proxy) ─▶ app:3000 ─▶ mysql:3306
 Internet ─HTTPS─▶ CDN ─▶ vhost công khai (ép Host)  ───────────────────────────────┘   (chỉ trang đã xuất bản — DEVOPS-NETWORK §6)
-app ─▶ Gemini API (generativelanguage.googleapis.com), Pixabay/Google (tuỳ tính năng) — DEVOPS-NETWORK §2
+app ─▶ Gemini qua Agent Platform (oauth2.googleapis.com + aiplatform.googleapis.com — `DEVOPS-AGENT-PLATFORM.md`; rollback: generativelanguage.googleapis.com — `ROLLBACK-GEMINI-API.md`), Pixabay/Google (tuỳ tính năng) — DEVOPS-NETWORK §2
 ```
 
 - Volume: `mysql-data` (DB), `app-data` → `/data/storage` (`private/` = asset, mẫu, bản xuất bản; `temp/`, `uploads/` = tạm).
@@ -24,7 +24,7 @@ app ─▶ Gemini API (generativelanguage.googleapis.com), Pixabay/Google (tuỳ
 | `SESSION_COOKIE_SECURE` | `true` | Cookie `mp.sid`: Secure + HttpOnly + SameSite=Lax |
 | `TRUST_PROXY` | số lớp proxy (cổng vào TLS → Nginx → app = **2**) | IP trong audit = IP người dùng; client giả `X-Forwarded-For` không có tác dụng |
 | Cổng app | **không** mở ra ngoài; chỉ Nginx | Gọi thẳng app bằng http → không cấp cookie phiên |
-| `GEMINI_API_KEY` | khoá dự án Gemini có hạn mức đủ (§7) | |
+| `GEMINI_PROVIDER` + file khoá | `agent-platform`, `GCP_KEY_FILE`, `GOOGLE_CLOUD_PROJECT` — chạy kèm `deploy/agent-platform/docker-compose.agent-platform.yml` (`DEVOPS-AGENT-PLATFORM.md`); quota project đủ (§7) | Thiếu/sai file khoá hoặc project lệch → app không khởi động |
 | `PUBLISH_BASE_URL` | domain công khai (trống = tắt Xuất bản) | DEVOPS-NETWORK §6.5 |
 | `PASSWORD_HASH_THREADS` | 2 (mặc định; ≤ số nhân CPU − 1) | Đăng nhập đồng loạt không làm chậm thao tác khác (LOAD-TEST §bcrypt) |
 | Giới hạn tài nguyên | đặt `mem_limit` cho app (khuyến nghị ≥ 4 GB, xem LOAD-TEST) và `shm_size: 512mb` (có sẵn) | `scripts/ops/check.sh` báo % RAM theo giới hạn |

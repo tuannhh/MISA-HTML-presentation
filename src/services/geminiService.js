@@ -1,11 +1,12 @@
 // Gọi Gemini (REST generateContent) để biến tài liệu nguồn thành đặc tả bài trình bày JSON theo responseSchema.
-// Khoá API chỉ gửi qua header x-goog-api-key (không đặt vào URL để không lọt vào log proxy).
+// Developer API: khoá chỉ gửi qua header x-goog-api-key; Agent Platform: token Bearer từ file khoá service account (không đặt vào URL để không lọt vào log proxy).
 import { AI_LAYOUTS as LAYOUTS, TONE_THEMES } from '../../shared/deck/render.js';
 import { THEME_PRESETS } from '../../shared/deck/palette.js';
 import { ICON_NAMES } from '../../shared/deck/icons.js';
 import { logger } from '../lib/logger.js';
 import { stripLinks } from '../../shared/deck/mdLinks.js';
 import { HttpError, unavailable } from '../lib/httpError.js';
+import { createServiceAccountTokens, loadServiceAccount } from '../lib/googleAuth.js';
 
 const S = (description) => ({ type: 'STRING', ...(description ? { description } : {}) });
 const ITEM = {
@@ -523,27 +524,61 @@ const EXTRACT_PROMPTS = {
 // Tỷ lệ khung ảnh model tạo ảnh hỗ trợ.
 export const IMAGE_ASPECTS = Object.freeze(['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9']);
 
-export function createGeminiService({ apiKey, model, baseUrl, timeoutMs, mediaTimeoutMs = timeoutMs, imageModel = 'gemini-3.1-flash-lite-image', imageSize = '1K', imageTimeoutMs = 90000 }) {
+/**
+ * Hai nền tảng, cùng định dạng request/response generateContent:
+ *  - provider 'agent-platform' (Gemini Enterprise Agent Platform, tên cũ Vertex AI): token OAuth từ file khoá service account,
+ *    URL `…/projects/<p>/locations/<loc>/publishers/google/models/<model>:generateContent`. KHÔNG có Files API → tệp luôn gửi inline
+ *    (`supportsFiles = false`, mediaService tự chia nhỏ — đo 15/10/2026: PDF inline 150 MB vẫn nhận).
+ *  - provider 'developer-api': khoá GEMINI_API_KEY qua header x-goog-api-key, có Files API cho tệp lớn.
+ * `agentBaseUrl` / `tokens` chỉ để test thay máy chủ Google.
+ */
+export function createGeminiService({ provider = 'developer-api', apiKey, model, baseUrl, timeoutMs, mediaTimeoutMs = timeoutMs, imageModel = 'gemini-3.1-flash-lite-image', imageSize = '1K', imageTimeoutMs = 90000, credentialsFile, project, location = 'global', agentBaseUrl, tokens }) {
+  const agent = provider === 'agent-platform';
+  const auth = agent ? tokens || createServiceAccountTokens(loadServiceAccount(credentialsFile)) : null;
+  const agentRoot = agentBaseUrl || `https://${location === 'global' ? '' : `${location}-`}aiplatform.googleapis.com/v1`;
+  const modelUrl = (m) => (agent
+    ? `${agentRoot}/projects/${encodeURIComponent(project)}/locations/${encodeURIComponent(location)}/publishers/google/models/${encodeURIComponent(m)}:generateContent`
+    : `${baseUrl}/models/${encodeURIComponent(m)}:generateContent`);
   const headers = { 'x-goog-api-key': apiKey };
   const upload = new URL(baseUrl);
   const uploadUrl = `${upload.origin}/upload${upload.pathname}/files`;
 
+  async function authHeaders() {
+    if (!agent) return { 'x-goog-api-key': apiKey };
+    try {
+      return { authorization: `Bearer ${await auth.getToken()}` };
+    } catch {
+      // Chi tiết (invalid_grant, mạng tới oauth2.googleapis.com) đã ghi log ở googleAuth.
+      throw unavailable('Không kết nối được dịch vụ AI, vui lòng thử lại sau', 'AI_UNAVAILABLE');
+    }
+  }
+
   async function call(body, attempt = 0, timeout = timeoutMs, useModel = model) {
-    const url = `${baseUrl}/models/${encodeURIComponent(useModel)}:generateContent`;
+    const url = modelUrl(useModel);
+    const started = Date.now();
     let res;
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+        headers: { 'content-type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(timeout),
       });
     } catch (err) {
+      if (err instanceof HttpError) throw err;
+      // Ghi lại mỗi lần thử lại (quá hạn / lỗi mạng) — không thì 1 lần gọi "chậm" 8 phút không để lại dấu vết nào.
+      logger.warn('gemini_retry', { provider, model: useModel, attempt: attempt + 1, reason: err.name === 'TimeoutError' ? 'timeout' : 'network', ms: Date.now() - started, err: err.message });
       if (attempt < 2) return call(body, attempt + 1, timeout, useModel);
       logger.warn('gemini_network_error', { err: err.message });
       throw unavailable('Không kết nối được dịch vụ AI, vui lòng thử lại sau', 'AI_UNAVAILABLE');
     }
+    // Token bị thu hồi trước hạn → xin token mới, thử lại 1 lần.
+    if (agent && res.status === 401 && attempt < 2) {
+      auth.invalidate();
+      return call(body, attempt + 1, timeout, useModel);
+    }
     if ((res.status === 429 || res.status >= 500) && attempt < 2) {
+      logger.warn('gemini_retry', { provider, model: useModel, attempt: attempt + 1, reason: `http_${res.status}`, ms: Date.now() - started });
       await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt + Math.random() * 1000));
       return call(body, attempt + 1, timeout, useModel);
     }
@@ -578,11 +613,16 @@ export function createGeminiService({ apiKey, model, baseUrl, timeoutMs, mediaTi
   }
 
   return {
+    provider,
+    // Agent Platform không có Files API: mediaService gửi mọi tệp inline (chia nhỏ khi cần).
+    supportsFiles: !agent,
+
     /**
      * Tải tệp lớn lên Gemini Files API (giao thức resumable) — tránh giới hạn ~20 MB của dữ liệu inline.
      * Trả { name, uri, mimeType } khi tệp đã ACTIVE. Gọi deleteFile(name) sau khi dùng xong (tệp tự hết hạn sau 48 giờ).
      */
     async uploadFile({ blob, size, mime, displayName }) {
+      if (agent) throw new Error('Agent Platform không có Files API — gửi tệp inline');
       const start = await fetch(uploadUrl, {
         method: 'POST',
         headers: {
@@ -628,7 +668,7 @@ export function createGeminiService({ apiKey, model, baseUrl, timeoutMs, mediaTi
     },
 
     async deleteFile(name) {
-      if (!name) return;
+      if (!name || agent) return;
       await fetch(`${baseUrl}/${name}`, { method: 'DELETE', headers, signal: AbortSignal.timeout(30000) })
         .then((r) => !r.ok && logger.warn('gemini_file_delete_failed', { status: r.status }))
         .catch(() => logger.warn('gemini_file_delete_failed', { status: 0 }));
