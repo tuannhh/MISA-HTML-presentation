@@ -21,7 +21,7 @@ frontend/src/
   shared/            # component dùng chung: SlideFields, ImagePicker, DeckThumb, RatioPicker, FormField, FormAlert, TempPasswordBox,
                      #   ThemePicker, DesignPanel (+ DesignPreview, BackgroundPicker, DeckBgCanvas, FontPicker, LogoSettings),
                      #   OutlineSlideCard, OutlineMedia, VideoPicker, MediaLibrary, VideoOverlay,
-                     #   ImageStudio(+Panel), ImageEditor (Cropper.js), RangeField, InsertSlidePanel, FreeElementsPanel,
+                     #   ImageStudio(+Panel), ImageEditor (Cropper.js; tab Khung + Lớp phủ), ColorSwatches, RangeField, InsertSlidePanel, FreeElementsPanel,
                      #   IconPicker (biểu tượng + ảnh/logo thay biểu tượng), BrandSettings (tab Thương hiệu: ảnh nhận diện + mẫu),
                      #   SharePanel (công khai + PublishSection "Xuất bản ra web" + mời theo email + danh sách quyền), VersionsPanel (handoff, xem lại, khôi phục — xác nhận ngay trong panel)
   desktop/           # composition desktop: DesktopShell (MHeaderBar + MSidebar) + các trang

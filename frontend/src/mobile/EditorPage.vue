@@ -36,6 +36,8 @@ import { useEditor } from '@/composables/useEditor.js'
 import { useDeckUrl } from '@/composables/useDeckUrl.js'
 import { useLiveDeck } from '@/composables/useLiveDeck.js'
 import { useSlideMedia } from '@/composables/useSlideMedia.js'
+import { useImageDrop } from '@/composables/useImageDrop.js'
+import { imageColors } from '@/lib/design.js'
 import { LAYOUT_LABEL, SPEC_LIMITS } from '@/lib/slideModel.js'
 import { plainText } from '@shared/deck/rich.js'
 import { ratioCss } from '@/lib/format.js'
@@ -66,7 +68,11 @@ const view = ref('slides') // 'slides' | 'deck'
 const frame = ref(null)
 const strip = ref(null)
 const sm = useSlideMedia(draft, selected)
-const live = useLiveDeck(frame, { draft, deck, selected, assets, onMedia: sm.open, onSave: () => onSave(), onHistory: (a) => (a === 'redo' ? ed.redo() : ed.undo()), onNotice: (t) => toast.info(t) })
+const live = useLiveDeck(frame, { draft, deck, selected, assets, onMedia: sm.open, onSave: () => onSave(), onHistory: (a) => (a === 'redo' ? ed.redo() : ed.undo()), onNotice: (t) => toast.info(t), onDrop: (d) => drop.onDrop(d) })
+// Kéo-thả / dán ảnh từ máy vào trang đang sửa.
+const drop = useImageDrop({ ed, live, draft, deck, selected, toast })
+// Màu chủ đề để xem trước khung/lớp phủ ảnh trong trình sửa ảnh.
+const imgColors = computed(() => imageColors(draft.value?.spec?.theme, draft.value?.spec?.palette))
 const selectedElId = computed(() => (live.selectedEl.value?.index === selected.value ? live.selectedEl.value.id : ''))
 const isFree = computed(() => slide.value?.layout === 'free')
 watch(selected, async (i) => {
@@ -386,6 +392,7 @@ onMounted(ed.load)
         :aspect="sm.aspect.value"
         :media="media"
         :assets="assets"
+        :colors="imgColors"
         :suggest="sm.suggest.value"
         @apply="(img) => (sm.applyImage(img), sm.close())"
         @close="sm.close()"

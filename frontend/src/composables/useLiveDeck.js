@@ -18,7 +18,7 @@ const fin = (v, min, max) => (Number.isFinite(v) ? Math.min(max, Math.max(min, M
  *   onHistory('undo' | 'redo') — Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z (Ctrl+Y) bấm trong khung.
  *   onNotice(text) — báo ngắn cho người dùng (vd. trang đã đủ số phần tử).
  */
-export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, onSave, onHistory, onNotice }) {
+export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, onSave, onHistory, onNotice, onDrop }) {
   const ready = ref(false);
   // Phần tử trang tự do đang chọn trên khung: { index, id } | null
   const selectedEl = ref(null);
@@ -120,6 +120,14 @@ export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, 
         break;
       case 'deck:history':
         if (d.action === 'undo' || d.action === 'redo') onHistory?.(d.action);
+        break;
+      // Kéo-thả / dán ảnh từ máy vào khung → trang chủ tải lên và đặt ảnh.
+      case 'deck:drop':
+        if (slideAt(idx) && Array.isArray(d.files)) {
+          const files = d.files.filter((x) => typeof File !== 'undefined' && x instanceof File);
+          const num = (v) => (Number.isFinite(Number(v)) ? Math.min(100, Math.max(0, Number(v))) : 50);
+          onDrop?.({ index: idx, files, skipped: Math.max(0, Number(d.skipped) || 0), path: typeof d.path === 'string' ? d.path : null, x: num(d.x), y: num(d.y) });
+        }
         break;
       case 'deck:el':
         if (d.action === 'remove') removeElement(idx, d.id);

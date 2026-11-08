@@ -1,5 +1,18 @@
 # 10 — Lịch sử phát triển
 
+## 2026-11-08 — Cải tiến 11 mục, Đợt 2: ảnh (mục 6 kéo-thả/dán/khung, mục 7 lớp phủ màu)
+
+- Mới `shared/deck/imgstyle.js` (kiểu khung + lớp phủ: làm sạch, CSS, `pickLook`), `frontend/src/shared/ColorSwatches.vue`,
+  `frontend/src/composables/useImageDrop.js`, `frontend/src/lib/dropRect.js`, `imageColors()` trong `lib/design.js`.
+  Sửa: `specService.cleanImage`, `render.js` (ô ảnh, ảnh tấm, bộ sưu tập, ảnh tự do), `theme.css` (`.ovl`, `.drop-on`), `engine.js` (dragover/drop/paste →
+  `deck:drop`), `useLiveDeck` (`onDrop`), `ImageEditor` (tab Khung, Lớp phủ; thanh tab tách thành hàng riêng), `ImageStudio(Panel)` (giữ kiểu khi thay ảnh,
+  prop `colors`), 2 `EditorPage`. Không đổi CSDL/API. Nghiệp vụ → `05` §26.
+- Quyết định: dán ảnh luôn **chèn mới** (bản đầu thay ảnh của phần tử đang chọn → dễ bất ngờ vì ảnh vừa chèn tự được chọn).
+- Kiểm chứng: unit **271/271** (mới `test/unit/image-look.test.js` 6 test: màu, làm sạch, CSS, `pickLook`, chuẩn hoá + renderer 3 loại ảnh + dữ liệu độc,
+  `dropRect`); Docker 8088 + Chrome tự động (`tmp/verify-dot2.mjs`, `tmp/verify-dot2-mobile.mjs`): đặt khung Lớn/Đậm/viền màu nhấn + lớp phủ Mờ dần → trang
+  hiển thị đúng và lưu đúng; thả ảnh lên ô ảnh → tô viền khi rê, đổi ảnh, giữ khung/lớp phủ; thả vào trang trắng → ảnh 30×30 tại điểm thả; dán ảnh dọc →
+  23,6×70 giữa trang; mobile đọc lại đúng kiểu đã lưu; không lỗi trang. Bài thử tự xoá.
+
 ## 2026-11-08 — Thư mục lồng nhau cho "Bài của tôi" (yêu cầu thêm, đầu Đợt 2)
 
 - Bảng `folders` + cột `presentations.folder_id` (changelog `20261108_100000`, idempotent, đã áp Docker 2 lần) → `03`; API `/api/folders` + `?folder=` ở danh sách → `04`;

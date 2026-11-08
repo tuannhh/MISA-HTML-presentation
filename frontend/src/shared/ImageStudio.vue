@@ -13,6 +13,7 @@ defineProps({
   suggest: { type: String, default: '' },
   allowRemove: { type: Boolean, default: true },
   initialTab: { type: String, default: '' },
+  colors: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['update:modelValue', 'apply'])
 const close = () => emit('update:modelValue', false)
@@ -33,6 +34,7 @@ function apply(img) {
       :suggest="suggest"
       :allow-remove="allowRemove"
       :initial-tab="initialTab"
+      :colors="colors"
       @apply="apply"
       @close="close"
     />

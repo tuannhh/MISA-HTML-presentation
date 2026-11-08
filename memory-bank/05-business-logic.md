@@ -289,6 +289,7 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
 - Engine (`startEdit`) bật `contenteditable` (plaintext-only), gửi `deck:edit {index, path, value}` mỗi lần gõ; Enter (trường 1 dòng)/Esc kết thúc. Ứng dụng áp vào bản nháp qua `lib/editPaths.js` **allowlist** (đường dẫn lạ, `__proto__`, chỉ số vượt mảng bị bỏ; cắt theo `SPEC_LIMITS`, bỏ ký tự điều khiển).
 - Chiều ngược lại: `useLiveDeck` dựng slide từ bản nháp bằng **chính renderer dùng chung** (`deckParts`, debounce 160 ms) → `deck:render {slides[], css, attrs}`; engine chỉ thay slide có HTML đổi (so cache), hoãn khi người dùng đang gõ **trong khung** (`document.hasFocus()`), dựng lại nền động khi đổi theme/nền. Sửa ở bảng bên phải → khung cập nhật ngay; Lưu mới gửi lên máy chủ.
 - Bấm ảnh/video trên khung → `deck:media {index, path, kind, w, h}` → mở hộp "Đổi / chỉnh sửa ảnh" (hoặc hộp video) với đúng tỷ lệ ô.
+- Kéo-thả / dán tệp ảnh trên khung → `deck:drop {index, files: File[], skipped, path|null, x, y (% trang)}` → `useImageDrop` (§26); ứng dụng lọc lại chỉ nhận `File`.
 
 ### Trang tự do (layout `free`) + chèn trang
 - Không có trong danh sách layout cho AI (`AI_LAYOUTS`); chỉ người dùng tạo. `slide.elements[]` (≤ 30): `text` (kiểu chữ title/heading/body/caption/label × hệ số cỡ 0.4–4, căn ngang/dọc, màu theo token theme, nền), `image` (tham chiếu ảnh + bo góc), `video`, `table` (≤ 12×8, hàng tiêu đề, kiểu sọc/kẻ ô/kẻ ngang), `shape` (chữ nhật/bo góc/tròn/đường kẻ, màu token, độ đậm). Toạ độ **% khung** (x, y, w, h) → giữ đúng bố cục khi đổi tỷ lệ.
@@ -298,7 +299,7 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
 
 ### Ảnh: AI, tìm Internet, chỉnh sửa
 - **Ảnh AI khi dựng bài** (tuỳ chọn ở màn Tạo, mặc định bật, lưu ở `outline.options.aiImages`): `designDeck` được yêu cầu thêm `imagePrompt` (tiếng Anh) cho trang **cần** minh hoạ mà chưa có ảnh thật/ảnh giao diện; `illustrate()` tạo tối đa `AI_IMAGES_PER_DECK` (6) ảnh 4:3 — ưu tiên bìa → mở đầu phần → còn lại — chạy song song `AI_IMAGES_CONCURRENCY`; ảnh lỗi bỏ qua, không làm hỏng bài.
-- **Hộp "Đổi / chỉnh sửa ảnh"** (`ImageStudioPanel`; desktop = dialog, mobile = màn toàn màn hình): Tải lên · Ảnh trong bài · Tìm ảnh (Pixabay, từ khoá Việt/Anh, lọc hướng) · Tạo bằng AI (mô tả + tỷ lệ, gợi ý sẵn từ tiêu đề trang) · Chỉnh sửa. Chọn ảnh mới giữ chú thích/kiểu hiển thị, bỏ thông số chỉnh sửa của ảnh cũ.
+- **Hộp "Đổi / chỉnh sửa ảnh"** (`ImageStudioPanel`; desktop = dialog, mobile = màn toàn màn hình): Tải lên · Ảnh trong bài · Tìm ảnh (Pixabay, từ khoá Việt/Anh, lọc hướng) · Tạo bằng AI (mô tả + tỷ lệ, gợi ý sẵn từ tiêu đề trang) · Chỉnh sửa. Chọn ảnh mới giữ chú thích/kiểu hiển thị + khung/lớp phủ (§26), bỏ thông số chỉnh sửa của ảnh cũ.
 - **Chỉnh sửa ảnh** (`ImageEditor`, Cropper.js v1, không AI): cắt theo tỷ lệ (tự do/vừa khung/16:9/4:3/1:1/3:4), xoay 90° + xoay tinh ±45°, lật ngang/dọc, sáng/tối – độ rực – tương phản (xem trước bằng CSS filter), **vị trí trong khung** (lấp đầy/hiện trọn, phóng 100–300%, kéo để chọn phần hiển thị).
   - Cắt/xoay/lật/màu → `POST /assets/:src/edit` tạo ảnh mới từ **ảnh gốc** (`src`) — tham chiếu lưu `{asset: ảnh mới, src: ảnh gốc, edit: thông số}` → mở lại tiếp tục từ trạng thái cũ, không giảm chất lượng qua nhiều lần sửa.
   - Vị trí/phóng chỉ là CSS (`pos {x,y}` → `object-position`, `zoom` → thuộc tính `scale` + `transform-origin`), không tạo ảnh mới; khi `zoom > 1` tắt hiệu ứng Ken Burns.
@@ -638,3 +639,23 @@ Yêu cầu chủ dự án: người dùng tạo thư mục, kể cả thư mục
   hợp lệ bị khoá mờ), **kéo thẻ bài thả** lên thẻ thư mục hoặc mục đường dẫn. Mobile — tiêu đề = tên thư mục, ← về thư mục cha, nút thư mục (tạo) + ⋯ (thao tác
   thư mục) trên thanh đầu, dòng thư mục 64 px đầu danh sách, ActionSheet; chuyển bài qua ⋮ → "Chuyển vào thư mục…".
 - Bài đang lập dàn ý/đang dựng không có mục "Chuyển vào thư mục…" (vẫn chuyển được sau).
+
+## 26. Ảnh: kéo-thả / dán, khung ảnh (bo góc, bóng, viền), lớp phủ màu (2026-11-08, Đợt 2 — mục 6, 7)
+
+- **Kiểu ảnh lưu trên tham chiếu ảnh** (đi theo ảnh khi đổi bố cục, nhân bản trang, thay ảnh khác vào cùng khung) — áp cho MỌI ảnh: ô ảnh của bố cục (`slot`),
+  ảnh bộ sưu tập (`images.N`), ảnh mục, ảnh tự do (`elements.<id>`). Định nghĩa + làm sạch + CSS dùng chung ở `shared/deck/imgstyle.js`:
+  - `radius`: none · sm 12px · md 28px · lg 64px · circle; `shadow`: none · sm · md · lg; `border`: `'none'` | `{ color, w 1–16 px }`.
+    Bỏ trống = **"Theo mẫu"** (giữ kiểu ảnh của phong cách bài). Ảnh tự do: `image.radius` ghi đè `el.radius`.
+  - `overlay`: `{ kind: flat (phủ đều) | fade (mờ dần, đậm ở đáy) | frosted (kính mờ, backdrop blur), color, opacity 5–95 (mặc định 45) }` —
+    vẽ bằng `<i class="ovl">` trên ảnh, dưới chú thích (`color-mix`, không đụng tệp ảnh).
+  - `color` = token bảng màu (`accent`, `accent-2`, `text`, `bg`, `white`, `dark` → biến CSS của chủ đề, **tự đổi khi đổi chủ đề**) hoặc `#rrggbb`.
+  - Máy chủ `cleanImage` → `cleanImgLook`: chỉ nhận giá trị trong danh sách / hex hợp lệ, kẹp số; màu viền rác → bỏ viền; chuỗi lạ không bao giờ vào CSS.
+- **Trình sửa ảnh** thêm 2 tab: **Khung** (bo góc, đổ bóng, viền: Theo mẫu / Không viền / Có viền + màu + độ dày) và **Lớp phủ** (kiểu, màu, độ đậm).
+  Xem trước dùng màu thật của chủ đề (`imageColors(theme, palette)` → biến CSS của khung xem trước; số đo px thu nhỏ ×0,5). Bộ chọn màu `ColorSwatches`
+  = 6 token + "Màu khác…" (`<input type=color>`). Áp dụng không tạo ảnh mới (chỉ CSS) — chỉ cắt/xoay/màu mới gọi máy chủ.
+- **Kéo-thả ảnh từ máy vào trang đang sửa** (khung `deck:drop` → `useLiveDeck.onDrop` → `useImageDrop`):
+  - Rê tệp trên ô ảnh → viền nét đứt + "Thả để thay ảnh"; thả **1 ảnh trúng ô ảnh** → tải lên, thay ảnh của ô (giữ chú thích, khung, lớp phủ).
+  - Thả ra chỗ trống / nhiều ảnh → chèn **ảnh tự do** tại điểm thả: rộng 30% trang, cao theo tỷ lệ thật của ảnh (`createImageBitmap`; không đọc được → 4:3),
+    cao tối đa 70%, luôn nằm trọn trang (`lib/dropRect.js`); nhiều ảnh lệch nhau 3%. Tối đa **5 ảnh**/lần; tệp không phải ảnh bị bỏ + báo.
+  - **Dán ảnh** (Ctrl/Cmd+V, trong khung hoặc ở ứng dụng khi không gõ trong ô nhập): luôn chèn ảnh mới giữa trang (thay ảnh có sẵn = thả trúng ô / bấm ảnh).
+  - Thả tệp ra ngoài khung bị chặn mở ảnh sang tab (tránh mất bài đang sửa). Di chuyển/đổi cỡ ảnh chèn dùng thao tác phần tử tự do sẵn có.

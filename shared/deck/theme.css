@@ -192,6 +192,9 @@ svg * { transform-box: fill-box; transform-origin: center; }
 .label { font: 600 var(--t-xs)/1.35 var(--f-sans); text-wrap: balance; letter-spacing: .16em; text-transform: uppercase; color: var(--c, var(--accent)); }
 .media { position: relative; margin: 0; height: 100%; min-height: 0; border-radius: var(--r); overflow: hidden; border: 1.5px solid var(--line-2); box-shadow: var(--shadow); background: var(--panel-b); }
 .media img { display: block; width: 100%; height: 100%; }
+/* Lớp phủ màu trên ảnh (shared/deck/imgstyle.js): trên ảnh, dưới chú thích; theo bo góc của khung. */
+.ovl { position: absolute; inset: 0; z-index: 1; pointer-events: none; border-radius: inherit; }
+.media figcaption, .fe-fig .ph { z-index: 2; }
 .media figcaption {
   position: absolute; left: 0; right: 0; bottom: 0; padding: calc(80px * var(--k)) var(--g3) var(--g3);
   background: linear-gradient(transparent, rgba(0, 0, 0, .72)); color: #fff; font-size: var(--t-sm); line-height: 1.35; font-weight: 500;
@@ -218,7 +221,7 @@ svg * { transform-box: fill-box; transform-origin: center; }
 .pbar i:nth-child(2) { background: #FEBC2E; } .pbar i:nth-child(3) { background: #28C840; }
 .plate.cap { --pc: calc(var(--t-xs) * 1.35 + var(--pp)); }
 .plate figcaption {
-  position: static; flex: none; margin-top: var(--pp); padding: 0; background: none; color: #334155;
+  position: relative; z-index: 2; flex: none; margin-top: var(--pp); padding: 0; background: none; color: #334155;
   font-size: var(--t-xs); line-height: 1.35; height: calc(var(--t-xs) * 1.35); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
 }
 [data-style="editorial"] .plate, [data-style="outline"] .plate { box-shadow: var(--shadow); }
@@ -587,7 +590,7 @@ a.ct-b:hover { transform: translateY(-3px) scale(1.06); }
 .gal.mosaic > :first-child { grid-column: span 2; grid-row: span 2; }
 .pola-row { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: calc(70px * var(--k)); align-items: center; justify-items: center; padding: var(--g3) var(--g2); }
 .pola { margin: 0; width: 100%; max-width: 900px; padding: calc(26px * var(--k)) calc(26px * var(--k)) calc(30px * var(--k)); background: #FFFFFF; border-radius: 10px; box-shadow: 0 30px 80px rgba(0, 0, 0, .32); rotate: var(--rot); display: flex; flex-direction: column; gap: var(--g2); min-width: 0; }
-.pola-i { aspect-ratio: 4 / 3.2; overflow: hidden; background: #E8E8E8; }
+.pola-i { position: relative; aspect-ratio: 4 / 3.2; overflow: hidden; background: #E8E8E8; }
 .pola-i img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .pola .ph { height: 100%; display: grid; place-items: center; color: #999; font-size: calc(120px * var(--k)); }
 .pola figcaption { font: 600 var(--t-sm)/1.3 var(--f-sans); color: #1A1A1A; text-align: center; }
@@ -823,6 +826,8 @@ body.edit .fe { cursor: move; touch-action: none; }
 body.edit .pola-i { position: relative; }
 body.edit .fe:hover { outline: 3px dashed color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 4px; }
 body.edit .fe.sel { outline: 4px solid var(--accent); outline-offset: 4px; z-index: 5; }
+body.edit .drop-on { outline: 6px dashed var(--accent) !important; outline-offset: -6px; }
+body.edit .drop-on::after { content: "Thả để thay ảnh" !important; opacity: 1 !important; }
 body.edit .fe.sel .fe-fig[data-m]::after { content: "Bấm đúp để đổi"; }
 /* Ô trống đã có chữ hướng dẫn riêng (.ph) → không chồng thêm nhãn "Bấm để đổi". */
 body.edit .fe-fig.empty[data-m]::after { display: none; }

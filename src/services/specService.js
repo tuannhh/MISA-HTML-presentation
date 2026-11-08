@@ -12,6 +12,7 @@ import { isUuid } from '../repositories/tenantScope.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 import { LOGO_MOTIONS } from '../../shared/deck/bg3d.js';
 import { VARIANTS, STYLES } from '../../shared/deck/variants.js';
+import { cleanImgLook } from '../../shared/deck/imgstyle.js';
 import { cleanMoves, cleanHide } from '../../shared/deck/layers.js';
 import { TITLE_CASES } from '../../shared/deck/textCase.js';
 import { PHONE_CHANNELS, CONTACT_LIMITS as CL, validPhone, validEmail, webHref } from '../../shared/deck/contact.js';
@@ -125,6 +126,8 @@ function cleanImage(c, v, path) {
   if (px !== null && py !== null && (px !== 50 || py !== 50)) img.pos = { x: px, y: py };
   const zoom = num(o.zoom, 1, 4, 2);
   if (zoom && zoom > 1) img.zoom = zoom;
+  // Kiểu khung (bo góc, bóng, viền) + lớp phủ màu — chỉ khoá hợp lệ (shared/deck/imgstyle.js).
+  Object.assign(img, cleanImgLook(o));
   return img.asset || img.alt || img.caption ? img : null;
 }
 

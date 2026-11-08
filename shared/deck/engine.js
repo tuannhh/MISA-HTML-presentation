@@ -1731,6 +1731,38 @@
       var m = t.closest('[data-m]');
       if (m) { e.preventDefault(); mediaMsg(m); }
     });
+    /* Kéo-thả / dán ảnh từ máy: gửi tệp lên ứng dụng (tải lên rồi đặt vào ô ảnh nếu thả trúng ô, ngược lại chèn ảnh tự do tại điểm thả). */
+    var dropOn = null;
+    function hasFiles(e) { var t = e.dataTransfer && e.dataTransfer.types; return !!t && Array.prototype.indexOf.call(t, 'Files') >= 0; }
+    function imgTarget(t) {
+      var m = t && t.closest ? t.closest('[data-m]') : null;
+      return m && !m.classList.contains('vid') && !m.closest('.fe-video') && slideIndex(m) === cur ? m : null;
+    }
+    function markDrop(m) { if (dropOn === m) return; if (dropOn) dropOn.classList.remove('drop-on'); dropOn = m; if (m) m.classList.add('drop-on'); }
+    function imageFiles(list) { var out = []; for (var i = 0; list && i < list.length; i++) if (/^image\//.test(list[i].type || '')) out.push(list[i]); return out; }
+    function sendDrop(all, m, x, y) {
+      var imgs = imageFiles(all);
+      var s = slides[cur]; if (!s) return;
+      var r = s.getBoundingClientRect();
+      var pct = function (v, a, b) { return v == null || !b ? 50 : Math.round(Math.max(0, Math.min(100, ((v - a) / b) * 100)) * 10) / 10; };
+      post({ type: 'deck:drop', index: cur, files: imgs, skipped: (all ? all.length : 0) - imgs.length, path: m ? m.getAttribute('data-m') : null, x: pct(x, r.left, r.width), y: pct(y, r.top, r.height) });
+    }
+    document.addEventListener('dragover', function (e) { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; markDrop(imgTarget(e.target)); });
+    document.addEventListener('dragleave', function (e) { if (!e.relatedTarget) markDrop(null); });
+    document.addEventListener('drop', function (e) {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      var m = imgTarget(e.target); markDrop(null);
+      sendDrop(e.dataTransfer.files, m, e.clientX, e.clientY);
+    });
+    // Dán ảnh (ngoài ô đang gõ chữ): luôn chèn ảnh mới giữa trang (thay ảnh có sẵn = thả trúng ô ảnh hoặc bấm vào ảnh).
+    document.addEventListener('paste', function (e) {
+      if (edEl(e.target)) return;
+      var files = e.clipboardData && e.clipboardData.files;
+      if (!imageFiles(files).length) return;
+      e.preventDefault();
+      sendDrop(files, null, null, null);
+    });
     deck.addEventListener('dblclick', function (e) {
       var fe = e.target.closest('.fe'); if (!fe) return;
       // Khi kéo, con trỏ bị "bắt" vào khối .fe (setPointerCapture) → e.target là chính khối, không phải chữ/ảnh bên trong

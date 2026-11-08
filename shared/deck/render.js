@@ -11,6 +11,7 @@ import { TEXT_STYLES } from './free.js';
 import { richHtml, plainText, linkAttrs } from './rich.js';
 import { moveAttr, hideClasses } from './layers.js';
 import { qrSvg } from './qr.js';
+import { lookCss, overlayHtml } from './imgstyle.js';
 import { PHONE_CHANNELS, CHANNEL_LABELS, CONTACT_LIMITS as CL, channelHref, emailHref, mapsHref, webHref, webLabel } from './contact.js';
 import { brandSvg } from './brands.js';
 
@@ -113,7 +114,7 @@ function plate(ref, url, cap, ctx, o) {
   const web = ref.frame === 'browser';
   const bar = web ? '<div class="pbar" aria-hidden="true"><i></i><i></i><i></i></div>' : '';
   const st = imgPos(ref);
-  return `<div class="vbox" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"><figure class="media plate${web ? ' web' : ''}${cap ? ' cap' : ''}" style="--ar:${ar.toFixed(4)}"${M(ctx, o.mp)}>${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"${st ? ` style="${st}"` : ''}></div>${
+  return `<div class="vbox" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"><figure class="media plate${web ? ' web' : ''}${cap ? ' cap' : ''}" style="--ar:${ar.toFixed(4)}${lookCss(ref) ? `;${lookCss(ref)}` : ''}"${M(ctx, o.mp)}>${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"${st ? ` style="${st}"` : ''}></div>${overlayHtml(ref)}${
     cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''
   }</figure></div>`;
 }
@@ -129,7 +130,8 @@ function media(ref, ctx, o = {}) {
   const inner = url
     ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" style="object-fit:${fit};${imgPos(ref)}"${kb ? ' data-loop="kb" data-p="20"' : ''}>`
     : `<div class="ph">${icon('image')}</div>`;
-  return `<figure class="media ${o.cls || ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"${M(ctx, o.mp)}>${inner}${cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''}</figure>`;
+  const look = url ? lookCss(ref) : '';
+  return `<figure class="media ${o.cls || ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"${look ? ` style="${look}"` : ''}${M(ctx, o.mp)}>${inner}${url ? overlayHtml(ref) : ''}${cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''}</figure>`;
 }
 
 const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
@@ -424,7 +426,7 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
       return `${head(s, ctx)}<div class="body"><div class="pola-row" style="--cols:${n}">${imgs
         .map((im, i) => {
           const url = im.asset ? ctx.assetUrl(im.asset) : null;
-          return `<figure class="pola" style="--rot:${tilt[i % tilt.length]}deg" data-a="pop" data-d="${14 + i * 6}"><div class="pola-i"${M(ctx, `images.${i}`)}>${url ? `<img src="${esc(url)}" alt="${esc(im.alt || '')}" style="${imgPos(im)}">` : `<div class="ph">${icon('image')}</div>`}</div>${im.caption ? `<figcaption${E(ctx, `images.${i}.caption`, LIM.caption, true)}>${rt(im.caption)}</figcaption>` : ''}</figure>`;
+          return `<figure class="pola" style="--rot:${tilt[i % tilt.length]}deg" data-a="pop" data-d="${14 + i * 6}"><div class="pola-i"${url && lookCss(im) ? ` style="${lookCss(im)}"` : ''}${M(ctx, `images.${i}`)}>${url ? `<img src="${esc(url)}" alt="${esc(im.alt || '')}" style="${imgPos(im)}">${overlayHtml(im)}` : `<div class="ph">${icon('image')}</div>`}</div>${im.caption ? `<figcaption${E(ctx, `images.${i}.caption`, LIM.caption, true)}>${rt(im.caption)}</figcaption>` : ''}</figure>`;
         })
         .join('')}</div></div>`;
     }
@@ -616,7 +618,9 @@ function freeEl(e, i, ctx) {
     const url = ref && ref.asset ? ctx.assetUrl(ref.asset) : null;
     const fit = ref && ref.fit === 'contain' ? 'contain' : 'cover';
     // Ảnh trọn khung (logo, đồ hoạ nền trong suốt) → không tô nền khung.
-    inner = `<figure class="fe-fig r-${esc(e.radius || 'md')}${url ? (fit === 'contain' ? ' fit-c' : '') : ' empty'}"${M(ctx, P)}>${url ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" style="object-fit:${fit};${imgPos(ref)}">` : ph('image', 'Bấm để chọn ảnh')}</figure>`;
+    // Kiểu khung của ảnh (imgstyle) ghi đè bo góc mặc định của phần tử.
+    const look = url ? lookCss(ref) : '';
+    inner = `<figure class="fe-fig r-${esc(e.radius || 'md')}${url ? (fit === 'contain' ? ' fit-c' : '') : ' empty'}"${look ? ` style="${look}"` : ''}${M(ctx, P)}>${url ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" style="object-fit:${fit};${imgPos(ref)}">${overlayHtml(ref)}` : ph('image', 'Bấm để chọn ảnh')}</figure>`;
   } else if (e.type === 'logo3d') {
     // Ảnh phẳng = dự phòng (trình soạn thảo, bản in, máy không có WebGL); engine phủ canvas 3D khi trình chiếu.
     // crossorigin: WebGL chỉ đọc được ảnh "sạch" CORS (URL ký từ khung sandbox origin null — route ảnh trả ACAO *).

@@ -88,3 +88,9 @@ export function withDesignDefaults(d) {
   if (d.brand === undefined) d.brand = null;
   return d;
 }
+
+// Mã màu xem trước cho bộ chọn màu ảnh (khung/lớp phủ) — khoá trùng token IMG_COLORS của shared/deck/imgstyle.js.
+export function imageColors(theme, palette) {
+  const sw = themeSwatch(theme, palette);
+  return { accent: sw.a, 'accent-2': sw.b, text: sw.ink, bg: sw.bg, white: '#ffffff', dark: '#0b0f19' };
+}

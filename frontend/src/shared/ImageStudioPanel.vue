@@ -2,7 +2,7 @@
 // Nội dung "Đổi / chỉnh sửa ảnh" (dùng chung: dialog desktop, màn toàn màn hình mobile).
 // 5 nguồn: tải ảnh mới · ảnh đã có trong bài · tìm ảnh Internet (Pixabay, nhập từ khoá) · tạo ảnh AI (Nano Banana 2 Lite, 1K)
 // · chỉnh sửa ảnh hiện tại (cắt/xoay/màu/vị trí trong khung). Chọn ảnh mới → phát 'apply' với tham chiếu ảnh mới
-// (giữ chú thích/kiểu hiển thị cũ, bỏ thông số chỉnh sửa của ảnh trước).
+// (giữ chú thích/kiểu hiển thị + khung/lớp phủ cũ, bỏ thông số chỉnh sửa của ảnh trước).
 import { computed, ref, watch } from 'vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
@@ -15,6 +15,7 @@ import ImageEditor from './ImageEditor.vue'
 import { useToast } from '@/components/mds/toast.js'
 import { IMAGE_ACCEPT, MAX_IMAGE_MB } from '@/composables/useMedia.js'
 import { SPEC_LIMITS as L } from '@/lib/slideModel.js'
+import { pickLook } from '@shared/deck/imgstyle.js'
 
 const props = defineProps({
   image: { type: Object, default: null }, // tham chiếu ảnh hiện tại { asset, alt, caption, fit, src?, edit?, pos?, zoom? }
@@ -25,6 +26,7 @@ const props = defineProps({
   compact: { type: Boolean, default: false },
   allowRemove: { type: Boolean, default: true },
   initialTab: { type: String, default: '' },
+  colors: { type: Object, default: () => ({}) }, // màu chủ đề để xem trước khung/lớp phủ
 })
 const emit = defineEmits(['apply', 'close'])
 const toast = useToast()
@@ -40,10 +42,10 @@ const TABS = computed(() => [
 const tab = ref(props.initialTab || (hasImage.value ? 'edit' : 'search'))
 const busy = ref('')
 
-// Ảnh mới thay ảnh cũ: giữ chú thích + kiểu hiển thị, bỏ vị trí/phóng/chỉnh sửa (thuộc về ảnh cũ).
+// Ảnh mới thay ảnh cũ: giữ chú thích + kiểu hiển thị + khung/lớp phủ, bỏ vị trí/phóng/chỉnh sửa (thuộc về ảnh cũ).
 function pickAsset(assetId, alt = '') {
   const old = props.image || {}
-  emit('apply', { asset: assetId, alt: alt || old.alt || '', caption: old.caption || '', fit: old.fit || 'cover', ...(old.frame ? { frame: old.frame } : {}) })
+  emit('apply', { asset: assetId, alt: alt || old.alt || '', caption: old.caption || '', fit: old.fit || 'cover', ...(old.frame ? { frame: old.frame } : {}), ...pickLook(old) })
 }
 
 /* ---- Tải lên ---- */
@@ -146,12 +148,16 @@ async function generate() {
 /* ---- Chỉnh sửa ---- */
 const originalId = computed(() => props.image?.src || props.image?.asset || '')
 const originalUrl = computed(() => props.media.assetUrl(originalId.value))
-async function onEditApply({ edit, pos, zoom, fit }) {
+async function onEditApply({ edit, pos, zoom, fit, look }) {
   const img = { ...props.image, fit }
   delete img.pos
   delete img.zoom
   if (pos) img.pos = pos
   if (zoom) img.zoom = zoom
+  for (const [k, v] of Object.entries(look || {})) {
+    if (v) img[k] = v
+    else delete img[k]
+  }
   const before = JSON.stringify(props.image?.edit || null)
   if (JSON.stringify(edit) === before) return emit('apply', img)
   busy.value = 'edit'
@@ -282,6 +288,8 @@ watch(() => props.image?.asset, (v) => !v && tab.value === 'edit' && (tab.value 
         :aspect="aspect"
         :busy="busy === 'edit'"
         :compact="compact"
+        :look="image"
+        :colors="colors"
         @apply="onEditApply"
         @cancel="emit('close')"
       />
