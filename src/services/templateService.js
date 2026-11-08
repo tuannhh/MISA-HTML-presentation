@@ -134,6 +134,24 @@ export function createTemplateService({ repos, storage, signer, audit }) {
     if (!MEDIA_STATUSES.has(deck.status)) throw conflict('Chưa thể áp mẫu khi bài đang được AI xử lý', 'NOT_READY');
     const tpl = await templates.findReadable(user.id, templateId);
     if (!tpl) throw notFound('Không tìm thấy mẫu');
+    return copyInto(deck, tpl);
+  }
+
+  // Mẫu chọn ở màn tạo bài: kiểm tra quyền xem ngay khi gửi yêu cầu (lỗi trả về liền, không đợi AI lập dàn ý xong).
+  async function assertReadable(userId, templateId) {
+    const tpl = await templates.findReadable(userId, templateId);
+    if (!tpl) throw notFound('Không tìm thấy mẫu thiết kế đã chọn', 'TEMPLATE_NOT_FOUND');
+  }
+
+  // Áp mẫu đã chọn lúc tạo bài vào bài vừa lập dàn ý (job nền — bài chưa ở trạng thái outline nên không qua apply()).
+  // deck: { id, tenant_id } của bài do chính người tạo sở hữu.
+  async function applyOnCreate(userId, deck, templateId) {
+    const tpl = await templates.findReadable(userId, templateId);
+    if (!tpl) throw notFound('Không tìm thấy mẫu thiết kế đã chọn', 'TEMPLATE_NOT_FOUND');
+    return copyInto(deck, tpl);
+  }
+
+  async function copyInto(deck, tpl) {
     const files = await templates.listAssets(tpl.id);
     if ((await assets.countForPresentation(deck.id, 'brand')) + files.length > MAX_BRAND_PER_DECK) {
       throw unprocessable('Bài trình bày đã áp quá nhiều mẫu — hãy tạo bài mới hoặc dùng lại ảnh đã có', 'TOO_MANY_ASSETS');
@@ -157,5 +175,5 @@ export function createTemplateService({ repos, storage, signer, audit }) {
     return { design: { ...design, logo: moved.logo, brand: moved.brand }, assets: out, name: tpl.name };
   }
 
-  return { list, create, update, remove, readAsset, apply };
+  return { list, create, update, remove, readAsset, apply, assertReadable, applyOnCreate };
 }

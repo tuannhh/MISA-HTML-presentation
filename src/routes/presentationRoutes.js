@@ -74,12 +74,12 @@ export function presentationRoutes({ service, templates, sharing, publications, 
   r.get('/', auth, async (req, res) => {
     const { page, pageSize } = paging(req.query, { maxPageSize: 48, defaultPageSize: 24 });
     const scope = ['public', 'shared'].includes(req.query.scope) ? req.query.scope : 'mine';
-    const { rows, total } = await service.list(req.user, { scope, q: req.query.q, page, pageSize });
+    const { rows, total } = await service.list(req.user, { scope, q: req.query.q, folder: req.query.folder, page, pageSize });
     ok(res, rows, { page, pageSize, total, hasNext: page * pageSize < total });
   });
 
   r.post('/', auth, limits.generate, capSourceBody, upload, async (req, res) => {
-    const body = pick(req.body, ['url', 'urls', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title', 'aiImages']);
+    const body = pick(req.body, ['url', 'urls', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title', 'aiImages', 'templateId']);
     // 'file' (1 tệp) giữ cho client cũ; giao diện mới gửi 'files' (nhiều tệp).
     const files = [...(req.files?.files || []), ...(req.files?.file || [])];
     const result = await service.create(req.user, { ...body, files, media: req.files?.media || [], posters: req.files?.posters || [] }, req.ip);

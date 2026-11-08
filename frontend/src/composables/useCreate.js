@@ -3,7 +3,7 @@
 // Nhập nội dung: chữ là cơ sở nội dung, ảnh/video gửi kèm (media) là thứ BẮT BUỘC đưa vào bài — AI đặt vào trang hợp nội dung.
 // Giới hạn khớp server (MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_CREATE_MEDIA, AUTO_MAX_SLIDES). Tạo xong → bước duyệt dàn ý.
 import { reactive, ref, computed, onBeforeUnmount } from 'vue';
-import { uploadForm } from '@/lib/api.js';
+import { api, uploadForm } from '@/lib/api.js';
 import { SOURCE_ACCEPT, sourceProblem, heicToJpeg, isImageFile, IMAGE_ACCEPT } from '@/lib/fileKinds.js';
 import { capturePoster, MAX_IMAGE_MB, MAX_VIDEO_MB, VIDEO_ACCEPT } from '@/composables/useMedia.js';
 
@@ -33,7 +33,23 @@ export function useCreate() {
     slideMode: 'auto', slideCount: 12, instructions: '', title: '',
     // AI tạo ảnh minh hoạ (Nano Banana 2 Lite) cho trang cần ảnh mà chưa có ảnh thật — mặc định bật.
     aiImages: true,
+    // Mẫu thiết kế (của mình hoặc người khác chia sẻ cho mọi người trong MISA) — '' = không dùng, theo Tông màu.
+    templateId: '',
   });
+  // Danh sách mẫu áp được (lỗi tải → vẫn tạo bài bình thường, chỉ ẩn ô chọn mẫu).
+  const templates = ref([]);
+  const templateOptions = computed(() => [
+    { label: 'Không dùng mẫu — theo Tông màu', value: '' },
+    ...templates.value.map((t) => ({ value: t.id, label: t.isOwner ? `${t.name} (của tôi)` : `${t.name} — ${t.ownerName || 'người dùng khác'} chia sẻ` })),
+  ]);
+  async function loadTemplates() {
+    try {
+      templates.value = (await api('GET', '/api/templates')).data || [];
+    } catch {
+      templates.value = [];
+    }
+  }
+  loadTemplates();
   const errors = reactive({});
   const submitting = ref(false);
   const progress = ref(null); // % tải tệp lên khi đang gửi
@@ -103,6 +119,7 @@ export function useCreate() {
       fd.set('aiImages', form.aiImages ? '1' : '0');
       fd.set('tone', form.tone);
       fd.set('theme', form.theme);
+      if (form.templateId) fd.set('templateId', form.templateId);
       if (form.theme === 'custom') {
         fd.set('primary', form.primary.trim());
         if (form.secondary.trim()) fd.set('secondary', form.secondary.trim());
@@ -243,7 +260,7 @@ export function useCreate() {
 
   return {
     form, errors, submitting, progress, submitError, totalBytes, validate, submit, fileList, onSelectFiles, onOversized, removeFile,
-    mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls,
+    mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions,
   };
 }
 

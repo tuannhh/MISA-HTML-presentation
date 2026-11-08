@@ -11,7 +11,7 @@ export function accessRole(row, userId) {
   return row.share_role === 'editor' ? 'editor' : 'viewer';
 }
 
-const LIST_COLS = `p.id, p.tenant_id, p.short_code, p.title, p.ratio, p.visibility, p.status, p.source_kind, p.source_label,
+const LIST_COLS = `p.id, p.tenant_id, p.folder_id, p.short_code, p.title, p.ratio, p.visibility, p.status, p.source_kind, p.source_label,
   p.spec_version, p.outline_version, p.slide_count, p.thumbnail_asset_id, p.error_message, p.created_at, p.updated_at, p.published_at`;
 
 function parseSpec(row) {
@@ -115,10 +115,15 @@ export function createPresentationRepository(pool) {
       return row;
     },
 
-    async listOwned(tenantId, { q, limit, offset }) {
+    async listOwned(tenantId, { q, limit, offset, folder = { mode: 'all' } }) {
       const t = tenantClause(tenantId, 'p');
       const where = [t.sql];
       const params = [...t.params];
+      if (folder.mode === 'root') where.push('p.folder_id IS NULL');
+      else if (folder.mode === 'folder') {
+        where.push('p.folder_id = ?');
+        params.push(folder.id);
+      }
       if (q) {
         where.push("p.title LIKE ? ESCAPE '\\\\'");
         params.push(`%${escapeLike(q)}%`);

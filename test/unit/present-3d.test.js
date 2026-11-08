@@ -50,8 +50,13 @@ test('engine: bộ chọn "ý" phủ đơn vị nội dung của mọi bố cụ
     assert.ok(byLayout[layout], `mẫu có bố cục ${layout}`);
     assert.ok(cls.some((c) => new RegExp(`class="[^"]*\\b${c}\\b`).test(byLayout[layout])), `${layout}: có đơn vị khớp UNIT`);
   }
-  // Phóng to: không áp video (bấm video để phát).
-  assert.match(/var ZOOM = '([^']+)'/.exec(engineSrc)[1], /figure\.media:not\(\.vid\)/);
+  // Phóng to: không áp video (bấm video để phát) và không áp ảnh (bấm ảnh mở toàn màn hình qua LBX).
+  const zoom = /var ZOOM = '([^']+)'/.exec(engineSrc)[1];
+  assert.doesNotMatch(zoom, /figure\.media|\.pola|\.fe-image/);
+  const lbx = /var LBX = '([^']+)'/.exec(engineSrc)[1];
+  assert.match(lbx, /figure\.media:not\(\.vid\)/);
+  for (const c of ['pola', 'fe-image']) assert.ok(lbx.includes(`.${c}`), `LBX có .${c}`);
+  assert.doesNotMatch(lbx, /bleed/);
 });
 
 test('nền 3D: tên hợp lệ, dự phòng 2D tồn tại, engine giữ bản sao FALLBACK_2D khớp', () => {

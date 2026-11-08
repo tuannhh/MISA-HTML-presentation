@@ -1,12 +1,15 @@
 <script setup>
 // Danh sách mobile (Bài của tôi / Được chia sẻ / Công khai): list row (ảnh bìa nhỏ + tên + metadata), tìm kiếm 48px,
-// thao tác qua bottom sheet; chủ bài mở màn con Chia sẻ toàn màn hình.
+// thao tác qua bottom sheet; chủ bài mở màn con Chia sẻ toàn màn hình. "Bài của tôi" có thư mục lồng nhau (?folder=…):
+// dòng thư mục ở đầu danh sách, nút quay lại về thư mục cha, nút + tạo thư mục, chuyển bài qua menu "Chuyển vào thư mục…".
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MobileShell from './MobileShell.vue'
 import ActionSheet from './ActionSheet.vue'
 import FullScreenSheet from './FullScreenSheet.vue'
 import SharePanel from '@/shared/SharePanel.vue'
+import FolderDialogs from '@/shared/FolderDialogs.vue'
+import { useFolderView } from '@/composables/useFolderView.js'
 import DeckThumb from '@/shared/DeckThumb.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import MInput from '@/components/mds/MInput.vue'
@@ -31,6 +34,22 @@ const COPY = {
   public: { title: 'Thư viện công khai', empty: 'Chưa có bài công khai', emptyDesc: 'Bài được chia sẻ công khai sẽ hiện ở đây (chỉ xem).' },
 }
 const copy = COPY[scope]
+const fv = scope === 'mine' ? useFolderView(list) : null
+const subfolders = computed(() => (fv && !fv.searching.value ? fv.subfolders.value : []))
+const inFolder = computed(() => !!fv?.current.value)
+const shellTitle = computed(() => (inFolder.value ? fv.current.value.name : copy.title))
+const shellBack = computed(() => {
+  if (!inFolder.value) return 'host'
+  const parent = fv.current.value.parentId
+  return parent ? `/decks?folder=${parent}` : '/decks'
+})
+const folderSheetFor = ref(null)
+const folderSheetOpen = computed({ get: () => !!folderSheetFor.value, set: (v) => !v && (folderSheetFor.value = null) })
+function onFolderSheet(key) {
+  const f = folderSheetFor.value
+  folderSheetFor.value = null
+  if (f) fv.handleFolder(key, f)
+}
 const shareOpen = computed({ get: () => !!pendingShare.value, set: (v) => !v && (pendingShare.value = null) })
 async function setShareVisibility(isPublic) {
   await list.setVisibility(pendingShare.value, isPublic ? 'public' : 'private')
@@ -45,11 +64,19 @@ function onSheet(key) {
   if (d) list.handle(key, d)
 }
 
-onMounted(list.load)
+onMounted(() => (fv ? fv.init() : list.load()))
 </script>
 
 <template>
-  <MobileShell :title="copy.title" :nav="scope">
+  <MobileShell :title="shellTitle" :back="shellBack" :nav="scope">
+    <template v-if="fv" #actions>
+      <MButton v-if="inFolder" variant="icon" :aria-label="`Thao tác với thư mục ${fv.current.value.name}`" @click="folderSheetFor = fv.current.value">
+        <template #icon><MIcon name="dots" :size="24" /></template>
+      </MButton>
+      <MButton variant="icon" aria-label="Thư mục mới" :disabled="!fv.canNest.value" @click="fv.askCreate()">
+        <template #icon><MIcon name="folder" :size="24" /></template>
+      </MButton>
+    </template>
     <div class="sticky top-0 z-10 bg-[var(--mds-bg)] px-4 py-2">
       <MInput :model-value="q" type="search" enterkeyhint="search" placeholder="Tìm theo tên bài" clearable aria-label="Tìm theo tên bài" @update:model-value="list.search">
         <template #prefix><MIcon name="search" :size="16" /></template>
@@ -63,7 +90,32 @@ onMounted(list.load)
       </FormAlert>
     </div>
 
+    <ul v-if="subfolders.length" class="bg-[var(--mds-bg)]" aria-label="Thư mục">
+      <li v-for="f in subfolders" :key="f.id" class="flex min-h-[64px] items-center gap-2 border-b border-[var(--mds-border-light)] pl-4 pr-1">
+        <RouterLink :to="`/decks?folder=${f.id}`" class="flex min-w-0 flex-1 items-center gap-3 py-2">
+          <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[var(--mds-brand-50)] text-[var(--mds-brand-600)]"><MIcon name="folder" :size="22" /></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[15px] font-semibold leading-5">{{ f.name }}</span>
+            <span class="mt-0.5 block truncate text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">{{ fv.folderMeta(f) }}</span>
+          </span>
+        </RouterLink>
+        <div class="grid h-12 w-12 shrink-0 place-items-center">
+          <MButton variant="icon" :aria-label="`Thao tác với thư mục ${f.name}`" @click="folderSheetFor = f">
+            <template #icon><MIcon name="dots-vertical" :size="24" /></template>
+          </MButton>
+        </div>
+      </li>
+    </ul>
+
     <div v-if="loading && !rows.length" class="flex justify-center py-16"><MSpinner :size="32" /></div>
+
+    <p v-else-if="!rows.length && !error && subfolders.length" class="px-4 py-6 text-center text-[14px] text-[var(--mds-text-secondary)]">
+      {{ inFolder ? 'Thư mục này chưa có bài trực tiếp.' : 'Mọi bài đã được xếp vào thư mục.' }}
+    </p>
+
+    <div v-else-if="!rows.length && !error && inFolder && !q" class="px-4 py-10">
+      <MEmptyState type="initial" title="Thư mục trống" description="Mở menu ⋮ của một bài và chọn “Chuyển vào thư mục…”." />
+    </div>
 
     <div v-else-if="!rows.length && !error" class="px-4 py-10">
       <MEmptyState
@@ -109,6 +161,8 @@ onMounted(list.load)
     </div>
 
     <ActionSheet v-model="sheetOpen" :title="sheetFor?.title" :items="sheetFor ? deckMenuItems(sheetFor) : []" @select="onSheet" />
+    <ActionSheet v-if="fv" v-model="folderSheetOpen" :title="folderSheetFor?.name" :items="fv.FOLDER_MENU" @select="onFolderSheet" />
+    <FolderDialogs v-if="fv" :view="fv" mobile />
     <FullScreenSheet v-model="shareOpen" title="Chia sẻ">
       <SharePanel v-if="pendingShare" compact :deck-id="pendingShare.id" :visibility="pendingShare.visibility" :set-visibility="setShareVisibility" />
     </FullScreenSheet>

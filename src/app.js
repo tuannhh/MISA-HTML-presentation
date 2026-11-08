@@ -15,6 +15,7 @@ import { authRoutes } from './routes/authRoutes.js';
 import { presentationRoutes } from './routes/presentationRoutes.js';
 import { assetRoutes } from './routes/assetRoutes.js';
 import { templateRoutes } from './routes/templateRoutes.js';
+import { folderRoutes } from './routes/folderRoutes.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { imageRoutes } from './routes/imageRoutes.js';
 import { publicSiteRoutes, isPublishHost } from './routes/publicSiteRoutes.js';
@@ -108,6 +109,7 @@ export function createApp({ config, pool, repos, services }) {
   api.use('/auth', authRoutes({ auth: services.auth, users: repos.users, limits }));
   api.use('/presentations', presentationRoutes({ service: services.presentations, templates: services.templates, sharing: services.sharing, publications: services.publications, exportFiles: services.exportFiles, config, limits }));
   api.use('/templates', templateRoutes({ service: services.templates, limits }));
+  api.use('/folders', folderRoutes({ service: services.folders }));
   api.use('/assets', assetRoutes({ service: services.presentations }));
   api.use('/admin', adminRoutes({ auth: services.auth, publications: services.publications }));
   api.use('/images', imageRoutes({ service: services.presentations, limits }));

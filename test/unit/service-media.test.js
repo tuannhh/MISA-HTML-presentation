@@ -18,7 +18,7 @@ async function pngFile(dir, name) {
   return { path, originalname: name, size: buffer.length, buffer };
 }
 
-function world() {
+function world(extra = {}) {
   const prev = process.env.NODE_ENV;
   process.env.NODE_ENV = 'test';
   const config = loadConfig();
@@ -49,7 +49,7 @@ function world() {
     async generateImage() { return { buffer: await sharp({ create: { width: 800, height: 600, channels: 3, background: '#336' } }).png().toBuffer() }; },
   };
   const audit = { async record() {} };
-  const svc = createPresentationService({ config, repos, storage, gemini, browser: {}, signer: { url: (id) => `/a/${id}` }, audit, stock: {} });
+  const svc = createPresentationService({ config, repos, storage, gemini, browser: {}, signer: { url: (id) => `/a/${id}` }, audit, stock: {}, ...extra });
   return { svc, created, stored, state, config };
 }
 
@@ -93,6 +93,38 @@ test('F01: dựng bài với ảnh minh hoạ AI → ảnh được lưu vào te
   assert.equal(a.presentationId, r.id);
   assert.ok(!stored.some((x) => /undefined/.test(x.key)));
   assert.equal(state.spec.slides[0].image?.asset, a.id);
+});
+
+// ---- Mẫu thiết kế chọn ở màn tạo bài (mục 9): kiểm tra quyền ngay, áp thiết kế mẫu khi dàn ý xong ----
+const TPL = 'b0000000-0000-4000-8000-000000000001';
+function templatesStub(calls, { readable = true } = {}) {
+  return {
+    async assertReadable(userId, id) { calls.push(['check', userId, id]); if (!readable) { const e = new Error('Không tìm thấy mẫu thiết kế đã chọn'); e.status = 404; throw e; } },
+    async applyOnCreate(userId, deck, id) {
+      calls.push(['apply', userId, deck.id, deck.tenant_id, id]);
+      return { design: { theme: 'sunset', palette: null, background: 'grid', font: { heading: 'Inter', body: 'Inter' }, logo: { asset: 'c0000000-0000-4000-8000-000000000001' }, brand: null } };
+    },
+  };
+}
+
+test('mẫu khi tạo bài: kiểm tra quyền lúc gửi + áp thiết kế mẫu (đúng bài, đúng tenant) vào dàn ý', async () => {
+  const calls = [];
+  const { svc, state } = world({ templates: templatesStub(calls) });
+  const r = await svc.create(USER, { text: 'Nội dung thử về hội nghị khách hàng', ratio: '16:9', slideCount: '5', templateId: TPL }, '127.0.0.1');
+  await until(() => state.outline || state.failed);
+  assert.equal(state.failed, null);
+  assert.deepEqual(calls[0], ['check', USER.id, TPL]);
+  assert.deepEqual(calls[1], ['apply', USER.id, r.id, USER.id, TPL]);
+  assert.equal(state.outline.design.theme, 'sunset');
+  assert.equal(state.outline.design.background, 'grid');
+});
+
+test('mẫu khi tạo bài: mã sai → 400 ngay; mẫu không xem được → lỗi ngay, không tạo bài', async () => {
+  const calls = [];
+  const { svc, state } = world({ templates: templatesStub(calls, { readable: false }) });
+  await assert.rejects(svc.create(USER, { text: 'Nội dung thử về hội nghị khách hàng', templateId: 'x' }, '127.0.0.1'), (e) => e.code === 'INVALID_TEMPLATE');
+  await assert.rejects(svc.create(USER, { text: 'Nội dung thử về hội nghị khách hàng', templateId: TPL }, '127.0.0.1'), (e) => e.status === 404);
+  assert.equal(state.rows.size, 0);
 });
 
 // ---- F05: xuất/thumbnail chỉ nạp (base64) asset mà bài thực sự tham chiếu; xuất HTML có hàng đợi ----

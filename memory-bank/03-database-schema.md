@@ -26,6 +26,7 @@ Mỗi người dùng đồng thời là **một tenant** (`presentations.tenant_
 |---|---|---|---|
 | id | CHAR(36) | PK | |
 | tenant_id | CHAR(36) | FK → users.id ON DELETE CASCADE | Chủ sở hữu |
+| folder_id | CHAR(36) | NULL, FK → folders.id ON DELETE SET NULL | Thư mục của chủ bài (NULL = ngoài thư mục). Chỉ chủ bài thấy; chuyển bài không đổi `updated_at` |
 | short_code | CHAR(8) | UNIQUE `uq_presentations_code`, NULL được | Mã ngắn `[a-z0-9]{8}` cho đường dẫn `/<ten-bai>/<ma>/<tinh-nang>`; sinh ngẫu nhiên khi tạo/nhân bản (trùng → thử lại). Tra mã **không** lọc tenant (chỉ ra UUID; quyền vẫn kiểm ở service) |
 | title | VARCHAR(200) | NOT NULL | Tên bài (hiển thị danh sách) |
 | ratio | ENUM('16:9','4:3','2:1','3:1') | default '16:9' | Đổi được bất kỳ lúc nào (không cần render lại spec) |
@@ -43,7 +44,21 @@ Mỗi người dùng đồng thời là **một tenant** (`presentations.tenant_
 | error_message | VARCHAR(500) | NULL | Lỗi tiếng Việt khi tạo thất bại |
 | published_at | DATETIME(3) | NULL | Lúc công khai (COALESCE giữ lần đầu); về private → NULL |
 
-Chỉ mục: `(tenant_id, updated_at)` cho "Bài của tôi"; `(visibility, status, published_at)` cho thư viện công khai.
+Chỉ mục: `(tenant_id, updated_at)` cho "Bài của tôi"; `ix_presentations_folder (tenant_id, folder_id, updated_at)` cho lọc theo thư mục; `(visibility, status, published_at)` cho thư viện công khai.
+
+### Bảng: `folders` (2026-11-08)
+
+Thư mục sắp xếp "Bài của tôi", lồng nhau — cây riêng từng người.
+
+| Cột | Kiểu | Ràng buộc | Ý nghĩa |
+|---|---|---|---|
+| id | CHAR(36) | PK | |
+| tenant_id | CHAR(36) | FK → users.id ON DELETE CASCADE | Chủ thư mục |
+| parent_id | CHAR(36) | NULL, FK → folders.id ON DELETE CASCADE | Thư mục cha (NULL = gốc). Xoá qua API **không** dựa vào cascade: con + bài được chuyển lên cha trước rồi mới xoá |
+| name | VARCHAR(120) | NOT NULL | Cho phép trùng tên |
+| created_at / updated_at | DATETIME(3) | | |
+
+Chỉ mục `ix_folders_tenant_parent (tenant_id, parent_id)`. Giới hạn ở service (không ở DB): ≤ 5 cấp, ≤ 300 thư mục/người, không vòng lặp cha–con.
 
 ### Bảng: `assets`
 
@@ -153,6 +168,7 @@ Tên các changelog đã áp dụng (baseline tự chèn). Changelog mới đặ
 
 ```
 users 1 ──< presentations 1 ──< assets
+users 1 ──< folders 1 ──< folders (cha–con)   folders 1 ──< presentations (folder_id, xoá thư mục → SET NULL)
   (xoá user → xoá bài → xoá asset trong DB; tệp trên đĩa dọn bằng storage.removePrefix khi xoá bài qua API)
 presentations 1 ──< presentation_shares >── 1 users        (xoá bài / người được mời → xoá quyền)
 presentations 1 ──< presentation_versions                   (xoá bài → xoá phiên bản; xoá người chụp → created_by NULL)
@@ -170,3 +186,4 @@ users 1 ──< design_templates 1 ──< template_assets
 - 2026-10-06 (`changelog_database_20261006_200000.sql`, idempotent — `MODIFY` ENUM chỉ khi chưa có `'brand'`, `CREATE TABLE IF NOT EXISTS`): asset kind `brand`, bảng `design_templates` + `template_assets`. Có trong `REQUIRED_CHANGELOGS`; baseline đã gồm sẵn. Đã chạy 2 lần trên MySQL Docker để kiểm idempotent.
 - 2026-10-12 (`changelog_database_20261012_100000.sql`, idempotent — `CREATE TABLE IF NOT EXISTS`): bảng `publications` (xuất bản ra domain công khai). Có trong `REQUIRED_CHANGELOGS` + `REQUIRED_TABLES`; baseline đã gồm sẵn.
 - 2026-10-07 (`changelog_database_20261007_100000.sql`, idempotent — `CREATE TABLE IF NOT EXISTS`, seed `INSERT … WHERE NOT EXISTS`): bảng `presentation_shares` + `presentation_versions`; tạo **bản gốc** cho các bài đang công khai + ready chưa có bản gốc (để "khôi phục mặc định" dùng được ngay với bài đã chia sẻ trước đây). Có trong `REQUIRED_CHANGELOGS` + `REQUIRED_TABLES`; baseline đã gồm sẵn. Chạy 2 lần trên MySQL Docker → vẫn đúng 1 bản gốc/bài.
+- 2026-11-08 (`changelog_database_20261108_100000.sql`, idempotent — `CREATE TABLE IF NOT EXISTS`, thêm cột/chỉ mục/FK có kiểm tra `information_schema`): bảng `folders` + cột `presentations.folder_id`. Có trong `REQUIRED_CHANGELOGS` + `REQUIRED_TABLES`; baseline đã gồm sẵn. Đã chạy 2 lần trên MySQL Docker.

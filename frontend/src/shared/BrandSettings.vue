@@ -204,7 +204,7 @@ async function doRename(t) {
 async function toggleShare(t) {
   try {
     Object.assign(t, await props.media.updateTemplate(t.id, { visibility: t.visibility === 'public' ? 'private' : 'public' }))
-    toast.success(t.visibility === 'public' ? 'Mẫu đã công khai — mọi người dùng áp được' : 'Mẫu đã chuyển về riêng tư')
+    toast.success(t.visibility === 'public' ? 'Đã chia sẻ — mọi người trong MISA dùng được mẫu này khi tạo bài' : 'Mẫu đã chuyển về riêng tư')
   } catch (err) {
     toast.error(err.message)
   }
@@ -224,7 +224,7 @@ async function doRemove() {
 }
 const menuFor = (t) => [
   { key: 'rename', label: 'Đổi tên', icon: 'pencil' },
-  { key: 'share', label: t.visibility === 'public' ? 'Chuyển về riêng tư' : 'Công khai cho mọi người', icon: t.visibility === 'public' ? 'lock' : 'share' },
+  { key: 'share', label: t.visibility === 'public' ? 'Thôi chia sẻ (về riêng tư)' : 'Chia sẻ cho mọi người trong MISA', icon: t.visibility === 'public' ? 'lock' : 'share' },
   { key: 'd', divider: true },
   { key: 'remove', label: 'Xoá mẫu', icon: 'trash', danger: true },
 ]
@@ -302,7 +302,7 @@ const swatch = (t) => themeSwatch(t.design?.theme, t.design?.palette)
     <!-- Mẫu thương hiệu -->
     <section class="flex flex-col gap-2 border-t border-[var(--mds-border)] pt-4" aria-labelledby="tpl-h">
       <h3 id="tpl-h" class="text-[14px] font-semibold">Mẫu thương hiệu</h3>
-      <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Lưu màu, nền, phông, logo và ảnh nhận diện của bài này thành mẫu để dùng lại. Mẫu công khai: mọi người dùng đều áp được (ví dụ bộ nhận diện công ty).</p>
+      <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Lưu màu, nền, phông, logo và ảnh nhận diện của bài này thành mẫu để dùng lại. Mẫu chia sẻ: mọi người trong MISA đều chọn được khi tạo bài mới hoặc áp vào bài của họ (ví dụ bộ nhận diện công ty).</p>
       <div class="flex items-start gap-2" :class="compact ? 'flex-col items-stretch' : ''">
         <div class="min-w-0 flex-1"><MInput v-model="tplName" placeholder="Tên mẫu, ví dụ: Nhận diện công ty 2026" aria-label="Tên mẫu mới" @keydown.enter="saveTemplate" /></div>
         <MButton variant="outline" :loading="saving" @click="saveTemplate"><template #icon><MIcon name="bookmark" :size="16" /></template>Lưu thành mẫu</MButton>
@@ -329,7 +329,7 @@ const swatch = (t) => themeSwatch(t.design?.theme, t.design?.palette)
             <template v-else>
               <p class="truncate text-[13px] font-medium leading-[18px]">{{ t.name }}</p>
               <p class="truncate text-[11px] leading-4 text-[var(--mds-text-secondary)]">
-                {{ t.isOwner ? (t.visibility === 'public' ? 'Của tôi · Công khai' : 'Của tôi · Riêng tư') : `Công khai · ${t.ownerName || 'người dùng khác'}` }}
+                {{ t.isOwner ? (t.visibility === 'public' ? 'Của tôi · Chia sẻ cho mọi người' : 'Của tôi · Riêng tư') : `${t.ownerName || 'Người dùng khác'} chia sẻ` }}
               </p>
             </template>
           </div>

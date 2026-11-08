@@ -15,7 +15,7 @@ frontend/src/
   router.js          # route + guard (session, guest, auth, mustChange, admin), safeNext()
   lib/               # api, session, surface, slideModel, deckActions, format, design (tông màu/nền/phông/logo cho giao diện),
                      #   deckPath (đường dẫn /ten-bai/ma/tinh-nang), editPaths (allowlist đường dẫn trường sửa trên khung)
-  composables/       # logic dùng chung 2 bề mặt: useDecks, useCreate, useOutline, useEditor, useMedia, useVideoPlayer, useDeckFrame, useAuthForms, useAdminUsers,
+  composables/       # logic dùng chung 2 bề mặt: useDecks, useFolders + useFolderView (thư mục, `05` §25), useCreate, useOutline, useEditor, useMedia, useVideoPlayer, useDeckFrame, useAuthForms, useAdminUsers,
                      #   useLiveDeck (khung sửa trực tiếp), useSlideMedia (mở hộp ảnh/video theo ô), useDeckUrl,
                      #   useSharing (mời/đổi quyền/gỡ — chủ bài), useVersions (bản gốc + handoff, khôi phục)
   shared/            # component dùng chung: SlideFields, ImagePicker, DeckThumb, RatioPicker, FormField, FormAlert, TempPasswordBox,

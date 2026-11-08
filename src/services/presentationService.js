@@ -35,6 +35,8 @@ import { renderDeck, deckSize } from './renderService.js';
 import { assetKey, presentationPrefix } from './storageService.js';
 import sharp from 'sharp';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const MAX_PENDING_JOBS = 20;
 // Ảnh xem trước gửi AI đủ lớn để đọc chữ trong ảnh (OCR), có trần tổng dung lượng để request không vượt ~20 MB.
 const MODEL_IMAGE_PREVIEWS = 30;
@@ -108,7 +110,7 @@ export function parseThemeChoice(input) {
   return { tone: preset.tone, theme, palette: null };
 }
 
-export function createPresentationService({ config, repos, storage, gemini, browser, signer, audit, stock }) {
+export function createPresentationService({ config, repos, storage, gemini, browser, signer, audit, stock, templates, folders }) {
   const { presentations, assets, versions } = repos;
   const genQueue = new Semaphore(config.limits.generationConcurrency);
   // Vị trí chờ + thời gian đo được của job AI — giao diện hiện "đã nhận / đang chờ / đang xử lý" (roadmap B).
@@ -133,6 +135,20 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     return ticket;
   }
 
+  // Thiết kế của mẫu (màu, nền, phông, logo, ảnh nhận diện — ảnh đã sao chép thành asset của bài) ghép lên thiết kế dàn ý.
+  // Mẫu bị xoá/đổi riêng tư giữa chừng → giữ thiết kế mặc định, không làm hỏng cả bài.
+  async function designFromTemplate(tenantId, id, templateId, base) {
+    try {
+      const res = await templates.applyOnCreate(tenantId, { id, tenant_id: tenantId }, templateId);
+      const out = { ...base };
+      for (const k of ['theme', 'palette', 'background', 'font', 'logo', 'brand']) if (res.design[k] !== undefined) out[k] = res.design[k];
+      return out;
+    } catch (err) {
+      logger.warn('create_template_skipped', { id, err: err.message });
+      return base;
+    }
+  }
+
   /* ---------------- bước 1: tạo dàn ý bằng AI ---------------- */
   // input.files: tệp multer trên đĩa — từ đây service chịu trách nhiệm xoá (lỗi kiểm tra → xoá ngay; job xong → xoá).
   async function create(user, input, ip) {
@@ -148,6 +164,11 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     let ticket = null;
     try {
       choice = parseThemeChoice(input);
+      // Mẫu thiết kế chọn lúc tạo bài (của mình hoặc được chia sẻ cho mọi người) — áp khi dàn ý xong.
+      if (input.templateId) {
+        if (!UUID_RE.test(String(input.templateId)) || !templates) throw badRequest('Mẫu thiết kế không hợp lệ', 'INVALID_TEMPLATE');
+        await templates.assertReadable(user.id, String(input.templateId));
+      }
       src = await precheckSource({ files: input.files, url: input.url, urls: input.urls, text: input.text }, config.limits, { driveFolders: Boolean(config.google.apiKey) });
       userMedia = await precheckMedia(input.media, input.posters, config.limits);
       const total = [...(input.files || []), ...(input.media || [])].reduce((n, f) => n + (f.size || 0), 0);
@@ -176,7 +197,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     }
 
     // Chạy nền; client theo dõi trạng thái bằng GET /api/presentations/:id.
-    const job = { urls: src.urls, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages };
+    const job = { urls: src.urls, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages, templateId: input.templateId ? String(input.templateId) : null };
     ticket
       .run(jobs.wrap(id, 'outline', () => generateOutline(user.id, id, job)))
       .catch((err) => logger.error('outline_unhandled', { id, err }))
@@ -386,6 +407,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       // Ảnh giao diện đã cắt mà AI chưa dùng: chèn vào trang chữ còn trống / gom thành trang ảnh khi còn hạn mức trang (không bắt buộc).
       const uiLeft = [...ui].filter((aid) => !outline.slides.some((sl) => (sl.images || []).some((im) => im.asset === aid))).map((aid) => ({ asset: aid, ...look.get(aid) }));
       const uiPlaced = placeUserMedia(outline.slides, { images: uiLeft, videos: [] }, { room: Math.max(0, maxSlides - outline.slides.length), force: false, chunk: 4, title: 'Giao diện sản phẩm' });
+      if (input.templateId) outline.design = await designFromTemplate(tenantId, id, input.templateId, outline.design);
       await presentations.setOutlineResult(tenantId, id, { outline, title: input.title ? null : outline.title });
       const kinds = {};
       for (const k of kindOf.values()) if (k) kinds[k] = (kinds[k] || 0) + 1;
@@ -533,6 +555,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       thumbnailUrl: row.thumbnail_asset_id ? `/api/assets/${row.thumbnail_asset_id}?v=${new Date(row.updated_at).getTime()}` : null,
       errorMessage: row.error_message,
       isOwner: row.tenant_id === viewerId,
+      // Thư mục là cách sắp xếp riêng của chủ bài — người khác không thấy.
+      folderId: row.tenant_id === viewerId ? row.folder_id || null : null,
       // 'owner' | 'editor' | 'viewer' — giao diện dựa vào đây để mở trình soạn thảo / chỉ trình chiếu.
       access: row.access_role || (row.tenant_id === viewerId ? 'owner' : 'viewer'),
       // Quyền được mời ('viewer' | 'editor') — null: bài của mình hoặc chỉ xem nhờ công khai.
@@ -546,16 +570,18 @@ export function createPresentationService({ config, repos, storage, gemini, brow
 
   const assetDto = (a) => ({ id: a.id, kind: a.kind, url: signer.url(a.id), width: a.width, height: a.height, name: a.original_name, mime: a.mime, bytes: a.bytes });
 
-  async function list(user, { scope, q, page, pageSize }) {
+  async function list(user, { scope, q, folder, page, pageSize }) {
     const limit = pageSize;
     const offset = (page - 1) * pageSize;
     const query = q ? String(q).trim().slice(0, 100) : '';
+    // Thư mục chỉ lọc "Bài của tôi"; đang tìm kiếm thì tìm trong mọi thư mục.
+    const inFolder = scope === 'mine' && !query && folders ? await folders.resolveFilter(user, folder) : { mode: 'all' };
     const res =
       scope === 'public'
         ? await presentations.listPublic({ q: query, limit, offset })
         : scope === 'shared'
           ? await presentations.listSharedWith(user.id, { q: query, limit, offset })
-          : await presentations.listOwned(user.id, { q: query, limit, offset });
+          : await presentations.listOwned(user.id, { q: query, limit, offset, folder: inFolder });
     return { rows: res.rows.map((r) => toDto(r, user.id)), total: res.total };
   }
 

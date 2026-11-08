@@ -27,9 +27,25 @@ CREATE TABLE IF NOT EXISTS users (
   UNIQUE KEY uq_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- Thư mục sắp xếp bài (của từng người, lồng nhau; parent_id NULL = gốc). Xoá thư mục: ứng dụng chuyển con + bài lên cha trước.
+CREATE TABLE IF NOT EXISTS folders (
+  id          CHAR(36)      NOT NULL,
+  tenant_id   CHAR(36)      NOT NULL,
+  parent_id   CHAR(36)      NULL,
+  name        VARCHAR(120)  NOT NULL,
+  created_at  DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at  DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (id),
+  KEY ix_folders_tenant_parent (tenant_id, parent_id),
+  CONSTRAINT fk_folders_tenant FOREIGN KEY (tenant_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT fk_folders_parent FOREIGN KEY (parent_id) REFERENCES folders (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS presentations (
   id                CHAR(36)      NOT NULL,
   tenant_id         CHAR(36)      NOT NULL,
+  -- Thư mục chứa bài (NULL = chưa xếp vào thư mục).
+  folder_id         CHAR(36)      NULL,
   -- Mã ngắn 8 ký tự [a-z0-9] cho đường dẫn /tên-bài/<mã>/<tính năng> (chỉ định vị, không thay kiểm tra quyền).
   short_code        CHAR(8)       NULL,
   title             VARCHAR(200)  NOT NULL,
@@ -57,7 +73,9 @@ CREATE TABLE IF NOT EXISTS presentations (
   UNIQUE KEY uq_presentations_code (short_code),
   KEY ix_presentations_tenant_updated (tenant_id, updated_at),
   KEY ix_presentations_public (visibility, status, published_at),
-  CONSTRAINT fk_presentations_tenant FOREIGN KEY (tenant_id) REFERENCES users (id) ON DELETE CASCADE
+  KEY ix_presentations_folder (tenant_id, folder_id, updated_at),
+  CONSTRAINT fk_presentations_tenant FOREIGN KEY (tenant_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT fk_presentations_folder FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -217,3 +235,4 @@ INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261006_
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261006_200000.sql');
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261007_100000.sql');
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261012_100000.sql');
+INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261108_100000.sql');

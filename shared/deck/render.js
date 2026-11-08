@@ -232,7 +232,9 @@ function statValue(st, d, ctx, p) {
 
 // Danh sách dọc có trục nối (dòng thời gian dọc, quy trình dọc): cột nhãn | trục chấm | nội dung.
 function railList(steps, label, ctx, editValue) {
-  return `<div class="tlv">${steps
+  // Độ rộng cột nhãn theo nhãn dài nhất (theme.css .tlv-i dùng --vw).
+  const vw = Math.max(0, ...steps.map((st, i) => plainText(label(st, i) || '').length));
+  return `<div class="tlv" style="--vw:${vw}">${steps
     .map((st, i) => `<div class="tlv-i" style="${accent(i)}"><span class="tlv-v" data-a="up" data-d="${16 + i * 7}" data-dist="30"${editValue && st.value ? E(ctx, `steps.${i}.value`, LIM.itemValue) : ''}>${rt(label(st, i))}</span><div class="tlv-rail"><i class="tl-dot" data-a="pop" data-d="${14 + i * 7}"></i><i class="tlv-ln"></i></div><div class="tlv-c" data-a="left" data-d="${18 + i * 7}">${itemText(st, ctx, `steps.${i}`)}</div></div>`)
     .join('')}</div>`;
 }
@@ -447,7 +449,10 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
     }
     if (v === 'cards') {
       const cols = steps.length;
-      return `${head(s, ctx)}<div class="body"><div class="proc tl-cards" style="--cols:${cols};--vl:${longestWord(steps.map((st, i) => st.value || pad2(i + 1)))}">${steps
+      const labels = steps.map((st, i) => plainText(st.value || '') || pad2(i + 1));
+      const full = Math.max(4, ...labels.map((t) => t.length));
+      const one = full <= 18;
+      return `${head(s, ctx)}<div class="body"><div class="proc tl-cards${one ? ' one' : ''}" style="--cols:${cols};--vl:${one ? full : longestWord(labels)}">${steps
         .map((st, i) => `<div class="panel ps" style="${accent(i)}" data-a="up" data-d="${18 + i * 7}"><span class="tlc-v"${st.value ? E(ctx, `steps.${i}.value`, LIM.itemValue) : ''}>${rt(st.value || pad2(i + 1))}</span>${itemText(st, ctx, `steps.${i}`)}${i < cols - 1 ? `<span class="arr">${icon('arrow')}</span>` : ''}</div>`)
         .join('')}</div></div>`;
     }

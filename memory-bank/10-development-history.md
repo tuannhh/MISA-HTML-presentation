@@ -1,5 +1,29 @@
 # 10 — Lịch sử phát triển
 
+## 2026-11-08 — Thư mục lồng nhau cho "Bài của tôi" (yêu cầu thêm, đầu Đợt 2)
+
+- Bảng `folders` + cột `presentations.folder_id` (changelog `20261108_100000`, idempotent, đã áp Docker 2 lần) → `03`; API `/api/folders` + `?folder=` ở danh sách → `04`;
+  nghiệp vụ + giao diện desktop/mobile → `05` §25.
+- Bẫy gặp phải: truyền object chứa `computed` qua prop (`view`) → template không tự mở `.value` (`MTree` nhận ComputedRef → "n is not iterable");
+  sửa bằng `reactive(props.view)` trong `FolderDialogs`.
+- Kiểm chứng: unit **265** đạt (mới: `test/unit/folders.test.js` 5 test — độ sâu, vòng lặp, cây con quá sâu, chuyển bài chỉ của mình, xoá đưa bài lên cha, bộ lọc 404;
+  `db-verify` đòi `folders` + changelog mới); Docker 8088: API (tạo 3 cấp, cấp 6 bị chặn, vòng lặp bị chặn, chuyển/lọc/xoá) + Chrome tự động desktop (tạo qua hộp thoại,
+  chuyển qua menu + cây, kéo-thả về gốc, xoá thư mục đang mở → về gốc) và mobile, không lỗi trang. Thư mục thử đã dọn khỏi tài khoản test.
+
+## 2026-11-08 — Cải tiến 11 mục, Đợt 1: sửa lỗi + nhanh (mục 4, 5, 9, 10)
+
+- Bối cảnh: chủ dự án gửi 11 yêu cầu cải tiến; chốt làm 5 đợt (1: mục 4, 5, 9, 10 → 2: ảnh 6, 7 → 3: tạo bài 1, 2 → 4: video 3 → 5: layout + chuyển động 8, 11);
+  nhập HTML (mục 2) cho người dùng chọn "giữ nguyên thiết kế" hoặc "chuyển thành bài sửa được". Trước khi làm: gộp `feature/gemini-agent-platform` vào `main`
+  (fast-forward `827da35`, chưa push), nhánh làm việc `feature/cai-tien-11-muc`.
+- (4) Bôi chọn chữ trang kết bị mất chữ: focus dùng shorthand `background` phá chữ gradient `.cl-t` → `09` §Rà bố cục.
+- (5) Bấm ảnh lúc trình chiếu → xem toàn màn hình (`#lbx`, bộ chọn `LBX`), thay phóng "máy quay" cho ảnh → `05` §14.
+- (9) Mẫu chia sẻ đã có từ 10/2026 (`visibility='public'`, chỉ áp được ở bước dàn ý/trình soạn) → thêm ô chọn mẫu ở màn tạo bài + đổi nhãn
+  "chia sẻ cho mọi người trong MISA" → `05` §Mẫu thương hiệu.
+- (10) Công cụ rà bố cục `npm run audit:layout` + sửa nhãn lộ trình, cột mốc lộ trình dọc, line-height nhãn/kicker, co chữ tới 0,42 + nhãn `.dense` → `09`.
+- Kiểm chứng: unit **259/259** (mới: 2 test mẫu khi tạo bài, test bộ chọn `LBX`); `audit:layout` 4 tỷ lệ × 3 mức × 14 bố cục/57 biến thể: **0 lỗi**
+  (trước sửa 78 trang lỗi, phần lớn nhãn bị bẻ đôi); Chrome tự động: trang kết khi sửa + bôi chọn chữ hiện rõ, bấm ảnh mở toàn màn hình, phím → đóng ảnh.
+  Docker 8088 đã dựng lại bản này.
+
 ## 2026-10-15 — Gemini chuyển sang Gemini Enterprise Agent Platform (file khoá service account)
 
 - Yêu cầu: bỏ Gemini API key, gọi Gemini qua Agent Platform (tên cũ Vertex AI) bằng file JSON service account trong kho khoá MISA Image editor;
@@ -343,7 +367,7 @@ tích hợp 3D three.js — rồi chốt: làm (1) hiện từng ý theo bấm, 
 (1) Sửa chữ ngay trên bản xem trước thay vì form từng trang, lưu từng trang rồi làm tiếp; (2) chèn trang trắng — gợi ý/chọn bố cục,
 thêm bảng, ảnh, video, chỉnh cỡ/vị trí; (3) ảnh: AI tự sinh ảnh hợp nội dung bằng Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`, 1K),
 bấm ảnh để đổi — tải lên / tìm Internet theo từ khoá (chốt dùng **Pixabay**) / tạo bằng AI theo mô tả; AI tự tạo ảnh khi dựng bài là
-**tuỳ chọn ở màn Tạo, mặc định bật**; (4) công cụ sửa ảnh đơn giản kiểu Gamma (cắt, xoay, sáng/tối, độ rực, giữ khung nhưng dịch/zoom ảnh),
+**tuỳ chọn ở màn Tạo, mặc định bật**; (4) công cụ sửa ảnh đơn giản (cắt, xoay, sáng/tối, độ rực, giữ khung nhưng dịch/zoom ảnh),
 không dùng AI; (5) đường dẫn `/ten-bai/<8 ký tự ngẫu nhiên>/tinh-nang`.
 
 ### Thay đổi (chi tiết `05` §12)

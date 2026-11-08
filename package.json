@@ -15,7 +15,8 @@
     "create-admin": "node --env-file-if-exists=.env scripts/create-admin.js",
     "test": "node --test \"test/unit/**/*.test.js\"",
     "test:integration": "node --env-file-if-exists=.env --test --test-concurrency=1 \"test/integration/**/*.test.js\"",
-    "render:sample": "node scripts/snap-sample.js"
+    "render:sample": "node scripts/snap-sample.js",
+    "audit:layout": "node scripts/layout-audit.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -331,10 +331,20 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
 - Lưu toàn bộ thiết kế bài (tông màu, nền, phông, logo, bộ nhận diện, phong cách) thành mẫu có tên; **ảnh được sao chép** sang kho mẫu. Mẫu **riêng tư** (chỉ mình) hoặc **công khai** (mọi người dùng áp được — vd. bộ nhận diện công ty; chỉ chủ đổi tên/chia sẻ/xoá).
 - Áp mẫu: sao chép ảnh mẫu thành asset mới của bài đích → trả `design` → giao diện gán vào thiết kế đang sửa (người dùng bấm Lưu). Bước dàn ý không có `style` → bỏ qua trường này.
 - Cô lập: mẫu riêng tư người khác → 404; ảnh khi lưu mẫu phải thuộc bài của người lưu (`FOREIGN_ASSET`); ảnh mẫu chỉ đọc qua `/api/templates/assets/:id` khi đọc được mẫu.
+- **Chọn mẫu ngay khi tạo bài** (2026-11): ô "Mẫu thiết kế" ở CreatePage (desktop + mobile, chỉ hiện khi có mẫu; chọn mẫu thì ẩn Tông màu) gửi `templateId`.
+  `create()` kiểm tra mã + quyền xem ngay (`templateService.assertReadable` → 400 `INVALID_TEMPLATE` / 404 `TEMPLATE_NOT_FOUND`, chưa tạo bài);
+  dàn ý xong → `designFromTemplate` gọi `applyOnCreate` (sao chép ảnh mẫu thành asset của bài vừa tạo) và ghép theme/palette/background/font/logo/brand
+  vào `outline.design`. Mẫu bị xoá/thôi chia sẻ giữa chừng → log `create_template_skipped`, giữ thiết kế mặc định. Giao diện gọi "công khai" là
+  **"chia sẻ cho mọi người trong MISA"** (mọi tài khoản đang hoạt động).
 
 ## 14. Trình chiếu từng ý, phóng to khi bấm, hiệu ứng 3D (2026-10-06)
 
 Chỉ xuất **HTML + PDF** (không PowerPoint — PPTX không giữ được chuyển động/3D).
+
+### Bấm ảnh xem toàn màn hình (2026-11)
+- Trình chiếu: ảnh (`figure.media:not(.vid)`, `.pola`, `.fe-image` — bộ chọn `LBX` trong `engine.js`) không còn phóng kiểu "máy quay" mà mở lớp phủ
+  `#lbx` (ảnh `object-fit: contain` trên nền đen, chú thích nếu có). Bấm/Esc/phím bất kỳ chỉ đóng ảnh (không chuyển trang). Chưa toàn màn hình thì
+  xin `requestFullscreen` trên lớp phủ. Ảnh nền tràn trang (`.bleed`) không mở — bấm nền vẫn chuyển trang. Khối nội dung (thẻ, số liệu…) giữ phóng to.
 
 ### Trình chiếu từng ý (`slide.build`)
 - Người dùng chọn ở mục **"Trình chiếu khi bấm Sau"** (`SlideFields`, desktop + mobile; nút "Áp cho mọi trang" → `useEditor.setBuildAll`): `auto` (mặc định, **không lưu** trường) · `step` từng ý mỗi lần bấm · `dim` từng ý + làm mờ ý trước · `tour` phóng to lần lượt từng ý rồi thu về. **Không qua AI** (không có trong schema Gemini).
@@ -612,3 +622,19 @@ Yêu cầu: Ctrl+Z hoàn tác về bước trước, **không giới hạn số 
   hoàn tác của trình duyệt.
 - **Nút**: desktop — ↶ ↷ (`arrow-back-up` / `arrow-forward-up`) ngay sau ô tên bài, tooltip "Hoàn tác · Ctrl+Z" / "Làm lại · Ctrl+Shift+Z"
   (Mac: ⌘Z / ⌘⇧Z — `HISTORY_SHORTCUTS`), `aria-keyshortcuts`; mobile — 2 nút 48 px đầu thanh đáy, trước "Hủy thay đổi" / "Lưu". Khoá khi hết bước.
+
+## 25. Thư mục lồng nhau cho "Bài của tôi" (2026-11-08)
+
+Yêu cầu chủ dự án: người dùng tạo thư mục, kể cả thư mục trong thư mục.
+
+- **Phạm vi**: mỗi người 1 cây riêng; chỉ xếp **bài của chính mình** (bài được chia sẻ / công khai không vào thư mục). Lồng tối đa **5 cấp**, ≤ 300 thư mục/người,
+  trùng tên được. Kiểm tra vòng lặp/độ sâu/số lượng chạy trên cây đã khoá `FOR UPDATE` trong transaction (`folderRepository` nhận hàm `check(rows)`) → 2 yêu cầu
+  đồng thời không tạo vòng lặp.
+- **Xoá thư mục không xoá bài**: thư mục con + bài chuyển lên thư mục cha. Xoá bài → `folder_id` tự mất theo bài; xoá người dùng → cascade.
+- **Danh sách**: "Bài của tôi" mặc định mở gốc (`folder=root`: bài ngoài thư mục + thẻ thư mục cấp 1); `?folder=<id>` mở thư mục (URL chia sẻ/quay lại được;
+  thư mục không còn → về gốc). Gõ tìm kiếm → tìm mọi bài, ẩn thẻ thư mục. Chuyển bài không đổi `updated_at` (không đẩy bài lên đầu).
+- **Giao diện** (`useFolders` + `useFolderView` + `shared/FolderDialogs.vue`): desktop — đường dẫn (Bài của tôi › A › B), nút "Thư mục mới", menu ⋯ của thư mục
+  đang mở, lưới thẻ thư mục (tên, "n thư mục · m bài", menu Đổi tên / Chuyển đến… / Xóa thư mục), menu bài thêm "Chuyển vào thư mục…" (hộp cây `MTree`, chỗ không
+  hợp lệ bị khoá mờ), **kéo thẻ bài thả** lên thẻ thư mục hoặc mục đường dẫn. Mobile — tiêu đề = tên thư mục, ← về thư mục cha, nút thư mục (tạo) + ⋯ (thao tác
+  thư mục) trên thanh đầu, dòng thư mục 64 px đầu danh sách, ActionSheet; chuyển bài qua ⋮ → "Chuyển vào thư mục…".
+- Bài đang lập dàn ý/đang dựng không có mục "Chuyển vào thư mục…" (vẫn chuyển được sau).

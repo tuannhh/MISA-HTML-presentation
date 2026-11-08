@@ -9,6 +9,7 @@ import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
 import MCheckbox from '@/components/mds/MCheckbox.vue'
+import MSelect from '@/components/mds/MSelect.vue'
 import ThemePicker from '@/shared/ThemePicker.vue'
 import MRadioGroup from '@/components/mds/MRadioGroup.vue'
 import MTabs from '@/components/mds/MTabs.vue'
@@ -21,7 +22,7 @@ import CreateMediaPicker from '@/shared/CreateMediaPicker.vue'
 import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_SOURCE_LINKS, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
 
 const router = useRouter()
-const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls } = useCreate()
+const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions } = useCreate()
 const SLIDE_MODES_M = SLIDE_MODES.map((m) => ({ ...m, label: m.value === 'auto' ? 'Tự động' : m.label }))
 const SHORT = { file: 'Tệp', url: 'Link', text: 'Văn bản' }
 const MODES = SOURCE_MODES.map((m) => ({ ...m, label: SHORT[m.key] }))
@@ -116,7 +117,10 @@ async function onSubmit() {
       <FormField label="Tỷ lệ khung hình" group>
         <RatioPicker v-model="form.ratio" compact name="ratio-m" />
       </FormField>
-      <FormField label="Tông màu" group hint="Đổi lại được ở bước duyệt dàn ý.">
+      <FormField v-if="templates.length" label="Mẫu thiết kế" hint="Mẫu của bạn hoặc đồng nghiệp chia sẻ cho mọi người trong MISA.">
+        <MSelect v-model="form.templateId" :options="templateOptions" aria-label="Mẫu thiết kế" />
+      </FormField>
+      <FormField v-if="!form.templateId" label="Tông màu" group hint="Đổi lại được ở bước duyệt dàn ý.">
         <ThemePicker v-model:tone="form.tone" v-model:theme="form.theme" v-model:primary="form.primary" v-model:secondary="form.secondary" name="theme-m" compact allow-auto />
         <p v-if="errors.theme" class="text-[13px] text-[var(--mds-danger)]">{{ errors.theme }}</p>
       </FormField>

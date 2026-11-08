@@ -107,10 +107,15 @@
     };
     // Ô chữ người dùng đã kéo dời (data-mv) đo ở vị trí gốc — kéo ra mép không làm cả trang co chữ.
     s.classList.add('fit-m');
-    while (k > 0.5 && check()) { k = Math.round((k - 0.04) * 100) / 100; s.style.setProperty('--k', String(k)); }
-    // Co tới mức nhỏ nhất vẫn tràn → chế độ sửa đánh dấu trang (theme.css: body.edit .slide.ovf) để người dùng bớt chữ / giảm cỡ /
-    // giãn dòng; trình chiếu, HTML xuất, PDF không hiện dấu này.
-    if (MODE === 'edit') s.classList.toggle('ovf', k <= 0.5 && check());
+    // Mức thường tới 0,5; trang quá dày co tiếp tới 0,42 (chữ nhỏ nhưng không bị cắt mất khi trình chiếu/xuất — rà bố cục 11/2026).
+    while (k > 0.42 && check()) { k = Math.round((k - 0.04) * 100) / 100; s.style.setProperty('--k', String(k)); }
+    // Chế độ sửa (trình chiếu, HTML xuất, PDF không hiện dấu): co hết mức vẫn tràn → đỏ (.ovf); phải co dưới 0,5 mới vừa → vàng (.dense)
+    // nhắc bớt chữ / tách trang.
+    if (MODE === 'edit') {
+      var still = k <= 0.42 && check();
+      s.classList.toggle('ovf', still);
+      s.classList.toggle('dense', !still && k < 0.5);
+    }
     s.classList.remove('fit-m');
   }
   // Đang gõ: co chữ ngay (tối đa 1 lần/khung hình) — chữ thêm vào không bị cắt mất trong lúc sửa.
@@ -167,8 +172,10 @@
   /* ---------- trình chiếu từng ý (data-build trên slide) + phóng to khi bấm ---------- */
   // Đơn vị nội dung theo bố cục (khối ngoài cùng, không tính tiêu đề/trang tự do). Thứ tự = thứ tự trong trang.
   var UNIT = '.ag-i,.tile,.path-i,.bi,.card,.crow,.stat,.st-hero,.st-row,.st-bar,.st-ring,.pola,.gal>.media,.tl-step,.tz-i,.ps,.tlv-i,.chev-i,.stair,.col,.org-br';
-  // Phần tử phóng to được khi bấm (video không — bấm video để phát).
-  var ZOOM = '.card,.stat,.st-hero,.st-row,.st-ring,.st-bar,.col,.ps,.stair,.tl-step,.tz-i,.chev-i,.tile,.crow,.panel.bi,.pola,figure.media:not(.vid),.fe-image,.fe-table,.org-br';
+  // Phần tử phóng to được khi bấm (video không — bấm video để phát; ảnh không — bấm ảnh mở toàn màn hình, LBX).
+  var ZOOM = '.card,.stat,.st-hero,.st-row,.st-ring,.st-bar,.col,.ps,.stair,.tl-step,.tz-i,.chev-i,.tile,.crow,.panel.bi,.fe-table,.org-br';
+  // Ảnh mở toàn màn hình khi bấm (ảnh nền tràn trang .bleed không — bấm nền để chuyển trang như cũ).
+  var LBX = 'figure.media:not(.vid),.pola,.fe-image';
   var BUILDS = { step: 1, dim: 1, tour: 1 };
   var STEPS = [], SF = []; // STEPS[i] = { mode, units[], max } · SF[i][k] = khung bắt đầu của ý k (null = theo nhịp gốc)
   function outer(list, sl) { return list.filter(function (el) { var p = el.parentElement && el.parentElement.closest(UNIT); return !p || !sl.contains(p); }); }
@@ -194,6 +201,12 @@
     });
   }
   function markZoom() {
+    slides.forEach(function (sl) {
+      Array.prototype.forEach.call(sl.querySelectorAll(LBX), function (el) {
+        if (el.closest('.vid') || el.querySelector('.vid') || !el.querySelector('img')) return;
+        el.setAttribute('data-lb', '');
+      });
+    });
     slides.forEach(function (sl) {
       Array.prototype.forEach.call(sl.querySelectorAll(ZOOM), function (el) {
         if (el.closest('.vid') || el.querySelector('.vid')) return;
@@ -397,6 +410,35 @@
     try { if (document.fullscreenElement === o) document.exitFullscreen(); } catch (e) { /* bỏ qua */ }
     if (o.parentNode) o.parentNode.removeChild(o);
   }
+  /* xem ảnh toàn màn hình (bấm ảnh lúc trình chiếu) — phủ kín khung chiếu, bấm/Esc/phím bất kỳ để đóng */
+  var lb = null;
+  function closeLightbox() {
+    if (!lb) return;
+    var o = lb; lb = null;
+    try { if (document.fullscreenElement === o) document.exitFullscreen(); } catch (e) { /* bỏ qua */ }
+    o.classList.remove('in');
+    setTimeout(function () { if (o.parentNode) o.parentNode.removeChild(o); }, REDUCE ? 0 : 300);
+  }
+  function openLightbox(el) {
+    var src = el.querySelector('img');
+    if (!src || !(src.currentSrc || src.src)) return;
+    closeLightbox();
+    lb = document.createElement('div');
+    lb.id = 'lbx'; lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-label', src.alt || 'Ảnh');
+    var img = document.createElement('img');
+    img.src = src.currentSrc || src.src; img.alt = src.alt || '';
+    lb.appendChild(img);
+    var capEl = el.querySelector('figcaption');
+    if (capEl && capEl.textContent.trim()) { var cap = document.createElement('figcaption'); cap.textContent = capEl.textContent.trim(); lb.appendChild(cap); }
+    var x = document.createElement('button'); x.type = 'button'; x.className = 'vx'; x.setAttribute('aria-label', 'Đóng ảnh'); x.textContent = '×'; lb.appendChild(x);
+    lb.addEventListener('click', function (e) { e.stopPropagation(); closeLightbox(); });
+    document.body.appendChild(lb);
+    void lb.offsetWidth; lb.classList.add('in');
+    // Đang chiếu toàn màn hình thì lớp phủ đã kín màn; chưa thì xin toàn màn hình (cần ngay trong sự kiện bấm).
+    if (!document.fullscreenElement) { try { var r = lb.requestFullscreen && lb.requestFullscreen(); if (r && r.catch) r.catch(function () {}); } catch (e) { /* khung chặn → vẫn phủ kín khung */ } }
+  }
+  document.addEventListener('fullscreenchange', function () { if (lb && document.fullscreenElement === lb) lb.setAttribute('data-fs', '1'); else if (lb && lb.getAttribute('data-fs') && !document.fullscreenElement) closeLightbox(); });
+
   function playVideo(fig) {
     var vp = fig.getAttribute('data-vp');
     var title = fig.getAttribute('data-title') || 'Video';
@@ -614,6 +656,8 @@
     addEventListener('keydown', function (e) {
       var k = e.key;
       if (ov) { if (k === 'Escape') closeVideo(); return; }
+      // Đang xem ảnh: phím bất kỳ (trừ phím bổ trợ) chỉ đóng ảnh, không chuyển trang.
+      if (lb) { if (['Shift', 'Control', 'Alt', 'Meta'].indexOf(k) < 0) { e.preventDefault(); closeLightbox(); } return; }
       // Enter/Space trên nút phát video / liên kết → để phần tử nhận lệnh bấm, không chuyển trang.
       if ((k === 'Enter' || k === ' ') && e.target && e.target.closest && e.target.closest('.vplay, a[href]')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -644,6 +688,8 @@
       if (e.target && e.target.closest && e.target.closest('a[href]')) { e.stopPropagation(); return; }
       var fig = e.target && e.target.closest ? e.target.closest('.vid') : null;
       if (fig) { e.stopPropagation(); playVideo(fig); return; }
+      var pic = e.target && e.target.closest ? e.target.closest('[data-lb]') : null;
+      if (pic && slides[cur].contains(pic) && !pic.closest('[data-wait]')) { e.stopPropagation(); if (Z.el) zoomOut(); openLightbox(pic); return; }
       // Bấm vào khối nội dung → phóng to; đang phóng → bấm khối khác chuyển sang khối đó, bấm chỗ khác thu về.
       var z = e.target && e.target.closest ? e.target.closest('[data-z]') : null;
       if (z && (!slides[cur].contains(z) || z.closest('[data-wait]'))) z = null;
@@ -653,7 +699,7 @@
     });
     var tx = null;
     addEventListener('touchstart', function (e) { tx = e.touches[0].clientX; }, { passive: true });
-    addEventListener('touchend', function (e) { if (tx === null || ov) return; var dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) { if (dx < 0) next(); else prev(); } tx = null; });
+    addEventListener('touchend', function (e) { if (tx === null || ov || lb) return; var dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 40) { if (dx < 0) next(); else prev(); } tx = null; });
     // Thị sai theo con trỏ cho nền/logo 3D (−1…1 quanh tâm màn hình).
     addEventListener('pointermove', function (e) {
       ptr.x = clamp((e.clientX / innerWidth) * 2 - 1, -1, 1); ptr.y = clamp(1 - (e.clientY / innerHeight) * 2, -1, 1);

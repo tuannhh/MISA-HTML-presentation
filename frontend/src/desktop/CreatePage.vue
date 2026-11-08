@@ -9,6 +9,7 @@ import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
 import RatioPicker from '@/shared/RatioPicker.vue'
 import MCheckbox from '@/components/mds/MCheckbox.vue'
+import MSelect from '@/components/mds/MSelect.vue'
 import ThemePicker from '@/shared/ThemePicker.vue'
 import MRadioGroup from '@/components/mds/MRadioGroup.vue'
 import MTabs from '@/components/mds/MTabs.vue'
@@ -21,7 +22,7 @@ import CreateMediaPicker from '@/shared/CreateMediaPicker.vue'
 import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_SOURCE_LINKS, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
 
 const router = useRouter()
-const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls } = useCreate()
+const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions } = useCreate()
 
 // Thêm ô link mới → đặt con trỏ vào ô đó.
 async function onAddUrl() {
@@ -128,7 +129,10 @@ async function onSubmit() {
           <FormField label="Tỷ lệ khung hình" group>
             <RatioPicker v-model="form.ratio" />
           </FormField>
-          <FormField label="Tông màu" group hint="Gợi ý bảng màu theo nền tối/sáng; Tuỳ chỉnh tự đảm bảo chữ đủ tương phản. Đổi lại được ở bước duyệt dàn ý.">
+          <FormField v-if="templates.length" label="Mẫu thiết kế" hint="Mẫu của bạn hoặc mẫu đồng nghiệp chia sẻ cho mọi người trong MISA: màu, nền, phông, logo, ảnh nhận diện. Chọn mẫu thì không cần chọn Tông màu.">
+            <MSelect v-model="form.templateId" :options="templateOptions" aria-label="Mẫu thiết kế" />
+          </FormField>
+          <FormField v-if="!form.templateId" label="Tông màu" group hint="Gợi ý bảng màu theo nền tối/sáng; Tuỳ chỉnh tự đảm bảo chữ đủ tương phản. Đổi lại được ở bước duyệt dàn ý.">
             <ThemePicker v-model:tone="form.tone" v-model:theme="form.theme" v-model:primary="form.primary" v-model:secondary="form.secondary" allow-auto />
             <p v-if="errors.theme" class="text-[12px] text-[var(--mds-danger)]">{{ errors.theme }}</p>
           </FormField>

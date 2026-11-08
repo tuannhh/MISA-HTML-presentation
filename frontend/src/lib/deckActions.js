@@ -35,6 +35,7 @@ export function deckMenuItems(d) {
       { key: 'd2', divider: true },
     );
   }
+  if (d.status !== 'outlining' && d.status !== 'generating') items.push({ key: 'move', label: 'Chuyển vào thư mục…', icon: 'folder' });
   items.push({ key: 'remove', label: 'Xóa', icon: 'trash', danger: true });
   return items;
 }

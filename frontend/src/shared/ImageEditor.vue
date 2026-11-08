@@ -1,5 +1,5 @@
 <script setup>
-// Trình chỉnh sửa ảnh đơn giản (kiểu Gamma): cắt theo tỷ lệ, xoay 90° + xoay tinh, lật, sáng/tối – độ rực – tương phản,
+// Trình chỉnh sửa ảnh đơn giản: cắt theo tỷ lệ, xoay 90° + xoay tinh, lật, sáng/tối – độ rực – tương phản,
 // và "vị trí trong khung" (giữ nguyên khung trên slide, chỉ dịch/phóng ảnh bên trong).
 // Phần cắt/xoay dùng Cropper.js v1 (không AI). Bấm Áp dụng → máy chủ áp thông số lên ẢNH GỐC bằng sharp
 // (crop tính theo tỷ lệ của khung bao ảnh SAU khi xoay — khớp cách Cropper.getData() trả về).

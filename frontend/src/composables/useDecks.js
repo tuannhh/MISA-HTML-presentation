@@ -8,8 +8,10 @@ import { useToast } from '@/components/mds/toast.js';
 
 export const PAGE_SIZE = 24;
 
-export function useDecks(scope) {
+// folder (chỉ scope 'mine'): 'root' = bài chưa xếp thư mục, mã thư mục = bài trong thư mục đó. Đang tìm kiếm → tìm mọi bài.
+export function useDecks(scope, { folder: initialFolder = 'root' } = {}) {
   const rows = ref([]);
+  const folder = ref(scope === 'mine' ? initialFolder : null);
   const total = ref(0);
   const page = ref(1);
   const q = ref('');
@@ -28,6 +30,7 @@ export function useDecks(scope) {
     try {
       const params = new URLSearchParams({ scope, page: String(page.value), pageSize: String(PAGE_SIZE) });
       if (q.value.trim()) params.set('q', q.value.trim());
+      else if (folder.value) params.set('folder', folder.value);
       const res = await get(`/api/presentations?${params}`, { signal: ctrl.signal });
       rows.value = res.data;
       total.value = res.meta?.total ?? res.data.length;
@@ -53,6 +56,12 @@ export function useDecks(scope) {
       page.value = 1;
       load();
     }, 300);
+  }
+
+  function setFolder(v) {
+    folder.value = v || 'root';
+    page.value = 1;
+    return load();
   }
 
   function goPage(p) {
@@ -88,6 +97,7 @@ export function useDecks(scope) {
   const toast = useToast();
   const pendingRemove = ref(null);
   const pendingShare = ref(null);
+  const pendingMove = ref(null); // bài đang chọn thư mục đích (trang mở hộp chọn)
 
   async function handle(key, d) {
     try {
@@ -95,6 +105,7 @@ export function useDecks(scope) {
       if (key === 'view') return router.push(deckPath(d, 'view'));
       if (key === 'remove') return (pendingRemove.value = d);
       if (key === 'share') return (pendingShare.value = d);
+      if (key === 'move') return (pendingMove.value = d);
       if (key === 'duplicate') {
         const copy = await duplicate(d);
         toast.success('Đã tạo bản sao riêng tư');
@@ -127,5 +138,5 @@ export function useDecks(scope) {
     ctrl?.abort();
   });
 
-  return { rows, total, page, q, loading, error, busy, load, search, goPage, duplicate, remove, setVisibility, exportFile, handle, pendingRemove, confirmRemove, pendingShare, pageSize: PAGE_SIZE };
+  return { folder, setFolder, pendingMove, rows, total, page, q, loading, error, busy, load, search, goPage, duplicate, remove, setVisibility, exportFile, handle, pendingRemove, confirmRemove, pendingShare, pageSize: PAGE_SIZE };
 }

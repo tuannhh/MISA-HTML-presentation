@@ -382,3 +382,19 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
   có `;`/`:` thành đường dẫn POSIX → chạy `docker compose` trong `MSYS2_ENV_CONV_EXCL='*' MSYS_NO_PATHCONV=1 bash -c '…'` hoặc dùng PowerShell.
 - `GEMINI_PROVIDER=agent-platform` mà thiếu tệp override compose → container nhận đường dẫn Windows của `GOOGLE_APPLICATION_CREDENTIALS` trong `.env`
   → fail-fast `ENOENT` (đúng thiết kế). Test tích hợp/đo tải ép `provider: 'developer-api'` để không cần file khoá.
+
+## Rà bố cục tự động (2026-11)
+
+- **Chữ chuyển màu (`background-clip: text; color: transparent`, `.cl-t` trang kết)**: quy tắc focus khi sửa từng dùng shorthand `background` →
+  xoá gradient + đặt lại `background-clip` → chữ biến mất khi bấm/bôi chọn (chỉ còn đoạn có màu riêng). Focus chỉ đổi `background-color`; `.cl-t:focus`
+  về màu đặc; `::selection` trong chế độ sửa đặt màu chữ thật (`-webkit-text-fill-color`). Thêm chữ gradient mới → thêm vào quy tắc `:focus` này.
+- **Công cụ `npm run audit:layout`** (`scripts/layout-audit.mjs`, cần Chrome): mọi bố cục × biến thể × 3 mức nội dung (mẫu / chữ dài / dày) × tỷ lệ;
+  bắt chữ tràn chân trang, bị cắt, nhãn ngắn (≤ 24 ký tự) xuống dòng, chữ "…" bị cắt, icon đè chữ, chữ tràn khỏi hình khối, co hết mức vẫn tràn.
+  Thoát mã 1 khi còn lỗi; `--shots` ghi ảnh đánh dấu đỏ vào `tmp/layout-audit/`. Đổi CSS/bố cục → chạy lại (mẫu có `moves` nên công cụ bỏ `moves/hide`).
+- Đã sửa theo công cụ: nhãn mốc thẻ lộ trình ("Tuần 7–10") bị bẻ đôi → `.tl-cards.one` giữ 1 dòng, `--vl` = độ dài cả cụm; cột mốc lộ trình dọc rộng theo
+  nhãn dài nhất (`--vw`, 300–560px); `.label`/`.kicker` line-height 1,35/1,3 + `text-wrap: balance` (nhãn dài xuống dòng không dính dòng);
+  `fitSlide` co tới 0,42 (trước 0,5) để trang quá dày không bị cắt khi trình chiếu — chế độ sửa: dưới 0,5 → nhãn vàng `.dense` "nên bớt chữ / tách trang",
+  co hết mức vẫn tràn → đỏ `.ovf`.
+
+
+- Vue: truyền object chứa `ref`/`computed` (vd. kết quả composable `useFolderView`) qua 1 prop → template **không** tự mở `.value` ở thuộc tính lồng (`view.moveNodes` là ComputedRef). Bọc `reactive(props.view)` hoặc dùng `.value` rõ ràng (2026-11-08, `FolderDialogs.vue`).

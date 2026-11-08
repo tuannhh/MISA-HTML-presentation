@@ -3,6 +3,7 @@ import { createUserRepository } from './repositories/userRepository.js';
 import { createPresentationRepository } from './repositories/presentationRepository.js';
 import { createAssetRepository } from './repositories/assetRepository.js';
 import { createTemplateRepository } from './repositories/templateRepository.js';
+import { createFolderRepository } from './repositories/folderRepository.js';
 import { createAuditRepository } from './repositories/auditRepository.js';
 import { createShareRepository } from './repositories/shareRepository.js';
 import { createVersionRepository } from './repositories/versionRepository.js';
@@ -15,6 +16,7 @@ import { createAuthService } from './services/authService.js';
 import { createPasswordHasher } from './lib/passwordHasher.js';
 import { createPresentationService } from './services/presentationService.js';
 import { createTemplateService } from './services/templateService.js';
+import { createFolderService } from './services/folderService.js';
 import { createSharingService } from './services/sharingService.js';
 import { createPublicationService } from './services/publicationService.js';
 import { createStockImageService } from './services/stockImageService.js';
@@ -27,6 +29,7 @@ export async function createContainer(config, pool, overrides = {}) {
     presentations: createPresentationRepository(pool),
     assets: createAssetRepository(pool),
     templates: createTemplateRepository(pool),
+    folders: createFolderRepository(pool),
     audit: createAuditRepository(pool),
     shares: createShareRepository(pool),
     versions: createVersionRepository(pool),
@@ -40,7 +43,9 @@ export async function createContainer(config, pool, overrides = {}) {
   const stock = overrides.stock || createStockImageService(config.pixabay);
   const sessionStore = new MySqlSessionStore(pool);
   const hasher = createPasswordHasher({ threads: config.auth.hashThreads });
-  const presentations = createPresentationService({ config, repos, storage, gemini, browser, signer, audit: repos.audit, stock });
+  const templates = createTemplateService({ repos, storage, signer, audit: repos.audit });
+  const folders = createFolderService({ repos, audit: repos.audit });
+  const presentations = createPresentationService({ config, repos, storage, gemini, browser, signer, audit: repos.audit, stock, templates, folders });
   // Bản xuất PDF/HTML chờ tải (tải GET thường để IDM/trình duyệt nhận đúng 1 tệp) — tệp nằm ở thư mục tạm.
   const exportFiles = overrides.exportFiles || createExportStore({ dir: config.storage.tempDir });
   await exportFiles.init();
@@ -48,7 +53,8 @@ export async function createContainer(config, pool, overrides = {}) {
     sessionStore,
     auth: createAuthService({ config, repos, audit: repos.audit, hasher }),
     presentations,
-    templates: createTemplateService({ repos, storage, signer, audit: repos.audit }),
+    templates,
+    folders,
     sharing: createSharingService({ repos, decks: presentations, audit: repos.audit }),
     publications: createPublicationService({ config, repos, storage, decks: presentations, audit: repos.audit }),
     exportFiles,
