@@ -399,7 +399,7 @@ onMounted(ed.load)
       />
     </FullScreenSheet>
     <FullScreenSheet v-model="sm.videoOpen.value" :title="sm.title.value">
-      <VideoPicker v-if="sm.videoOpen.value" :model-value="sm.video.value" :media="media" :library="videoLibrary" @update:model-value="sm.applyVideo" />
+      <VideoPicker v-if="sm.videoOpen.value" :model-value="sm.video.value" :media="media" :library="videoLibrary" :layout="sm.canSwitch.value" @update:model-value="sm.applyVideo" />
       <template #footer>
         <div class="flex gap-2">
           <MButton v-if="sm.canSwitch.value" variant="outline" class="flex-1" @click="sm.switchTo('image')">Dùng ảnh thay video</MButton>

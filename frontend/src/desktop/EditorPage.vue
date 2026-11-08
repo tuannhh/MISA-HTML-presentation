@@ -416,7 +416,7 @@ onMounted(ed.load)
       @apply="sm.applyImage"
     />
     <MDialog v-model="sm.videoOpen.value" :title="sm.title.value" width="560px">
-      <VideoPicker v-if="sm.videoOpen.value" :model-value="sm.video.value" :media="media" :library="videoLibrary" @update:model-value="sm.applyVideo" />
+      <VideoPicker v-if="sm.videoOpen.value" :model-value="sm.video.value" :media="media" :library="videoLibrary" :layout="sm.canSwitch.value" @update:model-value="sm.applyVideo" />
       <template #footer>
         <MButton v-if="sm.canSwitch.value" variant="ghost" class="mr-auto" @click="sm.switchTo('image')"><template #icon><MIcon name="photo" :size="16" /></template>Dùng ảnh thay video</MButton>
         <MButton variant="primary" @click="sm.close()">Xong</MButton>

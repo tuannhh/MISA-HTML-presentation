@@ -17,6 +17,8 @@ async function main() {
 
   const container = await createContainer(config, pool);
   await container.services.presentations.recoverStale();
+  // Video đang nén dở khi máy chủ dừng → nén tiếp (chạy nền, không chặn khởi động).
+  container.services.presentations.resumeVideoJobs().catch((err) => logger.warn('video_resume_failed', { err: err.message }));
   await container.storage.cleanupUploads(0);
   await container.services.exportFiles.purgeLeftovers();
 

@@ -4,7 +4,8 @@
    Chế độ: present (mặc định) · still (?still&slide=N — 1 slide, khung cuối) · print (mọi slide, khung cuối).
    API cho trình duyệt tự động: window.__deck = { count, ready, goto(i, frame) }.
    Nhúng trong khung xem trước: nhận postMessage {type:'deck:goto', index}, gửi {type:'deck:slide', index, count}
-   và {type:'deck:video', provider, id|src, title} khi bấm video (khung sandbox không phát được YouTube → ứng dụng mở lớp phát).
+   và {type:'deck:video', provider, id|src, hash, title, fs, muted, auto} khi bấm / tự phát video (khung sandbox không phát được
+   YouTube/Vimeo → ứng dụng mở lớp phát; video tải lên đặt "phát trong khung" thì phát ngay trong khung).
    Mẫu nền chuyển động: window.DeckBg (shared/deck/backgrounds.js, được ghép trước engine).
    Chế độ edit (data-mode="edit", chỉ khung xem trước của trình soạn thảo): khung cuối tĩnh, sửa chữ trực tiếp (data-e →
    contenteditable, gửi {type:'deck:edit'}), bấm ảnh/video để đổi ({type:'deck:media'}), chọn/kéo/đổi kích thước phần tử trang
@@ -439,45 +440,116 @@
   }
   document.addEventListener('fullscreenchange', function () { if (lb && document.fullscreenElement === lb) lb.setAttribute('data-fs', '1'); else if (lb && lb.getAttribute('data-fs') && !document.fullscreenElement) closeLightbox(); });
 
-  function playVideo(fig) {
-    var vp = fig.getAttribute('data-vp');
-    var title = fig.getAttribute('data-title') || 'Video';
-    var yt = fig.getAttribute('data-vid') || '';
-    if (vp === 'youtube' && !/^[A-Za-z0-9_-]{11}$/.test(yt)) return;
-    if (vp !== 'youtube' && vp !== 'file') return;
+  var YT_RE = /^[A-Za-z0-9_-]{11}$/, VM_RE = /^\d{5,12}$/, VH_RE = /^[0-9a-f]{6,24}$/i;
+  // Thông tin video từ thuộc tính renderer (đã kiểm định dạng lại — không tin DOM). null = không phát được.
+  function vidInfo(fig) {
+    var vp = fig.getAttribute('data-vp'), id = fig.getAttribute('data-vid') || '', h = fig.getAttribute('data-vh') || '';
+    if (vp === 'youtube' ? !YT_RE.test(id) : vp === 'vimeo' ? !VM_RE.test(id) : vp !== 'file') return null;
+    return { vp: vp, id: id, hash: VH_RE.test(h) ? h : '', title: fig.getAttribute('data-title') || 'Video', inline: fig.hasAttribute('data-inline'), muted: fig.hasAttribute('data-muted') };
+  }
+  function embedSrc(info) {
+    if (info.vp === 'youtube') return 'https://www.youtube-nocookie.com/embed/' + info.id + '?autoplay=1&rel=0&playsinline=1' + (info.muted ? '&mute=1' : '');
+    return 'https://player.vimeo.com/video/' + info.id + '?autoplay=1&dnt=1&playsinline=1' + (info.hash ? '&h=' + info.hash : '') + (info.muted ? '&muted=1' : '');
+  }
+  function pageUrl(info) { return info.vp === 'youtube' ? 'https://www.youtube.com/watch?v=' + info.id : 'https://vimeo.com/' + info.id + (info.hash ? '/' + info.hash : ''); }
+  function fileSrc(fig) { var key = fig.getAttribute('data-embed'); return key ? embedUrl(key) : fig.getAttribute('data-src') || ''; }
+  function makeFrame(info) {
+    var f = document.createElement('iframe');
+    f.src = embedSrc(info);
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.setAttribute('allowfullscreen', ''); f.title = info.title;
+    f.referrerPolicy = 'strict-origin-when-cross-origin';
+    return f;
+  }
+  // Phát <video>; trình duyệt chặn tự phát có tiếng (người xem chưa thao tác) → phát không tiếng + nút "Bật tiếng".
+  function startMedia(v, host, muted) {
+    v.muted = !!muted;
+    var pr = v.play();
+    if (!pr || !pr.catch) return;
+    pr.catch(function (err) {
+      if (v.muted || !err || err.name !== 'NotAllowedError') return;
+      v.muted = true;
+      var p2 = v.play(); if (p2 && p2.catch) p2.catch(function () { /* vẫn còn nút phát của trình phát */ });
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'vunm'; b.textContent = 'Bật tiếng';
+      b.addEventListener('click', function (e) { e.stopPropagation(); v.muted = false; if (b.parentNode) b.parentNode.removeChild(b); });
+      host.appendChild(b);
+    });
+  }
+  // Phát ngay trong khung video trên trang (tuỳ chọn "không phóng toàn màn hình"). Rời trang → dừng (stopInline).
+  var inl = [];
+  function stopInline() {
+    inl.forEach(function (fig) {
+      Array.prototype.forEach.call(fig.querySelectorAll('.vinl, .vunm'), function (p) { try { if (p.pause) p.pause(); } catch (e) { /* bỏ qua */ } if (p.parentNode) p.parentNode.removeChild(p); });
+      fig.classList.remove('playing');
+    });
+    inl = [];
+  }
+  function playInline(fig, info) {
+    if (fig.classList.contains('playing')) return;
+    var el;
+    if (info.vp === 'file') {
+      el = document.createElement('video'); el.controls = true; el.playsInline = true; el.setAttribute('playsinline', '');
+      el.src = fileSrc(fig);
+    } else el = makeFrame(info);
+    el.className = 'vinl';
+    fig.appendChild(el); fig.classList.add('playing'); inl.push(fig);
+    if (info.vp === 'file') startMedia(el, fig, info.muted);
+  }
+
+  function playVideo(fig, auto) {
+    var info = vidInfo(fig);
+    if (!info || fig.classList.contains('playing')) return;
+    // Khung chiếu của ứng dụng (sandbox, origin null) chỉ phát được tệp tải lên ngay trong khung; YouTube/Vimeo do ứng dụng mở lớp phát.
+    if (info.inline && (info.vp === 'file' || !EMBED)) { closeVideo(); playInline(fig, info); return; }
     if (EMBED) {
-      try { window.parent.postMessage({ type: 'deck:video', provider: vp, id: vp === 'youtube' ? yt : undefined, src: vp === 'file' ? fig.getAttribute('data-src') : undefined, title: title }, '*'); } catch (e) { /* bỏ qua */ }
+      try {
+        window.parent.postMessage({ type: 'deck:video', provider: info.vp, id: info.vp !== 'file' ? info.id : undefined, hash: info.hash || undefined, src: info.vp === 'file' ? fig.getAttribute('data-src') : undefined, title: info.title, fs: !info.inline, muted: info.muted, auto: !!auto }, '*');
+      } catch (e) { /* bỏ qua */ }
       return;
     }
-    closeVideo();
+    closeVideo(); stopInline();
     ov = document.createElement('div');
-    ov.id = 'vov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', title);
+    ov.id = 'vov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', info.title);
     var box = document.createElement('div'); box.className = 'vframe'; ov.appendChild(box);
     var x = document.createElement('button'); x.type = 'button'; x.className = 'vx'; x.setAttribute('aria-label', 'Đóng video'); x.textContent = '×'; ov.appendChild(x);
     x.addEventListener('click', function (e) { e.stopPropagation(); closeVideo(); });
     ov.addEventListener('click', function (e) { e.stopPropagation(); if (e.target === ov) closeVideo(); });
-    if (vp === 'youtube') {
-      var f = document.createElement('iframe');
-      f.src = 'https://www.youtube-nocookie.com/embed/' + yt + '?autoplay=1&rel=0&playsinline=1';
-      f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen'; f.setAttribute('allowfullscreen', ''); f.title = title;
-      f.referrerPolicy = 'strict-origin-when-cross-origin';
-      box.appendChild(f);
-      // Mở tệp HTML trực tiếp (file://) YouTube có thể từ chối nhúng → luôn có đường mở sang YouTube.
+    var v = null;
+    if (info.vp !== 'file') {
+      box.appendChild(makeFrame(info));
+      // Mở tệp HTML trực tiếp (file://) YouTube/Vimeo có thể từ chối nhúng → luôn có đường mở sang trang gốc.
       var a = document.createElement('a'); a.className = 'vyt'; a.target = '_blank'; a.rel = 'noopener';
-      a.href = 'https://www.youtube.com/watch?v=' + yt; a.textContent = 'Không phát được? Mở trên YouTube ↗'; ov.appendChild(a);
+      a.href = pageUrl(info); a.textContent = 'Không phát được? Mở trên ' + (info.vp === 'youtube' ? 'YouTube' : 'Vimeo') + ' ↗'; ov.appendChild(a);
     } else {
-      var v = document.createElement('video');
-      v.controls = true; v.autoplay = true; v.playsInline = true;
+      box.classList.add('vf-file');
+      v = document.createElement('video');
+      v.controls = true; v.playsInline = true; v.setAttribute('playsinline', '');
+      // Hết video → tự đóng, quay về trang (người trình bày bấm Sau để đi tiếp).
+      v.addEventListener('ended', function () { if (ov && ov.contains(v)) closeVideo(); });
       box.appendChild(v);
-      var key = fig.getAttribute('data-embed');
-      setTimeout(function () {
-        v.src = key ? embedUrl(key) : fig.getAttribute('data-src') || '';
-        var pr = v.play(); if (pr && pr.catch) pr.catch(function () { /* trình duyệt chặn tự phát → còn nút phát */ });
-      }, 0);
     }
     document.body.appendChild(ov);
-    // Phải gọi ngay trong sự kiện bấm (trình duyệt chỉ cho toàn màn hình khi có thao tác người dùng).
-    try { var r = ov.requestFullscreen && ov.requestFullscreen(); if (r && r.catch) r.catch(function () {}); } catch (e) { /* khung chặn → vẫn phủ kín cửa sổ */ }
+    // Phải gọi trong thời gian còn "thao tác người dùng" (bấm / phím vừa chuyển trang) — trình duyệt mới cho toàn màn hình.
+    if (!info.inline && !document.fullscreenElement) { try { var r = ov.requestFullscreen && ov.requestFullscreen(); if (r && r.catch) r.catch(function () {}); } catch (e) { /* khung chặn → vẫn phủ kín cửa sổ */ } }
+    if (v) { v.src = fileSrc(fig); startMedia(v, ov, info.muted); }
+  }
+  // Tự phát (data-auto): khi trang hiện (sau hiệu ứng chuyển trang) hoặc khi bước trình chiếu chứa video vừa hiện.
+  // Mỗi lần vào trang phát 1 lần (data-played) — quay lại trang thì phát lại.
+  var autoT = null;
+  function queueAuto() {
+    if (MODE !== 'present') return;
+    clearTimeout(autoT);
+    var sl = slides[cur];
+    autoT = setTimeout(function () {
+      if (sl !== slides[cur] || ov || lb) return;
+      var figs = sl.querySelectorAll('.vid[data-auto]');
+      for (var i = 0; i < figs.length; i++) {
+        var f = figs[i];
+        if (f.closest('[data-wait]') || f.hasAttribute('data-played')) continue;
+        f.setAttribute('data-played', '');
+        playVideo(f, true);
+        return;
+      }
+    }, REDUCE ? 60 : 650);
   }
   document.addEventListener('fullscreenchange', function () { if (ov && !document.fullscreenElement && ov.getAttribute('data-fs')) closeVideo(); else if (ov && document.fullscreenElement === ov) ov.setAttribute('data-fs', '1'); });
 
@@ -554,6 +626,7 @@
       SF[cur][to] = nowFrame(); u.removeAttribute('data-wait');
       if (st.mode === 'dim') st.units.forEach(function (x, k) { if (k < to - 1) x.setAttribute('data-past', ''); else x.removeAttribute('data-past'); });
       pos = to;
+      queueAuto();
     } else {
       var v = st.units[pos - 1];
       v.setAttribute('data-wait', ''); SF[cur][pos] = undefined;
@@ -574,7 +647,10 @@
       prevEl.classList.remove('on'); prevEl.classList.add('off'); prevEl.setAttribute('aria-hidden', 'true');
       setTimeout(function () { prevEl.classList.remove('off'); if (prevEl !== slides[cur]) stopLogos(prevEl); }, 700);
     }
+    stopInline();
+    if (i !== cur) closeVideo();
     cur = i; t0 = performance.now() - (instant ? FINAL / FPS * 1000 : 0);
+    Array.prototype.forEach.call(slides[cur].querySelectorAll('.vid[data-played]'), function (f) { f.removeAttribute('data-played'); });
     var st = MODE === 'present' ? STEPS[cur] : null;
     pos = st && back ? st.max : 0;
     if (st) applySteps(st, back);
@@ -586,6 +662,7 @@
     if (barEl) barEl.style.width = ((cur + 1) / N * 100) + '%';
     if (!EMBED) { try { history.replaceState(null, '', '#' + (cur + 1)); } catch (e) { /* bỏ qua */ } }
     notify();
+    queueAuto();
   }
   // Trước/Sau: phóng to (bấm) → thu về trước; còn ý chưa hiện → hiện ý tiếp; hết → sang slide.
   function next() {
@@ -655,11 +732,12 @@
     function toggleBlack() { document.body.classList.toggle('black'); }
     addEventListener('keydown', function (e) {
       var k = e.key;
-      if (ov) { if (k === 'Escape') closeVideo(); return; }
+      // Đang phát video toàn màn hình: Esc hoặc phím Trước/Sau (bút trình chiếu) đóng video, chưa chuyển trang.
+      if (ov) { if (k === 'Escape' || ['ArrowRight', 'PageDown', 'ArrowLeft', 'PageUp'].indexOf(k) >= 0) { e.preventDefault(); closeVideo(); } return; }
       // Đang xem ảnh: phím bất kỳ (trừ phím bổ trợ) chỉ đóng ảnh, không chuyển trang.
       if (lb) { if (['Shift', 'Control', 'Alt', 'Meta'].indexOf(k) < 0) { e.preventDefault(); closeLightbox(); } return; }
       // Enter/Space trên nút phát video / liên kết → để phần tử nhận lệnh bấm, không chuyển trang.
-      if ((k === 'Enter' || k === ' ') && e.target && e.target.closest && e.target.closest('.vplay, a[href]')) return;
+      if ((k === 'Enter' || k === ' ') && e.target && e.target.closest && e.target.closest('.vplay, a[href], .vinl, .vunm')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Màn đen (bút trình chiếu: phím "." hoặc B) — bấm phím bất kỳ để quay lại.
       if (document.body.classList.contains('black')) { e.preventDefault(); toggleBlack(); return; }

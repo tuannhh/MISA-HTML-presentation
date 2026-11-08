@@ -7,7 +7,7 @@ Thứ tự: **A bổ sung ✅ → P (Publish) ✅ → H + L (hyperlink, trang Li
 
 ## CT — Cải tiến 11 mục (yêu cầu chủ dự án 08/11/2026) — đang làm, nhánh `feature/cai-tien-11-muc`
 
-Làm theo 5 đợt (chủ dự án chốt). Nhánh tách từ `main` 827da35; **chưa push** GitHub (chỉ push khi chủ dự án yêu cầu). Mỗi đợt: code → unit test →
+Làm theo 5 đợt (chủ dự án chốt). Nhánh tách từ `main` 827da35; nhánh đã push lên GitHub sau Đợt 4 (08/11/2026); `main` chưa merge/push (chỉ làm khi chủ dự án yêu cầu). Mỗi đợt: code → unit test →
 `npm run build` → `docker compose up -d --build app` → kiểm thật trên Docker 8088 (desktop + mobile, tài khoản thử `tmp/e2e-user.json` — tệp gitignore,
 không in mật khẩu ra) → cập nhật `memory-bank/` → commit khi chủ dự án bảo.
 
@@ -16,10 +16,10 @@ không in mật khẩu ra) → cập nhật `memory-bank/` → commit khi chủ 
 | 1 | 4, 5, 9, 10 | Bôi chọn chữ trang kết không mất chữ · bấm ảnh xem toàn màn hình · chọn mẫu thiết kế được chia sẻ khi tạo bài · rà lỗi bố cục tự động (`npm run audit:layout`) | ✅ 73eda47 (+ thư mục lồng nhau) |
 | 2 | 6, 7 | Ảnh: kéo-thả/dán, di chuyển, bo góc, đổ bóng, màu viền · lớp phủ màu + độ mờ | ✅ 704918a (`memory-bank/05` §26) |
 | 3 | 1, 2 | Giữ nguyên nội dung + số trang (> 40 trang từ chối) · tải lên bài trình bày HTML làm ở công cụ khác (người dùng chọn giữ nguyên thiết kế / chuyển thành bài sửa được) | ✅ commit Đợt 3 (`memory-bank/05` §27) |
-| 4 | 3 | Video (chi tiết dưới) | ⏳ tiếp theo |
-| 5 | 8, 11 | Thêm nhiều bố cục (áp cả cho trang đang có) · thêm chuyển động | ⏳ |
+| 4 | 3 | Video: YouTube + Vimeo + tải lên ≤ 200 MB, nén ffmpeg nền, tự phát / toàn màn hình / tắt tiếng, căn + cỡ (chi tiết dưới) | ✅ commit Đợt 4 (`memory-bank/05` §28) |
+| 5 | 8, 11 | Thêm nhiều bố cục (áp cả cho trang đang có) · thêm chuyển động | ⏳ tiếp theo |
 
-### Đợt 4 — mục 3: video
+### Đợt 4 — mục 3: video (✅ 08/11/2026 — cách làm thật xem `memory-bank/05` §28; phần dưới là kế hoạch ban đầu)
 Yêu cầu: chèn video nhúng YouTube, Vimeo hoặc tải lên (tối đa **200 MB**); bật **tự phát** và **tự toàn màn hình** khi trình chiếu; hiển thị ảnh bìa
 (thumbnail của nền tảng / khung hình của tệp tải lên); **di chuyển, căn trái/phải/giữa, kéo đổi kích thước** khung video; tệp tải lên được **nén** tối đa
 mà vẫn giữ chất lượng để trình chiếu không phải chờ tải lâu.

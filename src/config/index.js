@@ -129,7 +129,7 @@ export function loadConfig() {
       maxSourceLinks: int('MAX_SOURCE_LINKS', 5, { min: 1, max: 10 }),
       maxLinkImages: int('MAX_LINK_IMAGES', 24, { min: 0, max: 60 }),
       // Video tải lên gắn vào slide (mỗi tệp) và số video tối đa/bài.
-      maxVideoMb: int('MAX_VIDEO_MB', 150, { min: 1, max: 2000 }),
+      maxVideoMb: int('MAX_VIDEO_MB', 200, { min: 1, max: 2000 }),
       maxVideosPerDeck: int('MAX_VIDEOS_PER_DECK', 10, { min: 0, max: 50 }),
       // Ảnh/video người dùng gửi kèm khi tạo bài (bắt buộc đưa vào bài) — số tệp tối đa mỗi lần tạo (video còn theo MAX_VIDEOS_PER_DECK).
       maxCreateMedia: int('MAX_CREATE_MEDIA', 20, { min: 0, max: 60 }),
@@ -137,6 +137,18 @@ export function loadConfig() {
       exportVideoMb: int('EXPORT_VIDEO_MB', 200, { min: 0, max: 2000 }),
       generationConcurrency: int('GENERATION_CONCURRENCY', 2, { min: 1, max: 8 }),
       renderConcurrency: int('RENDER_CONCURRENCY', 2, { min: 1, max: 8 }),
+    }),
+    // Video tải lên: đọc thông số + ảnh bìa (ffprobe/ffmpeg) và nén lại chạy nền (H.264/AAC, cạnh dài ≤ 1920, moov đầu tệp) để trình chiếu
+    // không phải chờ tải lâu. Mỗi lúc chỉ nén 1 video (không tranh CPU với tạo bài). VIDEO_TRANSCODE=0 → giữ nguyên tệp gốc.
+    video: Object.freeze({
+      transcode: bool('VIDEO_TRANSCODE', true),
+      ffmpeg: str('FFMPEG_PATH', 'ffmpeg'),
+      ffprobe: str('FFPROBE_PATH', 'ffprobe'),
+      // CRF càng thấp càng nét/nặng (18 gần như không mất; 23–26 cân bằng cho trình chiếu).
+      crf: int('VIDEO_CRF', 24, { min: 18, max: 32 }),
+      preset: ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow'].includes(str('VIDEO_PRESET', 'veryfast')) ? str('VIDEO_PRESET', 'veryfast') : 'veryfast',
+      threads: int('VIDEO_THREADS', 2, { min: 1, max: 16 }),
+      timeoutMs: int('VIDEO_TRANSCODE_TIMEOUT_MS', 1800000, { min: 60000, max: 7200000 }),
     }),
     // Nhận diện + cắt ảnh giao diện phần mềm và sơ đồ từ tư liệu (visualService): render trang PDF (poppler pdftoppm), PPTX/DOCX/ODP/ODT
     // (LibreOffice → PDF) → AI khoanh vùng, phân loại → cắt để đưa nguyên vẹn vào bài. Tên biến PDF_UI_SHOTS* giữ từ bản chỉ cắt PDF.

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { verifyTables } from '../../src/db/pool.js';
 
 const ALL = ['users', 'folders', 'presentations', 'assets', 'presentation_shares', 'presentation_versions', 'design_templates', 'template_assets', 'publications', 'sessions', 'audit_logs', 'schema_changelog'];
-const CHANGELOGS = ['changelog_database_20261005_170000.sql', 'changelog_database_20261006_090000.sql', 'changelog_database_20261006_200000.sql', 'changelog_database_20261007_100000.sql', 'changelog_database_20261012_100000.sql', 'changelog_database_20261108_100000.sql'];
+const CHANGELOGS = ['changelog_database_20261005_170000.sql', 'changelog_database_20261006_090000.sql', 'changelog_database_20261006_200000.sql', 'changelog_database_20261007_100000.sql', 'changelog_database_20261012_100000.sql', 'changelog_database_20261108_100000.sql', 'changelog_database_20261108_200000.sql'];
 const fakePool = (tables, changelogs = CHANGELOGS) => ({
   async query(sql) {
     if (/INFORMATION_SCHEMA/.test(sql)) return [tables.map((name) => ({ name }))];

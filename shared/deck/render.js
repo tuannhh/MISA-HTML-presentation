@@ -12,6 +12,7 @@ import { richHtml, plainText, linkAttrs } from './rich.js';
 import { moveAttr, hideClasses } from './layers.js';
 import { qrSvg } from './qr.js';
 import { lookCss, overlayHtml } from './imgstyle.js';
+import { videoFlags, videoBoxAttr, VIMEO_ID_RE, VIMEO_HASH_RE } from './video.js';
 import { PHONE_CHANNELS, CHANNEL_LABELS, CONTACT_LIMITS as CL, channelHref, emailHref, mapsHref, webHref, webLabel } from './contact.js';
 import { brandSvg } from './brands.js';
 
@@ -137,23 +138,32 @@ function media(ref, ctx, o = {}) {
 const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
 const hasMedia = (s) => !!(s.video || (s.image && s.image.asset));
 
-// Video (tải lên hoặc YouTube): ảnh bìa 16:9 + nút phát. Bấm → engine mở video toàn màn hình, tự phát.
-// Không nhúng trình phát ngay trong slide: trang nhẹ, in PDF/thumbnail vẫn đẹp, không tải YouTube khi chưa cần.
+// Video (tải lên, YouTube, Vimeo): ảnh bìa + nút phát. Bấm (hoặc tự phát khi tới trang — data-auto) → engine phát toàn màn hình,
+// hoặc ngay trong khung (data-inline). Không nhúng trình phát sẵn trong slide: trang nhẹ, in PDF/thumbnail vẫn đẹp, không tải
+// YouTube/Vimeo khi chưa cần. Video tải lên đã đọc được kích thước → khung theo đúng tỷ lệ (video quay dọc không bị cắt).
+// o.box === false (phần tử trang tự do): không áp căn/cỡ — phần tử tự do đã có toạ độ + kích thước riêng.
+const BADGE = { youtube: 'YouTube', vimeo: 'Vimeo' };
 function videoFig(v, ctx, o = {}) {
   const poster = v.poster ? ctx.assetUrl(v.poster) : null;
-  const label = v.title || v.caption || (v.provider === 'youtube' ? 'Video YouTube' : 'Video');
+  const label = v.title || v.caption || (BADGE[v.provider] ? `Video ${BADGE[v.provider]}` : 'Video');
   let src = '';
+  let ar = 16 / 9;
   if (v.provider === 'youtube') src = ` data-vp="youtube" data-vid="${esc(v.id)}"`;
-  else {
+  else if (v.provider === 'vimeo') {
+    src = VIMEO_ID_RE.test(v.id) ? ` data-vp="vimeo" data-vid="${esc(v.id)}"${v.hash && VIMEO_HASH_RE.test(v.hash) ? ` data-vh="${esc(v.hash)}"` : ''}` : ' data-vp="none"';
+  } else {
     const embed = ctx.videoEmbed ? ctx.videoEmbed(v.asset) : null;
     const url = embed ? null : ctx.assetUrl(v.asset);
     src = embed ? ` data-vp="file" data-embed="${esc(embed)}"` : url ? ` data-vp="file" data-src="${esc(url)}"` : ' data-vp="none"';
+    const m = ctx.assetMeta ? ctx.assetMeta(v.asset) : null;
+    if (m && m.width > 0 && m.height > 0) ar = Math.max(0.4, Math.min(2.6, m.width / m.height));
   }
   const cap = o.caption !== undefined ? o.caption : v.caption;
-  return `<div class="vbox" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"><figure class="media vid"${src} data-title="${esc(plainText(label))}"${M(ctx, o.mp)}>${
+  const arCss = Math.abs(ar - 16 / 9) > 0.01 ? ` style="--ar:${ar.toFixed(4)}"` : '';
+  return `<div class="vbox"${o.box === false ? '' : videoBoxAttr(v)} data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"><figure class="media vid"${src}${videoFlags(v)}${arCss} data-title="${esc(plainText(label))}"${M(ctx, o.mp)}>${
     poster ? `<img src="${esc(poster)}" alt="${esc(v.title || '')}">` : `<div class="ph">${icon('play')}</div>`
   }<button class="vplay" type="button" aria-label="Phát video: ${esc(plainText(label))}">${PLAY}</button>${
-    v.provider === 'youtube' ? '<span class="vbadge">YouTube</span>' : ''
+    BADGE[v.provider] ? `<span class="vbadge vb-${v.provider}">${BADGE[v.provider]}</span>` : ''
   }${cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''}</figure></div>`;
 }
 
@@ -631,7 +641,7 @@ function freeEl(e, i, ctx) {
     inner = `<figure class="fe-fig fit-c${url ? '' : ' empty'}"${M(ctx, P)}>${url ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" crossorigin="anonymous">` : ph('image', 'Bấm để chọn logo')}</figure>`;
     extra = ` data-motion="${esc(e.motion || 'swing')}" data-depth="${n2(e.depth, 0.5)}"`;
   } else if (e.type === 'video') {
-    inner = e.video ? videoFig(e.video, ctx, { mp: P, anim: 'fade', d: 0, caption: '' }) : ctx.edit ? `<figure class="fe-fig r-md empty"${M(ctx, P)}>${ph('play', 'Bấm để chọn video')}</figure>` : '';
+    inner = e.video ? videoFig(e.video, ctx, { mp: P, anim: 'fade', d: 0, caption: '', box: false }) : ctx.edit ? `<figure class="fe-fig r-md empty"${M(ctx, P)}>${ph('play', 'Bấm để chọn video')}</figure>` : '';
   } else if (e.type === 'table') {
     const rows = list(e.rows);
     const cell = (tag, txt, r, c) => `<${tag}${E(ctx, `${P}.rows.${r}.${c}`, LIM.cell, true)}>${rt(txt)}</${tag}>`;

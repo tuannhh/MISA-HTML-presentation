@@ -1,5 +1,24 @@
 # 10 — Lịch sử phát triển
 
+## 2026-11-08 — Cải tiến 11 mục, Đợt 4: video (mục 3)
+
+- Mới: `shared/deck/video.js` (tuỳ chọn tự phát/toàn màn hình/tắt tiếng/căn/cỡ), `src/services/vimeoService.js`, `src/services/videoService.js` (ffprobe/ffmpeg,
+  tham số an toàn, `decide`, `moovAtEnd`), `src/services/videoOptimizer.js` (hàng nén chạy nền, trạng thái DB, nén tiếp khi khởi động), changelog
+  `20261108_200000` (`assets.process_state`, đã áp Docker), fixture `test/fixtures/tiny.mp4` (smoke). Sửa: `specService.cleanVideo` (Vimeo + tuỳ chọn),
+  `render.js` (`videoFig`: Vimeo, cờ, căn/cỡ, tỷ lệ thật), `theme.css`, `engine.js` (tự phát, phát trong khung, lùi về không tiếng, phím Sau đóng video),
+  `presentationService` (`addVideoLink`, `videoStatus`, `resumeVideoJobs`, 3 đường tạo video đọc thông số + vào hàng nén), `assetRepository`, route
+  `POST /:id/video-link` + `GET /:id/videos/:assetId`, CSP (Vimeo; `media-src` cho khung chiếu), `config.video` + `MAX_VIDEO_MB` 200, Dockerfile (+ ffmpeg),
+  `container`/`server`. Giao diện: `VideoPicker`, `VideoOverlay`, `useVideoPlayer`, `useMedia`, `FreeElementsPanel` (căn theo trang), 2 `ViewerPage`
+  (`allow="autoplay"`), icon (volume, brand-vimeo, layout-align-*). Nghiệp vụ → `05` §28.
+- Kiểm chứng: unit **294/294** (mới `test/unit/video.test.js` 12 test); smoke Docker **TẤT CẢ ĐẠT** (video thật 201 có ảnh bìa, MP4 giả 422 `INVALID_VIDEO`);
+  `tmp/e2e-dot4.mjs` (API, Docker 8088): MP4 146 MB không ảnh bìa → ảnh bìa ffmpeg + 1920×1080, nén nền 146 → 33 MB/14 giây, Range 206 + moov đầu tệp;
+  MOV dọc → MP4 720×1280; Vimeo + YouTube thật có tên + ảnh bìa; link lạ 400; tuỳ chọn còn nguyên sau lưu; xem trước có đủ thuộc tính + CSP `media-src`.
+  `tmp/ui-dot4.mjs` (Chrome thật): trình chiếu ứng dụng desktop + mobile tự phát → lớp phát (không tiếng + "Bật tiếng" vì chưa có thao tác), PageDown đóng
+  video, Vimeo căn trái + lớp phát player.vimeo.com, video dọc phát trong khung đúng tỷ lệ + dừng khi rời trang, YouTube căn phải; trang xem trước mở trực tiếp
+  (engine độc lập) tự phát `#vov`; trình soạn thảo: bảng Video đủ mục, căn phải + cỡ 50% cập nhật khung tức thì; mobile: bảng Video, công tắc 44px, không cuộn
+  ngang; không lỗi JS. Ảnh: `tmp/e2e/dot4/*.png`.
+- Ghi chú: công tắc MSwitch cũ ở các mục khác của trình soạn thảo mobile vẫn cao 20px (ngoài phạm vi đợt này).
+
 ## 2026-11-08 — Cải tiến 11 mục, Đợt 3: giữ nguyên nội dung + số trang (mục 1), nhập bài trình bày HTML (mục 2)
 
 - Mới: `src/services/pageSource.js` (chia/đếm trang theo nguồn, từ chối > 40 trang), `src/services/htmlDeckService.js` (nhận diện HTML, tách video nhúng,

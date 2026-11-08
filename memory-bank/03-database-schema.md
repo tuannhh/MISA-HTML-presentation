@@ -71,6 +71,7 @@ Chỉ mục `ix_folders_tenant_parent (tenant_id, parent_id)`. Giới hạn ở 
 | mime, bytes, width, height | | | Ảnh luôn `image/webp` sau chuẩn hoá; video `video/mp4`·`quicktime`·`webm` (width/height NULL) |
 | storage_key | VARCHAR(255) | | Đường dẫn tương đối do server sinh, không lấy từ tên client |
 | original_name | VARCHAR(255) | NULL | Chỉ để hiển thị |
+| process_state | ENUM('pending','running','done','skipped','failed') | NULL | Nén video chạy nền (`05` §28): NULL = không có việc (ảnh, video cũ, máy không có ffmpeg) · pending/running = đang chờ/nén (khởi động lại → nén tiếp) · done = đã thay bằng bản nén (đổi `storage_key`/`mime`/`bytes`/kích thước, **giữ mã asset**) · skipped = giữ gốc · failed = lỗi, giữ gốc. Video có `width/height` đọc bằng ffprobe |
 
 ### Bảng: `design_templates`
 
@@ -186,4 +187,5 @@ users 1 ──< design_templates 1 ──< template_assets
 - 2026-10-06 (`changelog_database_20261006_200000.sql`, idempotent — `MODIFY` ENUM chỉ khi chưa có `'brand'`, `CREATE TABLE IF NOT EXISTS`): asset kind `brand`, bảng `design_templates` + `template_assets`. Có trong `REQUIRED_CHANGELOGS`; baseline đã gồm sẵn. Đã chạy 2 lần trên MySQL Docker để kiểm idempotent.
 - 2026-10-12 (`changelog_database_20261012_100000.sql`, idempotent — `CREATE TABLE IF NOT EXISTS`): bảng `publications` (xuất bản ra domain công khai). Có trong `REQUIRED_CHANGELOGS` + `REQUIRED_TABLES`; baseline đã gồm sẵn.
 - 2026-10-07 (`changelog_database_20261007_100000.sql`, idempotent — `CREATE TABLE IF NOT EXISTS`, seed `INSERT … WHERE NOT EXISTS`): bảng `presentation_shares` + `presentation_versions`; tạo **bản gốc** cho các bài đang công khai + ready chưa có bản gốc (để "khôi phục mặc định" dùng được ngay với bài đã chia sẻ trước đây). Có trong `REQUIRED_CHANGELOGS` + `REQUIRED_TABLES`; baseline đã gồm sẵn. Chạy 2 lần trên MySQL Docker → vẫn đúng 1 bản gốc/bài.
+- 2026-11-08 (`changelog_database_20261108_200000.sql`, idempotent — thêm cột có kiểm tra `information_schema`): cột `assets.process_state` (nén video chạy nền). Có trong `REQUIRED_CHANGELOGS`; baseline đã gồm sẵn. Đã chạy trên MySQL Docker.
 - 2026-11-08 (`changelog_database_20261108_100000.sql`, idempotent — `CREATE TABLE IF NOT EXISTS`, thêm cột/chỉ mục/FK có kiểm tra `information_schema`): bảng `folders` + cột `presentations.folder_id`. Có trong `REQUIRED_CHANGELOGS` + `REQUIRED_TABLES`; baseline đã gồm sẵn. Đã chạy 2 lần trên MySQL Docker.

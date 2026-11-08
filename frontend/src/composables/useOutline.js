@@ -3,7 +3,7 @@
 import { ref, computed, onBeforeUnmount } from 'vue';
 import { get, put, post, del, ApiError } from '@/lib/api.js';
 import { clone, SPEC_LIMITS } from '@/lib/slideModel.js';
-import { useMedia } from '@/composables/useMedia.js';
+import { useMedia, videoKey } from '@/composables/useMedia.js';
 import { withDesignDefaults } from '@/lib/design.js';
 
 const pendingDrafts = new Map();
@@ -70,7 +70,7 @@ export function useOutline(id, { onReady } = {}) {
   // Video đã dùng trong dàn ý + video tải lên chưa gắn trang nào (thư viện "Video trong bài").
   const videoLibrary = computed(() => {
     const out = new Map();
-    for (const s of slides.value) if (s.video) out.set(s.video.provider === 'youtube' ? `yt:${s.video.id}` : `f:${s.video.asset}`, { ...s.video });
+    for (const s of slides.value) if (s.video) out.set(videoKey(s.video), { ...s.video });
     for (const a of assets.value) if (a.kind === 'video' && !out.has(`f:${a.id}`)) out.set(`f:${a.id}`, { provider: 'file', asset: a.id, poster: null, title: (a.name || '').replace(/\.[a-z0-9]+$/i, ''), caption: '' });
     return [...out.values()];
   });

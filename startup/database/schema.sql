@@ -92,6 +92,8 @@ CREATE TABLE IF NOT EXISTS assets (
   -- Đường dẫn tương đối bên trong thư mục private của tenant, do server tự sinh (không lấy tên client).
   storage_key      VARCHAR(255)  NOT NULL,
   original_name    VARCHAR(255)  NULL,
+  -- Nén video chạy nền: NULL = không có việc · pending/running = đang chờ/nén · done = đã thay bản nén · skipped = giữ gốc · failed = lỗi
+  process_state    ENUM('pending','running','done','skipped','failed') NULL,
   created_at       DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (id),
   KEY ix_assets_tenant (tenant_id),
@@ -236,3 +238,4 @@ INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261006_
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261007_100000.sql');
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261012_100000.sql');
 INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261108_100000.sql');
+INSERT IGNORE INTO schema_changelog (name) VALUES ('changelog_database_20261108_200000.sql');

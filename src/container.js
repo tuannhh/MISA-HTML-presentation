@@ -15,6 +15,9 @@ import { createBrowserService } from './services/browserService.js';
 import { createAuthService } from './services/authService.js';
 import { createPasswordHasher } from './lib/passwordHasher.js';
 import { createPresentationService } from './services/presentationService.js';
+import { logger } from './lib/logger.js';
+import { createVideoService } from './services/videoService.js';
+import { createVideoOptimizer } from './services/videoOptimizer.js';
 import { createTemplateService } from './services/templateService.js';
 import { createFolderService } from './services/folderService.js';
 import { createSharingService } from './services/sharingService.js';
@@ -45,7 +48,10 @@ export async function createContainer(config, pool, overrides = {}) {
   const hasher = createPasswordHasher({ threads: config.auth.hashThreads });
   const templates = createTemplateService({ repos, storage, signer, audit: repos.audit });
   const folders = createFolderService({ repos, audit: repos.audit });
-  const presentations = createPresentationService({ config, repos, storage, gemini, browser, signer, audit: repos.audit, stock, templates, folders });
+  // Video tải lên: đọc thông số / ảnh bìa ngay khi tải, nén lại chạy nền (ffmpeg).
+  const videoTools = overrides.video || createVideoService({ config, logger });
+  const videos = createVideoOptimizer({ assets: repos.assets, storage, video: videoTools, logger, tmpDir: config.storage.uploadDir });
+  const presentations = createPresentationService({ config, repos, storage, gemini, browser, signer, audit: repos.audit, stock, templates, folders, videos });
   // Bản xuất PDF/HTML chờ tải (tải GET thường để IDM/trình duyệt nhận đúng 1 tệp) — tệp nằm ở thư mục tạm.
   const exportFiles = overrides.exportFiles || createExportStore({ dir: config.storage.tempDir });
   await exportFiles.init();

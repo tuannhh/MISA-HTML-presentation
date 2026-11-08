@@ -115,6 +115,7 @@ Chỉ container **`app`** gọi ra Internet. MySQL và Nginx **không** cần ra
 | `www.googleapis.com` | 443 | **Link thư mục Google Drive** (liệt kê + tải tệp qua Drive API v3) và phương án dự phòng tải Google Docs/Drive | Chỉ khi có `GOOGLE_API_KEY` (dự án Google Cloud của khoá phải **bật Google Drive API**). Không mở tên miền này → link thư mục báo lỗi, link từng tệp vẫn chạy |
 | *(không cần)* `accounts.google.com` | — | Tài liệu Google **không** công khai bị chuyển hướng tới trang đăng nhập; không mở thì người dùng nhận lỗi "Không tải được tài liệu từ đường link" — đúng mong muốn | Không cần mở |
 | `www.youtube.com`, `i.ytimg.com` | 443 | Gắn video YouTube vào trang: lấy tiêu đề (oEmbed) + ảnh bìa | Video **không** đi qua máy chủ (phát trên trình duyệt, mục 3) |
+| `vimeo.com`, `i.vimeocdn.com` | 443 | Gắn video Vimeo vào trang: lấy tiêu đề + ảnh bìa (oEmbed `vimeo.com/api/oembed.json`); ảnh bìa chỉ tải từ `i.vimeocdn.com` | Video **không** đi qua máy chủ. Video Vimeo đặt chế độ không cho nhúng → người dùng nhận lỗi rõ ràng |
 | **Link tư liệu bất kỳ** người dùng dán | 80/443 | Tab "Nhập từ link": tải trang/tệp công khai làm tư liệu | Không cố định tên miền. Firewall chỉ cho danh sách trắng thì chỉ các tên miền đã mở dùng được; còn lại người dùng nhận lỗi tải link. Ứng dụng **tự chặn** link tới IP nội bộ/loopback/metadata (chống SSRF) → link intranet MISA cũng không tải được, đây là chủ ý |
 
 ### 2.3. Ứng dụng KHÔNG gọi ra ngoài
@@ -139,9 +140,12 @@ Máy người dùng trong mạng MISA cần tới:
 |---|---|
 | Tên miền của ứng dụng (qua Nginx/LB) | Toàn bộ giao diện + API |
 | `www.youtube-nocookie.com` (và các tên miền YouTube nó tải kèm: `www.youtube.com`, `*.googlevideo.com`, `i.ytimg.com`, `*.ggpht.com`) | Phát video YouTube trong bài trình bày |
+| `player.vimeo.com` (và tên miền nó tải kèm: `*.vimeocdn.com`, `vimeo.com`) | Phát video Vimeo trong bài trình bày |
 | `pixabay.com`, `cdn.pixabay.com` | Ảnh xem trước trong ô "Tìm ảnh Internet" |
 
-Tệp HTML xuất ra chạy **offline** (nhúng sẵn phông, ảnh, hiệu ứng, video tải lên), không cần mạng; chỉ video YouTube cần Internet khi phát.
+Tệp HTML xuất ra chạy **offline** (nhúng sẵn phông, ảnh, hiệu ứng, video tải lên), không cần mạng; chỉ video YouTube / Vimeo cần Internet khi phát.
+
+Nén video tải lên chạy **trên máy chủ** bằng `ffmpeg` (cài sẵn trong image Docker) — không gọi ra ngoài; tắt bằng `VIDEO_TRANSCODE=0` nếu máy chủ yếu CPU.
 
 ---
 

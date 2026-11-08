@@ -5,7 +5,7 @@
 // Dùng: BASE=http://localhost:8088 SMOKE_BOOTSTRAP=1 node test/smoke/smoke.mjs   (Docker local dành cho test)
 //       BASE=… SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… node test/smoke/smoke.mjs (admin có sẵn) — xem provision.mjs
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import sharp from 'sharp';
 import { createProvisioner } from './provision.mjs';
 import { smokeEmail } from '../../scripts/lib/smokeAccounts.js';
@@ -111,13 +111,22 @@ assert.equal(r.json.data.method, 'color');
 const cutoutId = r.json.data.asset.id;
 assert.notEqual(cutoutId, logoId);
 
-const fakeMp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypisom'), Buffer.alloc(200_000, 7)]);
+// Video thật rất nhỏ (2 giây, 160×90) — máy chủ đọc thông số + chụp ảnh bìa bằng ffmpeg, rồi nén chạy nền.
+const tinyMp4 = readFileSync(new URL('../fixtures/tiny.mp4', import.meta.url));
 fd = new FormData();
-fd.set('file', new Blob([fakeMp4], { type: 'video/mp4' }), 'gioi-thieu.mp4');
+fd.set('file', new Blob([tinyMp4], { type: 'video/mp4' }), 'gioi-thieu.mp4');
 r = await a.req('POST', `/api/presentations/${id}/videos`, undefined, { form: fd });
 assert.equal(r.status, 201, JSON.stringify(r.json));
 const fileVideo = r.json.data.video;
 assert.equal(fileVideo.provider, 'file');
+assert.ok(fileVideo.poster, 'ảnh bìa chụp từ video');
+// Đúng chữ ký MP4 nhưng nội dung rác → từ chối ngay (không lưu tệp hỏng vào bài).
+const fakeMp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypisom'), Buffer.alloc(200_000, 7)]);
+fd = new FormData();
+fd.set('file', new Blob([fakeMp4], { type: 'video/mp4' }), 'hong.mp4');
+r = await a.req('POST', `/api/presentations/${id}/videos`, undefined, { form: fd });
+assert.equal(r.status, 422, JSON.stringify(r.json));
+assert.equal(r.json.error.code, 'INVALID_VIDEO');
 fd = new FormData();
 fd.set('file', new Blob([Buffer.from('ID3 không phải video')], { type: 'video/mp4' }), 'x.mp4');
 r = await a.req('POST', `/api/presentations/${id}/videos`, undefined, { form: fd });

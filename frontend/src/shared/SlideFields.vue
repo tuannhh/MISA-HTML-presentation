@@ -309,10 +309,10 @@ function setGalleryImage(i, v) {
     <ContactFields v-if="has('contact') && s.contact" :contact="s.contact" :assets="assets" :upload="upload" :studio="studio" :offer="s.layout === 'offer'" @media="(m) => emit('media', m)" />
 
     <!-- Ảnh hoặc video (1 ô media) -->
-    <FormField v-if="has('image')" :label="media ? 'Ảnh / video' : 'Ảnh'" group :hint="media ? 'Video hiển thị ảnh bìa 16:9; khi trình chiếu bấm vào sẽ tự phát toàn màn hình' : ''">
+    <FormField v-if="has('image')" :label="media ? 'Ảnh / video' : 'Ảnh'" group :hint="media ? 'Video hiển thị ảnh bìa; khi trình chiếu bấm vào (hoặc tự phát khi tới trang) sẽ phát toàn màn hình hoặc ngay trong khung' : ''">
       <div class="flex min-w-0 flex-col gap-2">
         <MTabs v-if="media" v-model="mediaTab" :tabs="MEDIA_TABS" variant="pill" />
-        <VideoPicker v-if="media && mediaTab === 'video'" :model-value="s.video" :media="media" :library="videoLibrary" :with-caption="s.layout === 'image'" @update:model-value="setVideo" />
+        <VideoPicker v-if="media && mediaTab === 'video'" :model-value="s.video" :media="media" :library="videoLibrary" :with-caption="s.layout === 'image'" layout @update:model-value="setVideo" />
         <ImagePicker v-else :model-value="s.image" :assets="imageAssets" :upload="upload" :with-caption="s.layout === 'image'" :studio="studio" @update:model-value="setImage" @studio="emit('media', { path: 'slot', kind: 'image' })" />
       </div>
     </FormField>

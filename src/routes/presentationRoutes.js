@@ -1,5 +1,5 @@
 // /api/presentations — danh sách (của tôi / công khai), tạo dàn ý bằng AI, lưu dàn ý, dựng bài, xem, sửa, xoá, nhân bản,
-// media (ảnh, logo + tách nền, video, YouTube), xem trước, xuất.
+// media (ảnh, logo + tách nền, video, YouTube/Vimeo), xem trước, xuất.
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
 import multer from 'multer';
@@ -154,6 +154,15 @@ export function presentationRoutes({ service, templates, sharing, publications, 
     const body = pick(req.body, ['url']);
     ok(res, await service.addYouTube(req.user, req.params.id, body), null, 201);
   });
+
+  // Link video nhúng YouTube / Vimeo (nhận dạng theo link).
+  r.post('/:id/video-link', auth, id, limits.media, async (req, res) => {
+    const body = pick(req.body, ['url']);
+    ok(res, await service.addVideoLink(req.user, req.params.id, body), null, 201);
+  });
+
+  // Trạng thái nén video tải lên (pending/running/done/skipped/failed) — giao diện hỏi lại tới khi xong.
+  r.get('/:id/videos/:assetId', auth, id, uuidParam('assetId'), async (req, res) => ok(res, await service.videoStatus(req.user, req.params.id, req.params.assetId)));
 
   // Trang trình chiếu: HTML do renderer sinh, chạy trong CSP sandbox (origin null) + nonce.
   function sendDeckHtml(req, res, html, nonce) {

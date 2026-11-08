@@ -14,7 +14,8 @@ export const MISS_CACHE = 'public, max-age=30, s-maxage=60';
 export const MEDIA_CACHE = 'public, max-age=31536000, immutable';
 
 // CSP trang xuất bản: chỉ script/style có nonce (lưu cùng bản xuất bản — trang tĩnh nên nonce cố định theo revision,
-// HTML do renderer sinh với mọi dữ liệu đã esc()); media chỉ từ chính domain; YouTube phát trong khung nocookie; không gọi mạng.
+// HTML do renderer sinh với mọi dữ liệu đã esc()); media chỉ từ chính domain; YouTube phát trong khung nocookie, Vimeo trong
+// player.vimeo.com; không gọi mạng.
 export function publishedCsp(nonce) {
   return [
     "default-src 'none'",
@@ -24,7 +25,7 @@ export function publishedCsp(nonce) {
     "img-src 'self' data:",
     "font-src 'self' data:",
     "media-src 'self' blob:",
-    'frame-src https://www.youtube-nocookie.com',
+    'frame-src https://www.youtube-nocookie.com https://player.vimeo.com',
     "connect-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",

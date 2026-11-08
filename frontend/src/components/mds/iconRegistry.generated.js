@@ -2457,6 +2457,276 @@ export const ICON_REGISTRY = Object.freeze({
     ]
   },
   // [MISA Presentation] Bổ sung icon Tabler Icons (MIT, stroke 1.5) cho video/YouTube/thiết kế bài trình bày.
+  "volume": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M15 8a5 5 0 0 1 0 8"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M17.7 5a9 9 0 0 1 0 14"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5 -4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5"
+        },
+        "children": []
+      }
+    ]
+  },
+  "brand-vimeo": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M3 8.5l1 1s1.5 -1.102 2 -.5c.509 .609 1.863 7.65 2.5 9c.556 1.184 1.978 2.89 4 1.5c2 -1.5 7.5 -5.5 8.5 -11.5c.444 -2.661 -1 -4 -2.5 -4c-2 0 -4.047 1.202 -4.5 4c1 -.6 1.5 0 1.5 1c0 1.5 -2 3.5 -3 3.5c-1 0 -1.5 -1.5 -2 -3.5c-.5 -2 -1 -5 -3 -5c-1.5 0 -3.5 2.5 -5.5 4"
+        },
+        "children": []
+      }
+    ]
+  },
+  "layout-align-left": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M4 4v16"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M8 8a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M8 16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"
+        },
+        "children": []
+      }
+    ]
+  },
+  "layout-align-center": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M12 4v2"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M12 10v4"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M12 18v2"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M7 8a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M5 16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"
+        },
+        "children": []
+      }
+    ]
+  },
+  "layout-align-right": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M20 4v16"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M6 8a2 2 0 0 1 2 -2h6a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-6a2 2 0 0 1 -2 -2z"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M2 16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v0a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2z"
+        },
+        "children": []
+      }
+    ]
+  },
+  "layout-align-top": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M4 4h16"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M8 8a2 2 0 0 1 2 2v6a2 2 0 0 1 -4 0v-6a2 2 0 0 1 2 -2z"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M16 8a2 2 0 0 1 2 2v10a2 2 0 0 1 -4 0v-10a2 2 0 0 1 2 -2z"
+        },
+        "children": []
+      }
+    ]
+  },
+  "layout-align-middle": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M4 12h2"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M10 12h4"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M18 12h2"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M8 7a2 2 0 0 1 2 2v6a2 2 0 0 1 -4 0v-6a2 2 0 0 1 2 -2z"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M16 5a2 2 0 0 1 2 2v10a2 2 0 0 1 -4 0v-10a2 2 0 0 1 2 -2z"
+        },
+        "children": []
+      }
+    ]
+  },
+  "layout-align-bottom": {
+    "attrs": {
+      "fill": "none",
+      "stroke": "currentColor",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-width": "1.5"
+    },
+    "nodes": [
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M4 20h16"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M8 6a2 2 0 0 1 2 2v6a2 2 0 0 1 -4 0v-6a2 2 0 0 1 2 -2z"
+        },
+        "children": []
+      },
+      {
+        "tag": "path",
+        "attrs": {
+          "d": "M16 2a2 2 0 0 1 2 2v10a2 2 0 0 1 -4 0v-10a2 2 0 0 1 2 -2z"
+        },
+        "children": []
+      }
+    ]
+  },
   "video": {
     "attrs": {
       "fill": "none",

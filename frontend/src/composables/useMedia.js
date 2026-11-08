@@ -5,7 +5,7 @@ import { postForm, post, get, patch, del, uploadForm, ApiError } from '@/lib/api
 import { IMAGE_ACCEPT as IMG_ACCEPT, isImageFile, heicToJpeg } from '@/lib/fileKinds.js';
 
 export const MAX_IMAGE_MB = 15;
-export const MAX_VIDEO_MB = 150;
+export const MAX_VIDEO_MB = 200;
 export const VIDEO_ACCEPT = 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v';
 export const IMAGE_ACCEPT = IMG_ACCEPT;
 export const LOGO_ACCEPT = `${IMG_ACCEPT},image/svg+xml,.svg`;
@@ -147,10 +147,19 @@ export function useMedia(id, assets) {
     return res.video;
   }
 
-  async function addYouTube(url) {
-    const res = (await post(`/api/presentations/${id}/youtube`, { url })).data;
+  // Link video nhúng YouTube / Vimeo (máy chủ nhận dạng, tải ảnh bìa về thành asset của bài).
+  async function addVideoLink(url) {
+    const res = (await post(`/api/presentations/${id}/video-link`, { url })).data;
     push(...res.assets);
     return res.video;
+  }
+  const addYouTube = addVideoLink;
+
+  // Trạng thái nén video tải lên (chạy nền trên máy chủ) → cập nhật bản ghi asset trong danh sách; trả asset mới.
+  async function videoStatus(assetId) {
+    const a = (await get(`/api/presentations/${id}/videos/${assetId}`)).data;
+    if (a) assets.value = (assets.value || []).map((x) => (x.id === a.id ? { ...x, ...a } : x));
+    return a;
   }
 
   // Ảnh AI (Nano Banana 2 Lite) theo mô tả → asset mới của bài; trả { asset, alt }.
@@ -181,13 +190,14 @@ export function useMedia(id, assets) {
     return res;
   }
 
-  return { byId, assetUrl, ofKind, uploadImage, uploadLogo, uploadBrand, listTemplates, saveTemplate, updateTemplate, deleteTemplate, applyTemplate, cutoutLogo, uploadVideo, addYouTube, generateImage, searchImages, importStock, editImage };
+  return { byId, assetUrl, ofKind, uploadImage, uploadLogo, uploadBrand, listTemplates, saveTemplate, updateTemplate, deleteTemplate, applyTemplate, cutoutLogo, uploadVideo, addVideoLink, addYouTube, videoStatus, generateImage, searchImages, importStock, editImage };
 }
 
 // Nguồn phát cho lớp video của ứng dụng (xem trước trong dàn ý / trình soạn thảo).
 export function videoSource(video, media) {
   if (!video) return null;
   if (video.provider === 'youtube') return { provider: 'youtube', id: video.id, title: video.title };
+  if (video.provider === 'vimeo') return { provider: 'vimeo', id: video.id, hash: video.hash || '', title: video.title };
   const url = media.assetUrl(video.asset);
   return url ? { provider: 'file', src: url, title: video.title } : null;
 }
@@ -196,3 +206,7 @@ export function videoSource(video, media) {
 export function looksLikeYouTube(v) {
   return /(?:youtube\.com|youtu\.be|youtube-nocookie\.com)\//i.test(String(v || '')) || /^[A-Za-z0-9_-]{11}$/.test(String(v || '').trim());
 }
+export const looksLikeVimeo = (v) => /(?:^|\/\/|\.)vimeo\.com\/\S*\d{5,12}/i.test(String(v || '').trim());
+export const looksLikeVideoLink = (v) => looksLikeYouTube(v) || looksLikeVimeo(v);
+// Khoá nhận diện 1 video trong thư viện của bài (trùng = cùng video).
+export const videoKey = (v) => (!v ? '' : v.provider === 'file' ? `f:${v.asset}` : `${v.provider === 'vimeo' ? 'vm' : 'yt'}:${v.id}`);

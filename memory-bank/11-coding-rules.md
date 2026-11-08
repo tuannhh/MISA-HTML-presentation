@@ -41,6 +41,12 @@
     bài ngoài bản nháp, không "chuẩn hoá" bản nháp trong component (sinh bước thừa, mất nhánh làm lại). Thao tác gửi nhiều thông điệp từ khung cho
     1 hành động thì gộp lại (vd. `setPt` lưu 1 lần). Phím tắt lịch sử dùng `historyKey`/`isTextField` (`lib/editHistory.js`; engine có bản sao `histKey`).
 
+17. **Video**: nguồn `file|youtube|vimeo`; tuỳ chọn trình chiếu + căn/cỡ (`autoplay`, `fullscreen`, `muted`, `align`, `size`) là lựa chọn của người dùng —
+    **không** đưa vào prompt/schema AI; làm sạch + thuộc tính HTML chỉ qua `shared/deck/video.js` (`cleanVideoOpts`, `videoFlags`, `videoBoxAttr`). Mã
+    YouTube/Vimeo luôn kiểm lại regex ở engine và `useVideoPlayer` (không tin DOM/postMessage). Gọi ffmpeg/ffprobe chỉ qua `videoService` (tham số có
+    `-nostdin -protocol_whitelist file`, `execFile`, có hạn thời gian); tạo asset video mới ở đâu cũng phải `videos.inspect` + `processState:'pending'` +
+    `videos.enqueue` (3 đường hiện có: `addVideo`, `storeUserMedia`, `storeVideoBuffer`).
+
 ## Quy trình
 
 - Viết code + comment tiếng Việt, ngắn gọn, giải thích **vì sao**.

@@ -705,3 +705,49 @@ Yêu cầu chủ dự án: người dùng tạo thư mục, kể cả thư mục
   Giữ nguyên nội dung → ≤ 40 trang (vượt → từ chối); AI biên tập lại → đọc ≤ 60 trang.
 - Thời gian đo trên Docker với bài mẫu 137 MB (38 trang, 5 video MP4): giữ nguyên thiết kế ~75–90 giây; sửa được + giữ nguyên nội dung ~135 giây (gồm AI).
   Trình duyệt dùng chung semaphore với ảnh bìa/xuất PDF (`RENDER_CONCURRENCY`) — lượt nhập dài chiếm 1 chỗ trong thời gian đó.
+
+## 28. Video: YouTube + Vimeo, tải lên ≤ 200 MB + nén chạy nền, tự phát / toàn màn hình / phát trong khung, căn + cỡ (2026-11-08, Đợt 4 — mục 3)
+
+### Nguồn video (`slide.video` / phần tử `video` của trang tự do)
+- `provider: 'file'` (asset video) · `'youtube'` (`id` 11 ký tự) · **`'vimeo'`** (`id` 5–12 chữ số + `hash` tuỳ chọn — mã riêng tư `h=…` của video
+  "không công khai"). Mọi nguồn có `poster` (asset ảnh bìa), `title`, `caption`.
+- Dán link: **1 ô nhận cả YouTube lẫn Vimeo** → `POST /:id/video-link` (`addVideoLink`, nhận dạng theo link; `/youtube` cũ giữ tương thích, chỉ nhận
+  YouTube). Vimeo (`src/services/vimeoService.js`): nhận `vimeo.com/<id>[/<hash>]`, `player.vimeo.com/video/<id>?h=`, `/channels|groups|showcase|album/…/<id>`;
+  oEmbed `vimeo.com/api/oembed.json` (404 → `VIMEO_NOT_FOUND`, 401/403 → `VIMEO_NOT_EMBEDDABLE`, mạng lỗi → vẫn gắn, thiếu tên/ảnh bìa); ảnh bìa chỉ tải khi
+  URL do oEmbed trả nằm đúng `https://i.vimeocdn.com` → cắt 16:9 (`poster169`, dùng chung với YouTube) → asset `poster` của bài.
+- Phát: YouTube qua `youtube-nocookie.com/embed`, Vimeo qua `player.vimeo.com/video/<id>?autoplay=1&dnt=1[&h=]` — trong lớp phát của ứng dụng (khung chiếu
+  sandbox không nhúng được) hoặc `#vov`/khung trang ở bản HTML độc lập; luôn có link "Mở trên YouTube/Vimeo".
+
+### Tải lên + nén (`src/services/videoService.js`, `src/services/videoOptimizer.js`)
+- Tối đa **200 MB** (`MAX_VIDEO_MB`, mặc định đổi 150 → 200; Nginx `client_max_body_size 310m` đã đủ). MP4/MOV/WebM (kiểm chữ ký tệp như cũ).
+- Ngay khi tải (đồng bộ, < 1 giây): `ffprobe` đọc kích thước (đảo khi cờ xoay 90° — video quay dọc), codec; **tệp không đọc được hình → 422 `INVALID_VIDEO`**
+  (chữ ký MP4 hợp lệ nhưng nội dung rác). Trình duyệt không gửi ảnh bìa (MOV/HEVC trên Chrome…) → `ffmpeg` chụp khung giây 1 (video < 3 giây: 1/3 thời lượng).
+  `assets.width/height` của video nay có giá trị → renderer dựng khung **đúng tỷ lệ** (`--ar`, kẹp 0,4–2,6; không có = 16:9 như cũ).
+- Sau khi lưu: `assets.process_state = 'pending'` + đưa vào **hàng nén chạy nền** (Semaphore 1 — mỗi lúc 1 video, không tranh CPU với tạo bài):
+  `running` → nén H.264 (`libx264 -crf 24 -preset veryfast`, `profile high`, `yuv420p`) + AAC 128k stereo, cạnh dài ≤ 1920 (không phóng to), bỏ metadata,
+  `-movflags +faststart` (chỉ mục đầu tệp → phát ngay khi chưa tải hết). Quyết định (`decide`): bản gốc **không phát được trên trình duyệt** (MOV, HEVC/ProRes,
+  10-bit, âm thanh PCM…) → luôn thay; còn lại chỉ thay khi bản nén ≤ 90% bản gốc; không thay nhưng MP4 gốc để `moov` sau `mdat` (`moovAtEnd` đọc tiêu đề
+  hộp cấp 1) → chỉ **đóng gói lại** `-c copy +faststart`.
+- Thay tệp: ghi khoá mới `<asset>-<8 ký tự>.mp4` (không ghi đè tệp đang được phát theo Range) → `replaceVideoFile` UPDATE có điều kiện `storage_key` cũ →
+  thành công thì xoá tệp cũ, `done`; 0 dòng (video bị xoá/thay giữa chừng) → xoá bản nén. Không giảm được → `skipped`; lỗi/quá hạn → `failed` (giữ gốc).
+  Mã asset **không đổi** → spec, bản nháp, URL ký không phải sửa.
+- Khởi động lại máy chủ: `resumeVideoJobs` đưa video `pending/running` vào hàng lại (tệp gốc còn nguyên). Thiếu ffmpeg / `VIDEO_TRANSCODE=0` → không đọc
+  thông số, không nén, `process_state` NULL (hành vi cũ). Cả 3 đường tạo video đều qua bước này: tải lên ở trình soạn thảo/dàn ý (`addVideo`), media gửi kèm
+  khi tạo bài (`storeUserMedia`), video tách từ bài HTML nhập vào (`storeVideoBuffer`).
+- Giao diện: asset video có `state`; `VideoPicker` hiện dải "Đang tối ưu video để trình chiếu mượt hơn…" trên ảnh bìa và hỏi `GET /:id/videos/:assetId`
+  mỗi 4 giây tới khi xong (toast "Đã tối ưu video…"). Đo thật: MP4 1080p 60 giây 146 MB → 33 MB sau ~14 giây (Docker trên máy dev); MOV dọc → MP4 720×1280.
+
+### Tuỳ chọn trình chiếu + vị trí (`shared/deck/video.js` — người dùng chọn, KHÔNG qua AI)
+- `autoplay: true` — **tự phát khi tới trang**, hoặc khi bước trình chiếu (`slide.build`) chứa video vừa hiện; mỗi lần vào trang phát 1 lần (`data-played`).
+- `fullscreen: false` — **phát ngay trong khung** trên trang (mặc định: phóng toàn màn hình). Trong khung chiếu của ứng dụng (sandbox) chỉ video tải lên
+  phát được trong khung; YouTube/Vimeo vẫn mở lớp phát của ứng dụng nhưng không xin toàn màn hình.
+- `muted: true` — phát không tiếng. Trình duyệt chặn tự phát có tiếng (người xem chưa bấm gì) → engine/ứng dụng tự lùi về **không tiếng + nút "Bật tiếng"**.
+- `align: 'left'|'right'` (không có = giữa) + `size` 30–99 (% ô media; không có = 100) — **chỉ ô media của bố cục** (`.vbox[data-va]`, `--vz`); phần tử
+  video của trang tự do giữ kéo/đổi cỡ như cũ + **nút "Căn theo trang"** (trái/giữa/phải, trên/giữa/dưới) dùng chung mọi phần tử tự do.
+- Chỉ lưu khác mặc định (`cleanVideoOpts`); renderer gắn `data-auto` / `data-inline` / `data-muted` lên `figure.vid`. Khung soạn thảo + thumbnail + PDF
+  không tự phát (chỉ chế độ `present`).
+- Điều khiển khi đang phát toàn màn hình: **Esc hoặc phím Trước/Sau (bút trình chiếu) đóng video, chưa chuyển trang**; video tải lên phát hết → tự đóng,
+  quay về trang. Video phát trong khung dừng + gỡ khi rời trang.
+- Đổi video khác vào cùng ô (tải lên / link / "Video trong bài") giữ chú thích + tuỳ chọn của ô (`VideoPicker.pick`).
+- Bảng "Video" (`VideoPicker`): "Khi trình chiếu" (3 công tắc + giải thích) và — khi mở từ ô media của bố cục (`layout`) — "Vị trí và kích thước" (3 nút căn
+  + thanh "Cỡ video"). Trên mobile cả hàng công tắc là vùng chạm 44px.

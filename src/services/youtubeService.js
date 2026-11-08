@@ -27,6 +27,20 @@ export function parseYouTubeId(input) {
   return id && YOUTUBE_ID_RE.test(id) ? id : null;
 }
 
+/** Ảnh bìa video nhúng (YouTube/Vimeo): cắt giữa về 16:9 (bỏ viền đen của bản 4:3), tối đa 1280×720, WebP. */
+export async function poster169(buffer, meta = null) {
+  const m = meta || (await sharp(buffer).metadata());
+  const w = m.width;
+  const h = Math.min(m.height, Math.round((w * 9) / 16));
+  const top = Math.max(0, Math.round((m.height - h) / 2));
+  const { data, info } = await sharp(buffer)
+    .extract({ left: 0, top, width: w, height: h })
+    .resize({ width: 1280, height: 720, fit: 'cover', withoutEnlargement: true })
+    .webp({ quality: 82 })
+    .toBuffer({ resolveWithObject: true });
+  return { buffer: data, width: info.width, height: info.height, mime: 'image/webp', bytes: data.length };
+}
+
 // Ảnh bìa: maxres (1280×720, có thể không tồn tại) → sd/hq (4:3 có viền đen) cắt giữa về 16:9.
 const THUMBS = ['maxresdefault', 'sddefault', 'hqdefault'];
 
@@ -38,15 +52,7 @@ async function fetchThumb(id) {
       const meta = await sharp(res.body).metadata();
       // YouTube trả ảnh xám 120×90 khi không có bản maxres.
       if (!meta.width || meta.width < 320) continue;
-      const w = meta.width;
-      const h = Math.min(meta.height, Math.round((w * 9) / 16));
-      const top = Math.max(0, Math.round((meta.height - h) / 2));
-      const { data, info } = await sharp(res.body)
-        .extract({ left: 0, top, width: w, height: h })
-        .resize({ width: 1280, height: 720, fit: 'cover', withoutEnlargement: true })
-        .webp({ quality: 82 })
-        .toBuffer({ resolveWithObject: true });
-      return { buffer: data, width: info.width, height: info.height, mime: 'image/webp', bytes: data.length };
+      return await poster169(res.body, meta);
     } catch (err) {
       logger.warn('youtube_thumb_failed', { id, name, err: err.message });
     }

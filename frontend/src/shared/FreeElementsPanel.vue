@@ -89,6 +89,17 @@ const setNum = (k, v, min, max) => {
   const n = Number(String(v).replace(',', '.'))
   if (el.value && Number.isFinite(n)) el.value[k] = Math.min(max, Math.max(min, Math.round(n * 100) / 100))
 }
+// Căn nhanh theo trang (như "căn theo trang chiếu"): trái/giữa/phải đặt cạnh trái phần tử, trên/giữa/dưới đặt cạnh trên.
+const r2 = (n) => Math.round(n * 100) / 100
+const ALIGN_PAGE = [
+  { k: 'left', icon: 'layout-align-left', label: 'Căn trái trang', set: (e) => (e.x = 0) },
+  { k: 'hcenter', icon: 'layout-align-center', label: 'Căn giữa trang theo chiều ngang', set: (e) => (e.x = r2(Math.max(0, (100 - e.w) / 2))) },
+  { k: 'right', icon: 'layout-align-right', label: 'Căn phải trang', set: (e) => (e.x = r2(Math.max(0, 100 - e.w))) },
+  { k: 'top', icon: 'layout-align-top', label: 'Căn trên trang', set: (e) => (e.y = 0) },
+  { k: 'vcenter', icon: 'layout-align-middle', label: 'Căn giữa trang theo chiều dọc', set: (e) => (e.y = r2(Math.max(0, (100 - e.h) / 2))) },
+  { k: 'bottom', icon: 'layout-align-bottom', label: 'Căn dưới trang', set: (e) => (e.y = r2(Math.max(0, 100 - e.h))) },
+]
+
 // Trình chiếu: phần tử ẩn đến khi người trình bày bấm Sau (theo thứ tự lớp). Chỉ lưu khi bật.
 function setStep(v) {
   if (v) el.value.step = true
@@ -165,6 +176,13 @@ function delCol() {
           <!-- Áp khi rời ô / Enter (không áp từng phím — tránh bị kẹp giá trị khi đang gõ dở) -->
           <MInput :model-value="String(el[k])" inputmode="decimal" :aria-label="{ x: 'Vị trí trái (%)', y: 'Vị trí trên (%)', w: 'Chiều rộng (%)', h: 'Chiều cao (%)' }[k]" @change="(e) => setNum(k, e.target.value, k === 'x' || k === 'y' ? -50 : 2, k === 'x' || k === 'y' ? 100 : 150)" />
         </label>
+      </div>
+
+      <div class="flex items-center gap-1" role="group" aria-label="Căn theo trang">
+        <span class="mr-auto text-[12px] text-[var(--mds-text-secondary)]">Căn theo trang</span>
+        <MTooltip v-for="a in ALIGN_PAGE" :key="a.k" :content="a.label">
+          <MButton variant="icon" :aria-label="a.label" @click="a.set(el)"><template #icon><MIcon :name="a.icon" :size="16" /></template></MButton>
+        </MTooltip>
       </div>
 
       <MSwitch :model-value="!!el.step" label="Hiện khi bấm (trình chiếu từng phần)" @update:model-value="setStep" />

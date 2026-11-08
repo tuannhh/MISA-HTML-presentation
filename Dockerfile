@@ -21,11 +21,13 @@ ENV NODE_ENV=production \
 # Chromium để chụp thumbnail/xuất PDF; poppler-utils (pdftoppm) render trang PDF; LibreOffice (bản không giao diện, chỉ Impress/Writer)
 # chuyển PPTX/DOCX/ODP/ODT → PDF để nhận diện + cắt sơ đồ, ảnh giao diện (visualService); font Noto/DejaVu dự phòng cho ký tự ngoài
 # Inter; Liberation/Carlito/Caladea = font tương thích kích thước Arial/Times/Calibri/Cambria → slide Office render đúng bố cục.
+# ffmpeg (ffprobe kèm theo): đọc thông số + ảnh bìa video tải lên, nén lại chạy nền (H.264/AAC) cho trình chiếu tải nhanh.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends chromium poppler-utils fonts-dejavu-core fonts-noto-core ca-certificates tini \
-      libreoffice-impress-nogui libreoffice-writer-nogui fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea \
+      libreoffice-impress-nogui libreoffice-writer-nogui fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea ffmpeg \
  && rm -rf /var/lib/apt/lists/* \
- && soffice --version
+ && soffice --version \
+ && ffmpeg -hide_banner -version | head -n 1
 WORKDIR /app
 COPY package.json package-lock.json ./
 # sharp cần tải binary nền tảng qua optionalDependencies (không phải install script) → --ignore-scripts vẫn chạy được.

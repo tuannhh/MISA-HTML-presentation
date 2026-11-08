@@ -405,3 +405,19 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - Số đếm chạy (count-up bằng requestAnimationFrame) không nằm trong `getAnimations()` → đọc ngay sẽ ra "0"; chờ chữ ổn định (so sánh innerText 350 ms/lần, tối đa ~2,5 giây).
 - Chữ IN HOA do CSS `text-transform` lọt vào `innerText` → bật tạm lớp `imp-plain` (text-transform none) khi đọc chữ.
 - Hàm chạy trong trang (`htmlDeckPage.js`) được puppeteer tuần tự hoá bằng `toString` → phải tự chứa, không dùng biến/hàm ngoài.
+
+## Video (Đợt 4, 2026-11-08)
+- **Khung chiếu sandbox (origin null) không có `media-src`** trong CSP cũ (`default-src 'none'`) → `<video>` trong khung bị chặn âm thầm. Phát video tải lên ngay trong
+  khung cần `media-src 'self' <origin> blob:` ở `deckCsp` ('self' của trang sandbox không khớp origin ứng dụng).
+- **Tự phát có tiếng bị trình duyệt chặn** khi người xem chưa thao tác (mở trang, trang 1 có video tự phát; headless luôn chặn) → `play()` reject `NotAllowedError`.
+  Thuộc tính `autoplay` thì im lặng không phát → luôn gọi `play()` tường minh và lùi về `muted` + nút "Bật tiếng". Phím vừa bấm (chuyển trang) = thao tác
+  hợp lệ ~5 giây → tự phát + xin toàn màn hình sau hiệu ứng 650 ms vẫn được. Iframe phải có `allow="autoplay"` (+ `fullscreen`).
+- Kích hoạt người dùng **truyền lên** khung cha (phím bấm trong iframe → trang cha được xin toàn màn hình), **không truyền xuống** khung con.
+- Thay tệp video đã nén: **không ghi đè cùng khoá** — trình duyệt đang phát theo Range có thể ghép đoạn cũ + mới. Ghi khoá mới, UPDATE có điều kiện
+  `storage_key` cũ, rồi mới xoá tệp cũ (Linux: tiến trình đang đọc vẫn giữ inode).
+- `ffprobe` trả kích thước khung lưu; video quay dọc trên điện thoại lưu ngang + cờ xoay (`tags.rotate` hoặc `side_data_list[].rotation`) → phải đảo
+  width/height. Luồng `attached_pic` (ảnh bìa nhúng trong tệp) cũng là `codec_type: video` → bỏ qua.
+- Test hàng nén chạy nền: đừng đợi khoảng cố định (20 ms đạt khi chạy riêng, trượt khi cả bộ test chạy song song) → đợi `stats()` hết việc.
+- Smoke cũ dùng "MP4 giả" (chữ ký `ftyp` + byte rác) → nay bị 422 đúng thiết kế; smoke dùng `test/fixtures/tiny.mp4` (2 giây, 7,7 KB).
+- Video cỡ `size` là % **ô media**; ô thấp (bố cục ảnh + chữ) bị giới hạn theo chiều cao (`min(cqw·vz, cqh·vz·ar)`) → đo được nhỏ hơn % đặt là đúng.
+

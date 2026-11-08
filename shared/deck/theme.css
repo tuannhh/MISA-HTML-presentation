@@ -226,9 +226,12 @@ svg * { transform-box: fill-box; transform-origin: center; }
 }
 [data-style="editorial"] .plate, [data-style="outline"] .plate { box-shadow: var(--shadow); }
 
-/* ---------- video (ảnh bìa 16:9 + nút phát; bấm → engine mở toàn màn hình) ---------- */
+/* ---------- video (ảnh bìa + nút phát; bấm / tự phát → engine phát toàn màn hình hoặc ngay trong khung) ----------
+   --ar: tỷ lệ khung (video tải lên đã đọc được kích thước; mặc định 16:9) · --vz: cỡ so với ô media (0,3–1) · data-va: căn trái/phải. */
 .vbox { container-type: size; width: 100%; height: 100%; min-height: 0; display: grid; place-items: center; }
-.vid { width: min(100cqw, calc(100cqh * 16 / 9)); height: auto; aspect-ratio: 16 / 9; cursor: pointer; }
+.vbox[data-va="l"] { justify-items: start; }
+.vbox[data-va="r"] { justify-items: end; }
+.vid { --ar: 1.7778; width: min(calc(100cqw * var(--vz, 1)), calc(100cqh * var(--vz, 1) * var(--ar))); height: auto; aspect-ratio: var(--ar); cursor: pointer; }
 .vid img { object-fit: cover; }
 .vid::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, .05) 0%, rgba(0, 0, 0, .38) 100%); pointer-events: none; }
 .vplay {
@@ -240,7 +243,15 @@ svg * { transform-box: fill-box; transform-origin: center; }
 .vid:hover .vplay, .vplay:focus-visible { transform: translate(-50%, -50%) scale(1.08); }
 .vplay:focus-visible { outline: 4px solid var(--text); outline-offset: 6px; }
 .vbadge { position: absolute; left: var(--g3); top: var(--g3); z-index: 2; padding: 10px 18px; border-radius: 10px; background: #FF0033; color: #fff; font: 700 var(--t-xs)/1 var(--f-sans); letter-spacing: .04em; }
+.vbadge.vb-vimeo { background: #17A9DC; }
 .vid figcaption { z-index: 2; }
+/* Phát ngay trong khung (data-inline hoặc khung chiếu không mở được lớp phủ): trình phát phủ kín ảnh bìa. */
+.vid .vinl { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; border: 0; background: #000; object-fit: contain; }
+.vid.playing .vplay, .vid.playing .vbadge, .vid.playing::after { display: none; }
+.vid.playing { cursor: default; }
+/* Trình duyệt chặn tự phát có tiếng → phát không tiếng + nút bật tiếng. */
+.vunm { position: absolute; right: 16px; bottom: 16px; z-index: 4; padding: 10px 18px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .5); background: rgba(0, 0, 0, .6); color: #fff; font: 600 18px/1 system-ui, sans-serif; cursor: pointer; }
+.vid .vunm { font-size: calc(26px * var(--k)); }
 /* Lớp phát video toàn màn hình (bản HTML mở trực tiếp; trong ứng dụng, ứng dụng tự mở lớp phát). */
 /* Xem ảnh toàn màn hình khi bấm ảnh lúc trình chiếu (engine tạo #lbx). */
 body:not(.edit) .slide.on [data-lb] { cursor: zoom-in; }
@@ -253,6 +264,8 @@ body:not(.edit) .slide.on [data-lb] { cursor: zoom-in; }
 @media (prefers-reduced-motion: reduce) { #lbx, #lbx img { transition: none; } }
 #vov { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(0, 0, 0, .94); }
 #vov .vframe { position: relative; width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9; background: #000; }
+#vov .vframe.vf-file { width: 100vw; height: 100vh; aspect-ratio: auto; }
+#vov video { object-fit: contain; }
 #vov iframe, #vov video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
 #vov .vx { position: fixed; right: 16px; top: 16px; z-index: 2; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .4); background: rgba(0, 0, 0, .5); color: #fff; font: 400 26px/1 system-ui, sans-serif; cursor: pointer; }
 #vov .vyt { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2; color: #fff; font: 500 14px/1.4 system-ui, sans-serif; text-decoration: underline; }

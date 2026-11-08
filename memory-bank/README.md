@@ -33,8 +33,9 @@ Thư mục này chứa **toàn bộ tri thức về dự án MISA Presentation**
 ## Audit và bàn giao mới nhất
 
 ### Bàn giao 08/11/2026 — cải tiến 11 mục (đọc trước khi làm tiếp)
-- **Nhánh `feature/cai-tien-11-muc`** (từ `main` 827da35, **chưa push** — chỉ push khi chủ dự án yêu cầu). Đã xong + commit Đợt 1 (73eda47), Đợt 2 (704918a),
-  Đợt 3 (commit ngay sau 704918a). **Việc tiếp theo: Đợt 4 — video** (mục 3), rồi Đợt 5 (mục 8 bố cục, mục 11 chuyển động). Kế hoạch chi tiết +
+- **Nhánh `feature/cai-tien-11-muc`** (từ `main` 827da35; **đã push nhánh lên GitHub `origin` 08/11/2026** sau Đợt 4 — `main` vẫn chưa đổi trên GitHub). Đã xong + commit Đợt 1 (73eda47), Đợt 2 (704918a),
+  Đợt 3 (commit ngay sau 704918a). Đợt 4 — video (mục 3) **đã xong + kiểm thật trên Docker, commit ngay sau 12b718c** (`05` §28; script
+  `tmp/e2e-dot4.mjs`, `tmp/ui-dot4.mjs`). **Việc tiếp theo: Đợt 5** (mục 8 bố cục, mục 11 chuyển động — chốt danh mục bố cục với chủ dự án trước). Kế hoạch chi tiết +
   yêu cầu gốc: [`docs/ROADMAP.md` mục CT](../docs/ROADMAP.md).
 - Môi trường: Docker local cổng 8088 (`docker compose up -d --build app` sau `npm run build`); Gemini qua Agent Platform (xem `07`). Chạy trên máy chủ MISA,
   **không Cloud Run**. Không đọc/in/commit secret (`.env`, khoá service account).

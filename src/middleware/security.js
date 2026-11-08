@@ -43,9 +43,9 @@ export function securityHeaders() {
         'img-src': ["'self'", 'data:', 'blob:', 'https://pixabay.com', 'https://cdn.pixabay.com'],
         'font-src': ["'self'", 'data:'],
         'connect-src': ["'self'"],
-        // Video tải lên (và ảnh bìa chụp từ video ở trình duyệt qua blob:); YouTube phát trong lớp phủ của ứng dụng.
+        // Video tải lên (và ảnh bìa chụp từ video ở trình duyệt qua blob:); YouTube / Vimeo phát trong lớp phủ của ứng dụng.
         'media-src': ["'self'", 'blob:'],
-        'frame-src': ["'self'", 'https://www.youtube-nocookie.com'],
+        'frame-src': ["'self'", 'https://www.youtube-nocookie.com', 'https://player.vimeo.com'],
         'frame-ancestors': ["'none'"],
         'object-src': ["'none'"],
         'base-uri': ["'self'"],
@@ -70,6 +70,8 @@ export function deckCsp(nonce, origin) {
     "style-src-attr 'unsafe-inline'",
     `img-src 'self' ${origin} data:`,
     `font-src 'self' ${origin} data:`,
+    // Video tải lên phát ngay trong khung trang (tuỳ chọn "không phóng toàn màn hình") — chỉ tệp của chính ứng dụng.
+    `media-src 'self' ${origin} blob:`,
     "connect-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",

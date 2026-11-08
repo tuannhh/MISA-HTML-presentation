@@ -47,7 +47,11 @@ Dự án dùng **`.env` + `.env.example`** (không dùng `startup/config.json` n
 | `MAX_IMAGES_PER_DECK` | | 60 | Ảnh rút từ tài liệu nguồn |
 | `MAX_SOURCE_LINKS` | | 5 | Số đường link tối đa mỗi lần tạo bài (1–10) |
 | `MAX_LINK_IMAGES` | | 24 | Tổng ảnh lấy từ các trang web nguồn (chia đều giữa các link, ≤ `MAX_IMAGES_PER_DECK`); `0` = chỉ lấy chữ (`05` §20) |
-| `MAX_VIDEO_MB` / `MAX_VIDEOS_PER_DECK` | | 150 / 10 | Video tải lên chèn vào slide (MP4/MOV/WebM) — dung lượng 1 tệp / số video mỗi bài |
+| `MAX_VIDEO_MB` / `MAX_VIDEOS_PER_DECK` | | 200 / 10 | Video tải lên chèn vào slide (MP4/MOV/WebM) — dung lượng 1 tệp / số video mỗi bài (Nginx `client_max_body_size` ≥ MAX_VIDEO_MB + 20) |
+| `VIDEO_TRANSCODE` | | true | Đọc thông số + ảnh bìa (ffprobe/ffmpeg) và **nén video tải lên chạy nền** (H.264/AAC, ≤ 1920, moov đầu tệp — `05` §28). false → giữ tệp gốc |
+| `FFMPEG_PATH` / `FFPROBE_PATH` | | ffmpeg / ffprobe | Docker cài gói `ffmpeg` (có ffprobe); thiếu → log `ffmpeg_unavailable`, bỏ qua đọc thông số/nén |
+| `VIDEO_CRF` / `VIDEO_PRESET` / `VIDEO_THREADS` | | 24 / veryfast / 2 | Chất lượng nén (18–32, thấp = nét/nặng), tốc độ nén, số luồng CPU cho 1 lần nén (mỗi lúc chỉ nén 1 video) |
+| `VIDEO_TRANSCODE_TIMEOUT_MS` | | 1800000 | Trần thời gian 1 lần nén (thực tế: ~2× thời lượng video, tối thiểu 2 phút) — quá hạn giết tiến trình, giữ gốc |
 | `MAX_CREATE_MEDIA` | | 20 | Số ảnh/video gửi kèm tối đa khi tạo bài (luôn được đưa vào bài) |
 | `PDF_UI_SHOTS` | | true | Nhận diện + cắt **sơ đồ** và **ảnh giao diện phần mềm** từ tư liệu nguồn để đưa vào bài (tên biến giữ từ bản cũ) |
 | `PDF_UI_SHOT_PAGES` | | 40 | Tổng số trang tư liệu (PDF + PPTX/DOCX đã render) được xem để tìm hình |
@@ -80,7 +84,9 @@ npm run dev                      # Vite http://localhost:5173 (proxy /api, /deck
   Windows `winget install --id oschwartz10612.Poppler --exact` (bản zip portable, thêm `…\WinGet\Packages\oschwartz10612.Poppler_…\poppler-<ver>\Library\bin` vào PATH người dùng — mở shell mới mới nhận);
   macOS `brew install poppler`; Debian/Ubuntu `apt-get install poppler-utils`. Kiểm: `pdftoppm -v`.
 - LibreOffice (`soffice`, render PPTX/DOCX/ODP/ODT) — tuỳ chọn; thiếu → log `soffice_missing`, chỉ PDF được nhận diện hình.
-- Máy chủ cài không qua Docker: cài `chromium poppler-utils` + LibreOffice headless + phông như `Dockerfile` (dòng `apt-get install`).
+- ffmpeg (đọc thông số/ảnh bìa + nén video tải lên) — tuỳ chọn; thiếu → log `ffmpeg_unavailable`, video giữ nguyên tệp gốc, không đọc được kích thước.
+  macOS `brew install ffmpeg`; Debian/Ubuntu `apt-get install ffmpeg`; Windows `winget install Gyan.FFmpeg`.
+- Máy chủ cài không qua Docker: cài `chromium poppler-utils ffmpeg` + LibreOffice headless + phông như `Dockerfile` (dòng `apt-get install`).
 
 > Trên máy phát triển hiện tại `.env` đang trỏ `APP_BASE_URL=http://localhost:8088` cho bản Docker; Origin của Vite (5173) vẫn được chấp nhận vì kiểm tra cả `host` hiện tại qua proxy. Nếu gặp `BAD_ORIGIN` khi dev, đặt `APP_BASE_URL` đúng địa chỉ đang mở.
 

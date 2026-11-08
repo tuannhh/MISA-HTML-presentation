@@ -3,16 +3,16 @@
 // Asset luôn thuộc tenant của CHỦ BÀI (kể cả khi người được mời sửa tải lên) — service truyền tenant của bài.
 import { tenantClause } from './tenantScope.js';
 
-const COLS = 'a.id, a.tenant_id, a.presentation_id, a.kind, a.mime, a.bytes, a.width, a.height, a.storage_key, a.original_name, a.created_at';
+const COLS = 'a.id, a.tenant_id, a.presentation_id, a.kind, a.mime, a.bytes, a.width, a.height, a.storage_key, a.original_name, a.process_state, a.created_at';
 
 export function createAssetRepository(pool) {
   return {
     async create(tenantId, a, conn = pool) {
       const t = tenantClause(tenantId);
       await conn.execute(
-        `INSERT INTO assets (id, tenant_id, presentation_id, kind, mime, bytes, width, height, storage_key, original_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [a.id, t.params[0], a.presentationId, a.kind || 'image', a.mime, a.bytes, a.width ?? null, a.height ?? null, a.storageKey, a.originalName ?? null],
+        `INSERT INTO assets (id, tenant_id, presentation_id, kind, mime, bytes, width, height, storage_key, original_name, process_state)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [a.id, t.params[0], a.presentationId, a.kind || 'image', a.mime, a.bytes, a.width ?? null, a.height ?? null, a.storageKey, a.originalName ?? null, a.processState ?? null],
       );
     },
 
@@ -80,6 +80,30 @@ export function createAssetRepository(pool) {
       const t = tenantClause(tenantId);
       const [rows] = await pool.execute(`SELECT storage_key FROM assets WHERE presentation_id = ? AND ${t.sql}`, [presentationId, ...t.params]);
       return rows.map((r) => r.storage_key);
+    },
+
+    /* ---- nén video chạy nền (tác vụ nội bộ: mã asset do chính máy chủ đưa vào hàng, KHÔNG lọc tenant) ---- */
+    async setProcessState(id, state) {
+      await pool.execute("UPDATE assets SET process_state = ? WHERE id = ? AND kind = 'video'", [state, id]);
+    },
+
+    async setVideoSize(id, width, height) {
+      await pool.execute("UPDATE assets SET width = ?, height = ? WHERE id = ? AND kind = 'video'", [width || null, height || null, id]);
+    },
+
+    // Thay tệp bằng bản nén — chỉ khi tệp hiện tại vẫn là tệp đã nén từ (không bị thay/xoá giữa chừng). Trả số dòng đổi (0 = bỏ bản nén).
+    async replaceVideoFile(id, fromKey, f) {
+      const [res] = await pool.execute(
+        "UPDATE assets SET storage_key = ?, mime = ?, bytes = ?, width = ?, height = ?, process_state = 'done' WHERE id = ? AND kind = 'video' AND storage_key = ?",
+        [f.storageKey, f.mime, f.bytes, f.width || null, f.height || null, id, fromKey],
+      );
+      return res.affectedRows;
+    },
+
+    // Video còn dở khi máy chủ dừng → nén lại sau khi khởi động.
+    async listVideoJobs() {
+      const [rows] = await pool.execute(`SELECT ${COLS} FROM assets a WHERE a.kind = 'video' AND a.process_state IN ('pending', 'running') ORDER BY a.created_at`);
+      return rows;
     },
 
     async deleteOwned(tenantId, id) {

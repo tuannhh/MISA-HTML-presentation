@@ -13,6 +13,7 @@ import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 import { LOGO_MOTIONS } from '../../shared/deck/bg3d.js';
 import { VARIANTS, STYLES } from '../../shared/deck/variants.js';
 import { cleanImgLook } from '../../shared/deck/imgstyle.js';
+import { cleanVideoOpts, VIMEO_ID_RE, VIMEO_HASH_RE } from '../../shared/deck/video.js';
 import { cleanMoves, cleanHide } from '../../shared/deck/layers.js';
 import { TITLE_CASES } from '../../shared/deck/textCase.js';
 import { PHONE_CHANNELS, CONTACT_LIMITS as CL, validPhone, validEmail, webHref } from '../../shared/deck/contact.js';
@@ -26,6 +27,7 @@ const LAYOUT_SET = new Set(LAYOUTS);
 const TONES = new Set(['neg', 'pos', 'neutral']);
 const ID_RE = /^[a-z0-9-]{1,40}$/i;
 export const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+export { VIMEO_ID_RE, VIMEO_HASH_RE };
 const uuidOrNull = (v) => (typeof v === 'string' && isUuid(v) ? v.toLowerCase() : null);
 
 function makeCtx(strict) {
@@ -131,13 +133,18 @@ function cleanImage(c, v, path) {
   return img.asset || img.alt || img.caption ? img : null;
 }
 
-// Video trên slide: YouTube (mã 11 ký tự) hoặc tệp tải lên (asset). poster = ảnh bìa (asset).
+// Video trên slide: YouTube (mã 11 ký tự), Vimeo (mã số + mã riêng tư tuỳ chọn) hoặc tệp tải lên (asset). poster = ảnh bìa (asset).
+// Tuỳ chọn trình chiếu / căn / cỡ (shared/deck/video.js) chỉ lưu khi khác mặc định.
 export function cleanVideo(c, v, path) {
   if (v === undefined || v === null) return null;
   const o = c.obj(v);
-  const provider = o.provider === 'youtube' ? 'youtube' : o.provider === 'file' ? 'file' : null;
-  const base = { poster: uuidOrNull(o.poster), title: c.str(o.title, SPEC_LIMITS.videoTitle, `${path}.title`), caption: c.str(o.caption, SPEC_LIMITS.caption, `${path}.caption`) };
+  const provider = ['youtube', 'vimeo', 'file'].includes(o.provider) ? o.provider : null;
+  const base = { poster: uuidOrNull(o.poster), title: c.str(o.title, SPEC_LIMITS.videoTitle, `${path}.title`), caption: c.str(o.caption, SPEC_LIMITS.caption, `${path}.caption`), ...cleanVideoOpts(o) };
   if (provider === 'youtube' && typeof o.id === 'string' && YOUTUBE_ID_RE.test(o.id)) return { provider, id: o.id, ...base };
+  if (provider === 'vimeo' && typeof o.id === 'string' && VIMEO_ID_RE.test(o.id)) {
+    const hash = typeof o.hash === 'string' && VIMEO_HASH_RE.test(o.hash) ? o.hash.toLowerCase() : '';
+    return { provider, id: o.id, ...(hash ? { hash } : {}), ...base };
+  }
   if (provider === 'file' && uuidOrNull(o.asset)) return { provider, asset: uuidOrNull(o.asset), ...base };
   if (c.strict) c.errors.push(`${path}: video không hợp lệ`);
   return null;

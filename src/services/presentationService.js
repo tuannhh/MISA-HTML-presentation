@@ -33,7 +33,8 @@ import { normalizeImage, normalizeExtractedImages, previewForModel, imageTraits,
 import { mapModelDeck, IMAGE_ASPECTS } from './geminiService.js';
 import { artDirect } from '../../shared/deck/variants.js';
 import { removeBackground } from './cutoutService.js';
-import { resolveYouTube } from './youtubeService.js';
+import { resolveYouTube, parseYouTubeId } from './youtubeService.js';
+import { resolveVimeo, parseVimeo } from './vimeoService.js';
 import { renderDeck, deckSize } from './renderService.js';
 import { assetKey, presentationPrefix } from './storageService.js';
 import sharp from 'sharp';
@@ -121,7 +122,10 @@ export function importViewport(ratio) {
   return rw >= rh ? { width: 1920, height: Math.round((1920 * rh) / rw) } : { width: Math.round((1920 * rw) / rh), height: 1920 };
 }
 
-export function createPresentationService({ config, repos, storage, gemini, browser, signer, audit, stock, templates, folders }) {
+// Không có ffmpeg / test đơn vị: bỏ qua đọc thông số + nén video (giữ tệp gốc như trước).
+const NO_VIDEO_TOOLS = Object.freeze({ inspect: async () => ({ info: null, poster: null }), enqueue() {}, resume: async () => 0, stats: () => ({ active: 0, pending: 0 }) });
+
+export function createPresentationService({ config, repos, storage, gemini, browser, signer, audit, stock, templates, folders, videos = NO_VIDEO_TOOLS }) {
   const { presentations, assets, versions } = repos;
   const genQueue = new Semaphore(config.limits.generationConcurrency);
   // Vị trí chờ + thời gian đo được của job AI — giao diện hiện "đã nhận / đang chờ / đang xử lý" (roadmap B).
@@ -256,7 +260,9 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const assetId = randomUUID();
     const key = assetKey(tenantId, id, assetId, v.type);
     await storage.put(key, v.buffer);
-    await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[v.type], bytes: v.buffer.length, width: null, height: null, storageKey: key, originalName: name });
+    const { info } = await videos.inspect(storage.pathOf(key));
+    await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[v.type], bytes: v.buffer.length, width: info?.width || null, height: info?.height || null, storageKey: key, originalName: name, processState: info ? 'pending' : null });
+    if (info) videos.enqueue(assetId);
     return assetId;
   }
 
@@ -355,14 +361,17 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     for (const f of userMedia?.videos || []) {
       let poster = null;
       let posterImg = null;
-      if (f.poster) {
-        posterImg = await normalizeImage(await readFile(f.poster), { maxSide: 1280 }).catch(() => null);
+      const { info, poster: frame } = await videos.inspect(f.path, { wantPoster: !f.poster });
+      const posterBuf = f.poster ? await readFile(f.poster) : frame;
+      if (posterBuf) {
+        posterImg = await normalizeImage(posterBuf, { maxSide: 1280 }).catch(() => null);
         if (posterImg) poster = await storeImage(deck, 'poster', posterImg, null);
       }
       const assetId = randomUUID();
       const key = assetKey(tenantId, id, assetId, f.type);
       await storage.putFile(key, f.path);
-      await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[f.type], bytes: f.size, width: null, height: null, storageKey: key, originalName: f.name });
+      await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[f.type], bytes: f.size, width: info?.width || null, height: info?.height || null, storageKey: key, originalName: f.name, processState: info ? 'pending' : null });
+      if (info) videos.enqueue(assetId);
       const title = f.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 200);
       out.videos.push({ name: f.name, preview: posterImg ? await preview(posterImg.buffer) : null, video: { provider: 'file', asset: assetId, poster: poster?.id || null, title, caption: '' } });
     }
@@ -727,7 +736,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     };
   }
 
-  const assetDto = (a) => ({ id: a.id, kind: a.kind, url: signer.url(a.id), width: a.width, height: a.height, name: a.original_name, mime: a.mime, bytes: a.bytes });
+  // state: trạng thái nén video chạy nền (pending/running = đang tối ưu) — chỉ có ở video.
+  const assetDto = (a) => ({ id: a.id, kind: a.kind, url: signer.url(a.id), width: a.width, height: a.height, name: a.original_name, mime: a.mime, bytes: a.bytes, ...(a.kind === 'video' ? { state: a.process_state || null } : {}) });
 
   async function list(user, { scope, q, folder, page, pageSize }) {
     const limit = pageSize;
@@ -1001,29 +1011,59 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const type = sniffVideo(await readHead(file.path));
       if (!type) throw unprocessable('Chỉ hỗ trợ video MP4, MOV hoặc WebM', 'INVALID_VIDEO');
       const name = String(file.originalname || '').normalize('NFC').slice(0, 255);
+      // Đọc thông số (kích thước, codec) + chụp ảnh bìa khi trình duyệt không chụp được (MOV/HEVC trên Chrome…). Tệp hỏng → từ chối ngay.
+      const { info, poster: frame, broken } = await videos.inspect(file.path, { wantPoster: !posterFile });
+      if (broken) throw unprocessable('Tệp video bị hỏng hoặc không đọc được hình', 'INVALID_VIDEO');
       let poster = null;
-      if (posterFile) {
-        const img = await normalizeImage(await readFile(posterFile.path), { maxSide: 1280 }).catch(() => null);
+      const posterBuf = posterFile ? await readFile(posterFile.path) : frame;
+      if (posterBuf) {
+        const img = await normalizeImage(posterBuf, { maxSide: 1280 }).catch(() => null);
         if (img) poster = await storeImage(deck, 'poster', img, null);
       }
       const assetId = randomUUID();
       const key = assetKey(deck.tenant_id, id, assetId, type);
       await storage.putFile(key, file.path);
-      await assets.create(deck.tenant_id, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, width: null, height: null, storageKey: key, originalName: name });
-      const asset = assetDto({ id: assetId, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, width: null, height: null, original_name: name });
+      const dims = { width: info?.width || null, height: info?.height || null };
+      const processState = info ? 'pending' : null;
+      await assets.create(deck.tenant_id, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, ...dims, storageKey: key, originalName: name, processState });
+      if (processState) videos.enqueue(assetId);
+      const asset = assetDto({ id: assetId, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, ...dims, original_name: name, process_state: processState });
       return { video: { provider: 'file', asset: assetId, poster: poster?.id || null, title: name.replace(/\.[a-z0-9]+$/i, '').slice(0, 200) }, assets: [asset, poster].filter(Boolean) };
     } finally {
       await removeUploads([file, posterFile]);
     }
   }
 
-  async function addYouTube(user, id, { url }) {
+  // Link video nhúng: YouTube hoặc Vimeo (nhận dạng theo link) → mã video + ảnh bìa (tải về thành asset của bài, không nhúng ảnh ngoài).
+  async function addVideoLink(user, id, { url }) {
     const deck = await mediaTarget(user, id);
+    const raw = String(url || '').slice(0, 500);
+    const isVimeo = !parseYouTubeId(raw) && !!parseVimeo(raw);
+    if (!isVimeo && !parseYouTubeId(raw)) throw badRequest('Chỉ nhận link YouTube hoặc Vimeo', 'INVALID_VIDEO_URL');
     if ((await assets.countForPresentation(id, 'poster')) >= MAX_POSTERS_PER_DECK) throw unprocessable('Bài trình bày đã có quá nhiều video', 'TOO_MANY_ASSETS');
-    const yt = await resolveYouTube(url);
+    if (isVimeo) {
+      const vm = await resolveVimeo(raw);
+      const poster = vm.thumb ? await storeImage(deck, 'poster', vm.thumb, `vimeo-${vm.id}`) : null;
+      return { video: { provider: 'vimeo', id: vm.id, ...(vm.hash ? { hash: vm.hash } : {}), poster: poster?.id || null, title: vm.title }, assets: [poster].filter(Boolean) };
+    }
+    const yt = await resolveYouTube(raw);
     const poster = yt.thumb ? await storeImage(deck, 'poster', yt.thumb, `youtube-${yt.id}`) : null;
     return { video: { provider: 'youtube', id: yt.id, poster: poster?.id || null, title: yt.title }, assets: [poster].filter(Boolean) };
   }
+  // Đường cũ /youtube (giữ tương thích): chỉ nhận link YouTube.
+  async function addYouTube(user, id, { url }) {
+    if (!parseYouTubeId(String(url || '').slice(0, 500))) throw badRequest('Link YouTube không hợp lệ', 'INVALID_YOUTUBE_URL');
+    return addVideoLink(user, id, { url });
+  }
+
+  // Trạng thái nén video chạy nền (giao diện hỏi lại tới khi xong) — chỉ người sửa được bài.
+  async function videoStatus(user, id, assetId) {
+    const row = await editable(user, id);
+    const a = await assets.findOwnedInPresentation(row.tenant_id, id, assetId);
+    if (!a || a.kind !== 'video') throw notFound('Không tìm thấy video');
+    return assetDto(a);
+  }
+  const resumeVideoJobs = () => videos.resume();
 
   // Tệp media: cho phép nếu chữ ký hợp lệ (khung xem trước sandbox) hoặc người dùng có quyền đọc.
   // Video trả đường dẫn tệp để route phát theo Range (tua được, không nạp cả tệp vào RAM).
@@ -1178,8 +1218,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
 
   return {
     create, list, get, update, remove, duplicate, saveOutline, build, idByCode, owned, editable, restoreSnapshot, previewVersion,
-    addAsset, addLogo, addBrand, cutoutLogo, addVideo, addYouTube, readAsset,
+    addAsset, addLogo, addBrand, cutoutLogo, addVideo, addYouTube, addVideoLink, videoStatus, resumeVideoJobs, readAsset,
     generateImage, searchImages, importStockImage, editImage,
-    preview, exportHtml, exportPdf, renderForPublish, makeThumbnail, recoverStale, queueStats: () => ({ active: genQueue.active, pending: genQueue.pending, reserved: genQueue.reserved, ...jobs.stats(), thumbnailsPending: thumbQueue.pending, renderPending: browser.pending ?? 0 }),
+    preview, exportHtml, exportPdf, renderForPublish, makeThumbnail, recoverStale, queueStats: () => ({ active: genQueue.active, pending: genQueue.pending, reserved: genQueue.reserved, ...jobs.stats(), thumbnailsPending: thumbQueue.pending, renderPending: browser.pending ?? 0, videoOptimize: videos.stats() }),
   };
 }
