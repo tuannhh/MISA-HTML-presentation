@@ -4,6 +4,7 @@ import { SPEC_LIMITS } from '@shared/deck/limits.js';
 import { ICON_NAMES } from '@shared/deck/icons.js';
 import { elementsFromTemplate } from '@shared/deck/free.js';
 import { emptyContact, CTA_SUGGESTIONS } from '@shared/deck/contact.js';
+import { chartFromStats } from '@shared/deck/chart.js';
 
 export { SPEC_LIMITS };
 
@@ -14,6 +15,7 @@ export const LAYOUTS = [
   { value: 'bullets', label: 'Ý chính', icon: 'list' },
   { value: 'cards', label: 'Thẻ nội dung', icon: 'layout-grid' },
   { value: 'stats', label: 'Con số nổi bật', icon: 'star' },
+  { value: 'chart', label: 'Biểu đồ', icon: 'chart-bar' },
   { value: 'image', label: 'Ảnh / video lớn', icon: 'photo' },
   { value: 'gallery', label: 'Bộ sưu tập ảnh', icon: 'photo' },
   { value: 'timeline', label: 'Dòng thời gian', icon: 'clock' },
@@ -37,6 +39,8 @@ export const LAYOUT_FIELDS = {
   bullets: [...HEAD, 'items', 'image'],
   cards: [...HEAD, 'items'],
   stats: [...HEAD, 'stats', 'items'],
+  // Biểu đồ: bảng dữ liệu (ChartFields) + dòng nguồn số liệu (caption).
+  chart: [...HEAD, 'chart', 'caption'],
   image: [...HEAD, 'image', 'caption', 'items'],
   gallery: [...HEAD, 'images'],
   timeline: [...HEAD, 'steps'],
@@ -61,18 +65,36 @@ export const VARIANT_LABELS = {
   cover: { split: 'Chữ trái – hình phải', mirror: 'Hình trái – chữ phải', center: 'Căn giữa', bottom: 'Chữ dưới đáy' },
   section: { num: 'Số thứ tự lớn', center: 'Căn giữa', band: 'Dải màu', ghost: 'Số chìm nền' },
   agenda: { list: 'Danh sách', tiles: 'Ô lưới', split: 'Tiêu đề bên trái', path: 'Lộ trình' },
-  bullets: { icons: 'Biểu tượng', numbered: 'Đánh số', split: 'Tiêu đề bên trái', panels: 'Ô nội dung', checks: 'Dấu tích' },
-  cards: { grid: 'Lưới thẻ', bento: 'Bento (ô to nhỏ)', rows: 'Hàng ngang', numbered: 'Đánh số' },
-  stats: { cards: 'Thẻ số liệu', hero: 'Số lớn nổi bật', bars: 'Biểu đồ thanh', rings: 'Vòng tiến độ (%)', plain: 'Tối giản' },
+  bullets: { icons: 'Biểu tượng', numbered: 'Đánh số', split: 'Tiêu đề bên trái', panels: 'Ô nội dung', checks: 'Dấu tích', big: 'Gạch đầu dòng lớn' },
+  cards: { grid: 'Hộp có biểu tượng', bento: 'Bento (ô to nhỏ)', rows: 'Hàng ngang', numbered: 'Đánh số', solid: 'Hộp đặc', outline: 'Hộp viền', labeled: 'Hộp có nhãn', alternate: 'Xen kẽ', arrows: 'Hộp nối mũi tên', matrix: 'Ma trận 2×2', venn: 'Vòng giao nhau (Venn)' },
+  stats: { cards: 'Thẻ số liệu', hero: 'Số lớn nổi bật', bars: 'Biểu đồ thanh', rings: 'Vòng tiến độ (%)', plain: 'Tối giản', progress: 'Thanh tiến độ (%)', stars: 'Xếp hạng sao' },
   image: { side: 'Ảnh trái', right: 'Ảnh phải', full: 'Ảnh tràn trang' },
   gallery: { grid: 'Lưới ảnh', mosaic: 'Ghép mảng', polaroid: 'Ảnh polaroid' },
-  timeline: { line: 'Trục ngang', vertical: 'Trục dọc', zigzag: 'Zíc zắc', cards: 'Thẻ mốc' },
-  process: { cards: 'Thẻ bước', chevrons: 'Mũi tên', stairs: 'Bậc thang', vertical: 'Dọc' },
-  quote: { classic: 'Cổ điển', center: 'Căn giữa', band: 'Dải màu' },
-  comparison: { columns: 'Cột song song', split: 'Chia đôi đối lập' },
+  timeline: { line: 'Trục ngang', vertical: 'Trục dọc', zigzag: 'Zíc zắc', cards: 'Thẻ mốc', minimal: 'Tối giản', pills: 'Viên thuốc', arrows: 'Mũi tên' },
+  process: { cards: 'Các bước', chevrons: 'Mũi tên', stairs: 'Cầu thang', vertical: 'Dọc', pyramid: 'Kim tự tháp', funnel: 'Phễu', cycle: 'Chu trình', concentric: 'Vòng đồng tâm', bullseye: 'Bia (đích ở tâm)' },
+  quote: { classic: 'Cổ điển', center: 'Căn giữa', band: 'Dải màu', bubble: 'Bong bóng lời thoại' },
+  comparison: { columns: 'Cột song song', split: 'Chia đôi đối lập', versus: 'Đối đầu A vs B' },
+  chart: { column: 'Cột', bar: 'Thanh ngang', stacked: 'Cột chồng', line: 'Đường', area: 'Vùng', pie: 'Tròn', donut: 'Vành khuyên', waterfall: 'Thác nước' },
   org: { tree: 'Cây nhánh', boxes: 'Ô khối' },
   closing: { center: 'Căn giữa', split: 'Chia đôi', minimal: 'Tối giản' },
 };
+// Ảnh nhấn / hộp chú thích / chuyển trang (shared/deck/blocks.js) — '' = không dùng / theo cả bài.
+export const ACCENT_OPTIONS = [
+  { value: '', label: 'Không' },
+  { value: 'left', label: 'Trái' },
+  { value: 'right', label: 'Phải' },
+  { value: 'top', label: 'Trên' },
+  { value: 'bg', label: 'Làm nền' },
+];
+export const CALLOUT_OPTIONS = [
+  { value: '', label: 'Không có' },
+  { value: 'note', label: 'Ghi chú' },
+  { value: 'warn', label: 'Cảnh báo' },
+  { value: 'ok', label: 'Thành công' },
+];
+export const TRANSITION_LABELS = { fade: 'Mờ dần', push: 'Đẩy sang', zoom: 'Phóng to', flip: 'Lật trang', curtain: 'Mở màn', none: 'Không hiệu ứng' };
+export const COLS_OPTIONS = [{ value: 0, label: 'Tự động' }, ...[2, 3, 4, 5, 6].map((n) => ({ value: n, label: `${n} cột` }))];
+
 // Phong cách toàn bài (hình khối, viền, bóng) — khớp STYLES.
 export const STYLE_OPTIONS = [
   { value: 'neon', label: 'Neon công nghệ', hint: 'Viền sáng, phát quang' },
@@ -103,6 +125,7 @@ const newId = () => `s-${Date.now().toString(36)}${(seq++).toString(36)}`;
 export const emptyItem = () => ({ icon: 'sparkles', title: '', text: '', value: '' });
 export const emptyStat = () => ({ value: '', prefix: '', suffix: '', label: '' });
 export const emptyColumn = () => ({ title: '', subtitle: '', tone: 'neutral', points: [''] });
+export const emptyChart = () => ({ categories: ['Mục A', 'Mục B', 'Mục C', 'Mục D'], series: [{ name: 'Số liệu', values: [40, 65, 50, 80] }] });
 
 // template: mẫu bố cục trang tự do (shared/deck/free.js) — chỉ dùng khi layout = 'free'.
 const NEW_TITLE = { free: 'Trang tự do', contact: 'Liên hệ với chúng tôi', offer: 'Ưu đãi đặc biệt' };
@@ -127,6 +150,8 @@ export function ensureLayoutContent(s) {
   if (s.layout === 'org' && s.columns.length < 2) s.columns = [...s.columns, emptyColumn(), emptyColumn(), emptyColumn()].slice(0, 3);
   if (s.layout === 'quote' && !s.quote) s.quote = { text: '', author: '', role: '' };
   if (s.layout === 'free' && !Array.isArray(s.elements)) s.elements = [];
+  // Biểu đồ: lấy từ Con số nổi bật nếu có, không thì bảng mẫu 4 hạng mục để người dùng sửa/dán dữ liệu thật.
+  if (s.layout === 'chart' && !s.chart) s.chart = chartFromStats(s.stats) || emptyChart();
   return s;
 }
 
@@ -177,4 +202,4 @@ export const BUILD_OPTIONS = [
   { value: 'tour', label: 'Phóng to lần lượt từng ý' },
 ]
 // Bố cục có các "ý" để trình chiếu lần lượt (trang tự do: phần tử bật "Hiện khi bấm").
-export const BUILD_LAYOUTS = ['agenda', 'bullets', 'cards', 'stats', 'image', 'gallery', 'timeline', 'process', 'comparison', 'org', 'free']
+export const BUILD_LAYOUTS = ['agenda', 'bullets', 'cards', 'stats', 'chart', 'image', 'gallery', 'timeline', 'process', 'comparison', 'org', 'free']

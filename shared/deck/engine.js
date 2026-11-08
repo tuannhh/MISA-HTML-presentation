@@ -28,6 +28,8 @@
   var slides = Array.prototype.slice.call(deck.querySelectorAll('.slide'));
   var N = slides.length;
   var FINAL = 9000;
+  // Kiểu chuyển trang mặc định cả bài (renderer đặt data-tr trên #deck).
+  var DTR = deck.getAttribute('data-tr') || 'fade';
 
   function clamp(v, a, b) { a = a === undefined ? 0 : a; b = b === undefined ? 1 : b; return Math.min(b, Math.max(a, v)); }
   function easeInOut(t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
@@ -172,9 +174,9 @@
 
   /* ---------- trình chiếu từng ý (data-build trên slide) + phóng to khi bấm ---------- */
   // Đơn vị nội dung theo bố cục (khối ngoài cùng, không tính tiêu đề/trang tự do). Thứ tự = thứ tự trong trang.
-  var UNIT = '.ag-i,.tile,.path-i,.bi,.card,.crow,.stat,.st-hero,.st-row,.st-bar,.st-ring,.pola,.gal>.media,.tl-step,.tz-i,.ps,.tlv-i,.chev-i,.stair,.col,.org-br';
+  var UNIT = '.ag-i,.tile,.path-i,.bi,.bb-i,.card,.crow,.alt-i,.stat,.st-hero,.st-row,.st-bar,.st-ring,.st-pg,.st-star,.pola,.gal>.media,.tl-step,.tz-i,.tmin-i,.tp-i,.ta-i,.ps,.tlv-i,.chev-i,.stair,.tr-i,.col,.org-br,.mx-q,.dg-r,.ch-g,.ch-hr,.ch-pr';
   // Phần tử phóng to được khi bấm (video không — bấm video để phát; ảnh không — bấm ảnh mở toàn màn hình, LBX).
-  var ZOOM = '.card,.stat,.st-hero,.st-row,.st-ring,.st-bar,.col,.ps,.stair,.tl-step,.tz-i,.chev-i,.tile,.crow,.panel.bi,.fe-table,.org-br';
+  var ZOOM = '.card,.alt-i,.stat,.st-hero,.st-row,.st-ring,.st-bar,.st-star,.col,.ps,.stair,.tl-step,.tz-i,.chev-i,.tile,.crow,.panel.bi,.fe-table,.org-br,.mx-q';
   // Ảnh mở toàn màn hình khi bấm (ảnh nền tràn trang .bleed không — bấm nền để chuyển trang như cũ).
   var LBX = 'figure.media:not(.vid),.pola,.fe-image';
   var BUILDS = { step: 1, dim: 1, tour: 1 };
@@ -644,8 +646,20 @@
     // Slide cũ mờ dần cùng góc phóng hiện tại rồi mới trả về (không giật).
     if (Z.el && prevEl) { var zs = prevEl; Z = { el: null, z: 1, x: 0, y: 0, tour: false }; if (i === cur) unzoomSlide(zs); else setTimeout(function () { if (zs !== slides[cur]) unzoomSlide(zs); }, 700); }
     if (i !== cur && prevEl) {
+      // Chuyển trang theo kiểu của trang đang vào (data-tr trên slide, không có → mặc định cả bài trên #deck — theme.css).
+      // Chỉ khi trình chiếu; khung sửa/in/chụp ảnh và máy bật "giảm chuyển động" dùng mờ dần mặc định.
+      var nx = slides[i];
+      var tr = MODE === 'present' && !instant && !REDUCE ? nx.getAttribute('data-tr') || DTR : 'fade';
+      deck.setAttribute('data-tr', tr); deck.setAttribute('data-dir', back || i < cur ? 'back' : 'fwd');
+      // Tư thế bắt đầu của trang vào: gắn .pre không hiệu ứng, ép trình duyệt tính kiểu, rồi mới chuyển sang .on.
+      nx.style.transition = 'none'; nx.classList.remove('off'); nx.classList.add('pre'); void nx.offsetWidth; nx.style.transition = '';
       prevEl.classList.remove('on'); prevEl.classList.add('off'); prevEl.setAttribute('aria-hidden', 'true');
-      setTimeout(function () { prevEl.classList.remove('off'); if (prevEl !== slides[cur]) stopLogos(prevEl); }, 700);
+      setTimeout(function () {
+        // Gỡ .off không hiệu ứng: trang cũ (đẩy/lật/mở màn) không trượt ngược qua khung khi trở về tư thế nghỉ.
+        if (prevEl === slides[cur]) { prevEl.classList.remove('off'); return; }
+        prevEl.style.transition = 'none'; prevEl.classList.remove('off'); void prevEl.offsetWidth; prevEl.style.transition = '';
+        stopLogos(prevEl);
+      }, 900);
     }
     stopInline();
     if (i !== cur) closeVideo();
@@ -656,7 +670,7 @@
     if (st) applySteps(st, back);
     else SF[cur] = null;
     render(cur, instant ? FINAL : 0);
-    slides[cur].classList.add('on'); slides[cur].removeAttribute('aria-hidden');
+    slides[cur].classList.add('on'); slides[cur].classList.remove('pre'); slides[cur].removeAttribute('aria-hidden');
     if (MODE === 'present') startLogos(cur);
     if (countEl) countEl.textContent = pad(cur + 1) + ' / ' + pad(N);
     if (barEl) barEl.style.width = ((cur + 1) / N * 100) + '%';

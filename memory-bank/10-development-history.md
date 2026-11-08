@@ -1,5 +1,40 @@
 # 10 — Lịch sử phát triển
 
+## 2026-11-09 — Cải tiến 11 mục, Đợt 5b: sơ đồ + biểu đồ có bảng dữ liệu (mục 8 phần 2)
+
+- Mới: `shared/deck/chart.js` (`CHART_LIMITS`, `parseNum`, `cleanChart`, `parseTable`, `chartFromStats`/`statsFromChart`, `niceScale`, `fmtNum`, `withUnit`),
+  `shared/deck/chartView.js` (vẽ 8 kiểu biểu đồ), `frontend/src/shared/ChartFields.vue` (bảng dữ liệu), `test/unit/layouts-dot5b.test.js` (12 test). Sửa:
+  `variants.js` (sơ đồ matrix/venn/cycle/concentric/bullseye/versus, `VARIANTS.chart`, `FITS`, `MANUAL_VARIANTS`, `LAYOUT_FAMILIES`/`familyOf`), `render.js`
+  (bố cục `chart`, `dgArt`/`dgLegend`, vẽ sơ đồ), `theme.css` (sơ đồ + biểu đồ, màu `--ch*`), `engine.js` (lớp đơn vị mới), `blocks.js` (chú thích trên trang
+  biểu đồ), `specService` (`chart`), `slideModel.js`, `useEditor.changeLayout` (stats ↔ chart), `SlideFields.vue`, `StylePicker.vue` (họ bố cục),
+  `stylePreviews.js`, `scripts/layout-audit.mjs` (ca biểu đồ 6/12 hạng mục, 3 chuỗi; bỏ nét vẽ biểu đồ khỏi kiểm "biểu tượng đè chữ"). Không đổi CSDL/API.
+  Nghiệp vụ → `05` §30; giao diện → `06`; bẫy → `09`.
+- Kiểm chứng: unit **315/315**; `npm run audit:layout` **0 lỗi** (mọi kiểu × 3 tỷ lệ × ca dày); smoke Docker **TẤT CẢ ĐẠT**. `tmp/e2e-dot5b.mjs` (API,
+  Docker 8088): lưu 6 sơ đồ + biểu đồ → đọc lại đúng, ô số "1.250,5" → 1250.5, ô chữ → trống, tên chuỗi giữ nguyên + escape trong bản HTML xuất, bản xuất có
+  đủ khối. `tmp/ui-dot5b.mjs` (Chrome thật): dán bảng 3×2 từ bảng tính, gõ sai → viền đỏ, sửa ô → khung xem trước cập nhật, 8 kiểu biểu đồ có hình xem trước
+  (tròn/vành khuyên/thác nước khoá khi 2 chuỗi), đổi sang Đường + lưu, Con số → Biểu đồ thanh ngang giữ 3 số + đơn vị %, tải lại đọc đúng; mobile 390px: bảng
+  hiện, ô 44px, không cuộn ngang. Soát ảnh trên mẫu tối 16:9 + mẫu sáng 4:3 (`tmp/dot5b-preview.mjs`).
+- Sửa sau khi chạy thật: lát tròn bị engine ghi đè transform → xoay qua thẻ `<g>`; hàng tiêu đề toàn năm bị đọc thành số liệu; mẫu sáng 2 chuỗi đầu trùng tông;
+  đơn vị lặp ở mọi nhãn → ghi một lần; `aria-label` biểu đồ thêm số liệu; tên chuỗi bị nút xoá 44px chèn trên mobile → cột chuỗi rộng hơn khi cảm ứng.
+
+## 2026-11-09 — Cải tiến 11 mục, Đợt 5a: kiểu trình bày danh sách, ảnh nhấn, số liệu, hộp chú thích, chuyển trang (mục 8 phần 1 + mục 11)
+
+- Mới: `shared/deck/blocks.js` (ảnh nhấn, hộp chú thích, chuyển trang — hằng + làm sạch), `frontend/src/shared/StylePicker.vue`,
+  `frontend/src/lib/stylePreviews.js`, `test/unit/layouts-dot5.test.js` (9 test). Sửa: `variants.js` (16 kiểu mới, `MANUAL_VARIANTS`, `LIST_LAYOUTS`/`LIST_KEY`,
+  `COLS_RANGE`/`COLS_VARIANTS`/`userCols`, `artDirect` bỏ kiểu chỉ-người-dùng), `render.js` (vẽ kiểu mới, `accentFig`, `calloutHtml`, `ctx.CW`, `data-tr`),
+  `theme.css` (kiểu mới, ảnh nhấn, chú thích, 5 chuyển trang + reduced-motion), `engine.js` (chuyển trang `.pre/.on/.off`, lớp đơn vị mới), `limits.js`
+  (`callout` 300), `specService` (`cols`, `accent`, `callout`, `transition`), `slideModel.js` (nhãn + tuỳ chọn), `SlideFields.vue`, `DesignPanel.vue`,
+  `useEditor.changeLayout` (chuyển `items`↔`steps`), `editPaths.js` (`callout.text`), `scripts/layout-audit.mjs` (ca mới: nhãn, %, sao, ảnh nhấn, chú thích).
+  Không đổi CSDL/API. Nghiệp vụ → `05` §29; giao diện → `06`; bẫy → `09`.
+- Kiểm chứng: unit **303/303**; `npm run audit:layout` **0 lỗi** (mọi kiểu × 3 tỷ lệ × ca dài + ảnh nhấn + chú thích); smoke Docker **TẤT CẢ ĐẠT**
+  (`SMOKE_BOOTSTRAP=1`). `tmp/e2e-dot5.mjs` (API, Docker 8088): lưu → đọc lại giữ đủ trường mới, bản HTML xuất có đủ khối mới. `tmp/tr-dot5.mjs` (bản xuất
+  offline): đẩy/phóng/lật/mở màn chạy, lùi trang đảo chiều, reduced-motion → mờ dần, dọn `.off` sau khi xong, không lỗi JS. `tmp/ui-dot5.mjs` (Chrome thật,
+  desktop): bảng 9 kiểu Thẻ đều có hình xem trước, đổi sang Quy trình/Kim tự tháp giữ 4 mục (items → steps) + lưu, bấm điểm lấy nét đổi object-position
+  trên khung, ảnh nhấn sang phải; mobile 390px: bảng kiểu hiện, không cuộn ngang. Soát ảnh kiểu mới trên mẫu tối + sáng (`tmp/dot5-preview.mjs`,
+  `tmp/sheet*.png`).
+- Còn lại (Đợt 5b): sơ đồ (2×2, đồng tâm, bia, chu trình, Venn 2–3, A vs B) + biểu đồ (cột, cột chồng, thanh, đường, vùng, tròn, vành khuyên, thác nước) có
+  bảng dữ liệu sửa được; tinh chỉnh giao diện mobile cho các khối mới.
+
 ## 2026-11-08 — Cải tiến 11 mục, Đợt 4: video (mục 3)
 
 - Mới: `shared/deck/video.js` (tuỳ chọn tự phát/toàn màn hình/tắt tiếng/căn/cỡ), `src/services/vimeoService.js`, `src/services/videoService.js` (ffprobe/ffmpeg,

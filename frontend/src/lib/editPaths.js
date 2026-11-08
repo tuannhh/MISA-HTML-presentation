@@ -49,6 +49,7 @@ export function applyFrameEdit(spec, index, path, value) {
     s.quote = s.quote || { text: '', author: '', role: '' };
     return set(s.quote, p[1], p[1] === 'text' ? L.quoteText : L.quoteAuthor);
   }
+  if (p.length === 2 && p[0] === 'callout' && p[1] === 'text') return s.callout ? set(s.callout, 'text', L.callout) : false;
   if ((p[0] === 'items' || p[0] === 'steps') && ITEM_MAX[p[2]]) return set(at(s[p[0]], n(1)), p[2], ITEM_MAX[p[2]]);
   if (p[0] === 'stats' && STAT_MAX[p[2]]) return set(at(s.stats, n(1)), p[2], STAT_MAX[p[2]], p[2] !== 'label');
   if (p[0] === 'columns' && (p[2] === 'title' || p[2] === 'subtitle')) return set(at(s.columns, n(1)), p[2], p[2] === 'title' ? L.colTitle : L.colSubtitle);

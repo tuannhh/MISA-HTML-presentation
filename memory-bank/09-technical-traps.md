@@ -421,3 +421,24 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 - Smoke cũ dùng "MP4 giả" (chữ ký `ftyp` + byte rác) → nay bị 422 đúng thiết kế; smoke dùng `test/fixtures/tiny.mp4` (2 giây, 7,7 KB).
 - Video cỡ `size` là % **ô media**; ô thấp (bố cục ảnh + chữ) bị giới hạn theo chiều cao (`min(cqw·vz, cqh·vz·ar)`) → đo được nhỏ hơn % đặt là đúng.
 
+
+## Bố cục + chuyển trang (Đợt 5a, 2026-11-09)
+- **`slide.moves` (dời/đổi cỡ ô chữ) giữ nguyên khi đổi kiểu trình bày** → kiểu mới có thể trông chồng chữ/co lại dù CSS đúng. Khi soát kiểu mới bằng spec mẫu
+  phải xoá `moves`/`hide` trước (đã gặp: thẻ có nhãn đè nhau, xen kẽ co 0,88 chỉ vì `translate` cũ).
+- Ảnh nhấn trái/phải thu vùng nội dung còn 60% → trang nhiều mục bị co chữ quá mức; vì vậy > 6 mục thì ẩn ảnh nhấn (`accentTooDense`), không phải lỗi.
+- Hàm bố cục mới phải dùng `ctx.CW` (độ rộng vùng nội dung), không dùng `ctx.W`, nếu không sẽ vỡ khi có ảnh nhấn trái/phải.
+- Chuyển trang: trang vào phải gỡ `.off` trước khi gắn `.pre` (đi tới rồi lùi nhanh, trang vừa ra lại thành trang vào → kẹt tư thế ra). `.pre` đặt với
+  `transition: none` + đọc `offsetWidth` để ép reflow, rồi mới thêm `.on` (thiếu reflow → không có chuyển động). Mở màn (`curtain`): `.off` cần
+  `transform: none`, nếu không trang ra bị phóng 1,025 theo luật chung.
+- Hộp mũi tên ở khung hẹp (4:3) với 4 mục → nhãn xuống dòng; giới hạn `arrows` còn 3 mục khi tỷ lệ < 1,7 (`npm run audit:layout` bắt được).
+
+## Sơ đồ + biểu đồ (Đợt 5b, 2026-11-09)
+- **Engine ghi đè `style.transform` của mọi phần tử có `data-a`** (đặt tư thế đầu/cuối hiệu ứng) → xoay/dời bằng transform nội tuyến trên chính phần tử đó bị
+  mất (đã gặp: lát biểu đồ tròn đều bắt đầu từ 3 giờ, chồng lên nhau). Đặt transform lên **thẻ bọc** (`<g>` trong SVG, `<div>` ngoài) hoặc căn bằng margin.
+- Đường/vùng: SVG `preserveAspectRatio="none"` + `vector-effect="non-scaling-stroke"`; hiệu ứng "vẽ dần" là thẻ bọc `.ch-rev` mở rộng chiều ngang ('bar'),
+  SVG bên trong phải rộng cố định `100cqw` (vùng vẽ `.ch-plot` có `container-type: size`) — để `width:100%` thì SVG co theo thẻ bọc, đường bị bóp méo.
+- `parseTable`: hàng đầu chỉ gồm năm (2025, 2026) đọc được thành số → phải nhận là tiêu đề khi các hàng dưới không phải toàn năm, nếu không năm thành 1 hạng
+  mục số liệu.
+- `npm run audit:layout` coi mọi `svg` là "biểu tượng" và báo chữ đè → bỏ qua `.chart` và `.cy-ring` (nhãn số liệu được đặt chủ ý trên vùng vẽ).
+- Puppeteer headless trên macOS: `click({clickCount: 3})` / Meta+A **không** chọn hết chữ trong `<input>` → gõ tiếp bị chèn vào giữa; trong script kiểm dùng
+  `el.select()` trước khi gõ.

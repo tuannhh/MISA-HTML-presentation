@@ -31,6 +31,8 @@ export const SPEC_LIMITS = Object.freeze({
   point: 200,
   quoteText: 600,
   quoteAuthor: 100,
+  // Hộp chú thích (slide.callout — shared/deck/blocks.js).
+  callout: 300,
   alt: 200,
   images: 6,
   videoTitle: 200,

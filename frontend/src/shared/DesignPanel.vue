@@ -13,7 +13,9 @@ import LogoSettings from './LogoSettings.vue'
 import BrandSettings from './BrandSettings.vue'
 import DesignPreview from './DesignPreview.vue'
 import { CUSTOM_THEME, themeTone } from '@/lib/design.js'
-import { SPEC_LIMITS as L, STYLE_OPTIONS } from '@/lib/slideModel.js'
+import { SPEC_LIMITS as L, STYLE_OPTIONS, TRANSITION_LABELS } from '@/lib/slideModel.js'
+import MSelect from '@/components/mds/MSelect.vue'
+import { TRANSITIONS } from '@shared/deck/blocks.js'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import { useToast } from '@/components/mds/toast.js'
@@ -56,6 +58,15 @@ function onTheme(v) {
 // Trình soạn thảo (thiết kế = chính spec, có slides): sửa tiêu đề bài cũ đang "Viết Hoa Từng Chữ" về viết hoa đầu câu.
 const toast = useToast()
 const isDeck = computed(() => Array.isArray(d.value.slides))
+// Chuyển trang mặc định cả bài (từng trang đặt riêng ở form nội dung trang) — 'fade' = mặc định, không lưu.
+const TRANSITION_OPTIONS = TRANSITIONS.map((t) => ({ value: t, label: TRANSITION_LABELS[t] }))
+const transition = computed({
+  get: () => d.value.transition || TRANSITIONS[0],
+  set: (v) => {
+    if (v && v !== TRANSITIONS[0]) d.value.transition = v
+    else delete d.value.transition
+  },
+})
 function fixTitleCase() {
   const n = sentenceCaseSpec(d.value)
   if (n) toast.success(`Đã chuyển ${n} tiêu đề/nhãn về viết hoa đầu câu — bấm Lưu để giữ thay đổi`)
@@ -106,6 +117,9 @@ function onColor(key, v) {
     <div v-else-if="tab === 'bg'" class="flex flex-col gap-2">
       <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Hiệu ứng chuyển động phía sau nội dung, theo màu của tông đã chọn. {{ compact ? 'Chạm để chọn và xem chuyển động.' : 'Rê chuột để xem chuyển động.' }}</p>
       <BackgroundPicker v-model="d.background" :theme="d.theme" :palette="d.palette" :compact="compact" />
+      <FormField v-if="isDeck" label="Chuyển trang (cả bài)" hint="Hiệu ứng khi sang trang lúc trình chiếu; trang nào cần khác thì đặt riêng ở nội dung trang. Máy bật “giảm chuyển động” luôn dùng mờ dần nhẹ">
+        <MSelect v-model="transition" :options="TRANSITION_OPTIONS" />
+      </FormField>
     </div>
     <div v-else-if="tab === 'font'" class="flex flex-col gap-2">
       <p class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Phông được nhúng kèm bài trình bày — máy chiếu/máy khác không cài phông vẫn hiển thị đúng, đủ dấu tiếng Việt.</p>

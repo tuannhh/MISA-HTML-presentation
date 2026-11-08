@@ -14,9 +14,12 @@ import MTabs from '@/components/mds/MTabs.vue'
 import IconPicker from './IconPicker.vue'
 import DecorPanel from './DecorPanel.vue'
 import ContactFields from './ContactFields.vue'
+import ChartFields from './ChartFields.vue'
+import StylePicker from './StylePicker.vue'
 import { shiftMoves } from '@/lib/editPaths.js'
-import { LAYOUTS, LAYOUT_FIELDS, TONE_OPTIONS, VARIANT_LABELS, ITEM_IMAGE_LAYOUTS, BUILD_OPTIONS, BUILD_LAYOUTS, ratioNum, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
-import { VARIANTS, fits, resolveVariant } from '@shared/deck/variants.js'
+import { LAYOUTS, LAYOUT_FIELDS, TONE_OPTIONS, ITEM_IMAGE_LAYOUTS, BUILD_OPTIONS, BUILD_LAYOUTS, ACCENT_OPTIONS, CALLOUT_OPTIONS, TRANSITION_LABELS, COLS_OPTIONS, ratioNum, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
+import { VARIANTS, resolveVariant, COLS_VARIANTS } from '@shared/deck/variants.js'
+import { ACCENT_LAYOUTS, CALLOUT_LAYOUTS, TRANSITIONS, ACCENT_MAX_ITEMS, accentTooDense } from '@shared/deck/blocks.js'
 import { plainText, repaintRich } from '@shared/deck/rich.js'
 
 const props = defineProps({
@@ -66,18 +69,77 @@ const rx = (obj, key) => ({
   },
 })
 const layoutOptions = LAYOUTS.map((l) => ({ label: l.label, value: l.value }))
-const CAPTION_LABEL = { image: 'Chú thích ảnh', offer: 'Thời hạn / điều kiện', contact: 'Ghi chú' }
-const CAPTION_HINT = { cover: 'Ví dụ: người trình bày · ngày', offer: 'Ví dụ: Áp dụng đến hết 31/12/2026', contact: 'Dòng nhỏ dưới lời kêu gọi (tuỳ chọn)' }
+const CAPTION_LABEL = { image: 'Chú thích ảnh', offer: 'Thời hạn / điều kiện', contact: 'Ghi chú', chart: 'Nguồn số liệu' }
+const CAPTION_HINT = { cover: 'Ví dụ: người trình bày · ngày', offer: 'Ví dụ: Áp dụng đến hết 31/12/2026', contact: 'Dòng nhỏ dưới lời kêu gọi (tuỳ chọn)', chart: 'Ví dụ: Nguồn: Báo cáo tài chính 2026 — hiện nhỏ dưới biểu đồ' }
 
-// Kiểu trình bày (biến thể) — chỉ bật kiểu còn hợp nội dung hiện có (số mục, số liệu %, có ảnh…).
+// Kiểu trình bày (biến thể) — bảng chọn có hình xem trước (StylePicker); chọn kiểu của bố cục cùng họ = đổi bố cục, giữ nội dung.
 const ratioN = computed(() => ratioNum(props.ratio))
-const variants = computed(() =>
-  (VARIANTS[s.value.layout] || []).map((v) => ({ value: v, label: VARIANT_LABELS[s.value.layout]?.[v] || v, ok: fits(s.value.layout, v, s.value, ratioN.value) })),
-)
+const hasVariants = computed(() => (VARIANTS[s.value.layout] || []).length > 1)
 const variant = computed(() => resolveVariant(s.value, ratioN.value))
-function setVariant(v) {
+function pickStyle({ layout, variant: v }) {
+  if (layout !== s.value.layout) emit('change-layout', layout)
   s.value.variant = v
 }
+// Số cột (kiểu dạng lưới, từ 3 mục): 'Tự động' = xoá trường; không cho chọn nhiều cột hơn số mục.
+const colsCount = computed(() => (s.value.layout === 'stats' ? s.value.stats : s.value.items || []).length)
+const colsOn = computed(() => COLS_VARIANTS[s.value.layout]?.includes(variant.value) && colsCount.value >= 3 && !(s.value.layout === 'bullets' && (s.value.image?.asset || s.value.video) && !s.value.accent))
+const colsOptions = computed(() => COLS_OPTIONS.filter((o) => !o.value || o.value <= colsCount.value))
+const cols = computed({
+  get: () => s.value.cols || 0,
+  set: (v) => {
+    if (v) s.value.cols = v
+    else delete s.value.cols
+  },
+})
+// Ảnh nhấn: vị trí ảnh của trang (trái/phải/trên/làm nền) — bố cục chưa có ô ảnh dùng ô chọn ảnh riêng ngay dưới.
+const accentOn = computed(() => ACCENT_LAYOUTS.includes(s.value.layout))
+const accentHint = computed(() =>
+  s.value.video
+    ? 'Trang đang có video — ảnh nhấn chỉ dùng với ảnh'
+    : s.value.accent && accentTooDense(s.value)
+      ? `Trang có hơn ${ACCENT_MAX_ITEMS} mục — ảnh nhấn tạm ẩn để chữ không quá nhỏ (bớt mục hoặc tách trang để hiện lại)`
+      : 'Đặt ảnh sát mép trái, phải, trên hoặc làm nền — nội dung giữ nguyên',
+)
+const accent = computed({
+  get: () => s.value.accent || '',
+  set: (v) => {
+    if (v) s.value.accent = v
+    else delete s.value.accent
+  },
+})
+// Điểm lấy nét: bấm vào ảnh thu nhỏ → ảnh cắt theo khung giữ điểm này (object-position, cùng trường pos của "Chỉnh sửa ảnh").
+const accentUrl = computed(() => (s.value.image?.asset ? props.assetUrl(s.value.image.asset) : ''))
+function setFocus(e) {
+  const r = e.currentTarget.getBoundingClientRect()
+  const x = Math.round(Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100)))
+  const y = Math.round(Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100)))
+  s.value.image = { ...s.value.image, pos: { x, y } }
+}
+function focusKey(e) {
+  const p = s.value.image?.pos || { x: 50, y: 50 }
+  const d = { ArrowLeft: [-5, 0], ArrowRight: [5, 0], ArrowUp: [0, -5], ArrowDown: [0, 5] }[e.key]
+  if (!d) return
+  e.preventDefault()
+  s.value.image = { ...s.value.image, pos: { x: Math.min(100, Math.max(0, p.x + d[0])), y: Math.min(100, Math.max(0, p.y + d[1])) } }
+}
+// Hộp chú thích cuối trang.
+const calloutOn = computed(() => CALLOUT_LAYOUTS.includes(s.value.layout))
+const calloutTone = computed({
+  get: () => s.value.callout?.tone || '',
+  set: (v) => {
+    if (v) s.value.callout = { tone: v, text: s.value.callout?.text || '' }
+    else delete s.value.callout
+  },
+})
+// Chuyển trang riêng của trang này ('' = theo cài đặt cả bài ở mục Thiết kế).
+const TRANSITION_OPTIONS = [{ value: '', label: 'Theo cả bài' }, ...TRANSITIONS.map((t) => ({ value: t, label: TRANSITION_LABELS[t] }))]
+const transition = computed({
+  get: () => s.value.transition || '',
+  set: (v) => {
+    if (v) s.value.transition = v
+    else delete s.value.transition
+  },
+})
 // Trình chiếu từng ý (người dùng chọn, không qua AI) — 'auto' = xoá trường.
 const canBuild = computed(() => BUILD_LAYOUTS.includes(s.value.layout))
 const build = computed({
@@ -143,22 +205,56 @@ function setGalleryImage(i, v) {
     <FormField label="Bố cục trang">
       <MSelect :model-value="s.layout" :options="layoutOptions" @update:model-value="(v) => emit('change-layout', v)" />
     </FormField>
-    <FormField v-if="variants.length > 1" label="Kiểu trình bày" group hint="Kiểu mờ chưa hợp nội dung hiện tại (số mục, số liệu, ảnh…)">
-      <div role="radiogroup" aria-label="Kiểu trình bày" class="flex flex-wrap gap-1.5">
-        <button
-          v-for="v in variants"
-          :key="v.value"
-          type="button"
-          role="radio"
-          :aria-checked="variant === v.value"
-          :disabled="!v.ok"
-          class="rounded-full border px-3 py-1 text-[12px] leading-5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mds-brand-600)] disabled:cursor-not-allowed disabled:border-dashed disabled:text-[var(--mds-text-secondary)] disabled:opacity-60"
-          :class="variant === v.value ? 'border-[var(--mds-brand-600)] bg-[var(--mds-brand-50)] font-semibold text-[var(--mds-brand-700)]' : 'border-[var(--mds-border)] hover:border-[var(--mds-brand-600)]'"
-          @click="setVariant(v.value)"
-        >
-          {{ v.label }}
-        </button>
+    <FormField v-if="hasVariants" label="Kiểu trình bày" group hint="Kiểu mờ chưa hợp nội dung hiện tại (số mục, số liệu, ảnh…)">
+      <StylePicker :slide="s" :ratio="ratio" @pick="pickStyle" />
+    </FormField>
+    <FormField v-if="colsOn" label="Số cột">
+      <MSelect v-model="cols" :options="colsOptions" aria-label="Số cột" />
+    </FormField>
+
+    <FormField v-if="accentOn" label="Ảnh nhấn" group :hint="accentHint">
+      <div class="flex min-w-0 flex-col gap-2">
+        <div role="radiogroup" aria-label="Vị trí ảnh nhấn" class="flex flex-wrap gap-1.5">
+          <button
+            v-for="o in ACCENT_OPTIONS"
+            :key="o.value"
+            type="button"
+            role="radio"
+            :aria-checked="accent === o.value"
+            :disabled="!!s.video && !!o.value"
+            class="rounded-full border px-3 py-1 text-[12px] leading-5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mds-brand-600)] disabled:cursor-not-allowed disabled:opacity-50"
+            :class="accent === o.value ? 'border-[var(--mds-brand-600)] bg-[var(--mds-brand-50)] font-semibold text-[var(--mds-brand-700)]' : 'border-[var(--mds-border)] hover:border-[var(--mds-brand-600)]'"
+            @click="accent = o.value"
+          >
+            {{ o.label }}
+          </button>
+        </div>
+        <ImagePicker v-if="accent && !has('image')" :model-value="s.image" :assets="imageAssets" :upload="upload" :studio="studio" @update:model-value="setImage" @studio="emit('media', { path: 'slot', kind: 'image' })" />
+        <div v-if="accent && accentUrl" class="flex flex-col gap-1">
+          <span class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Điểm lấy nét — bấm vào ảnh (hoặc dùng phím mũi tên) để chọn phần luôn hiện khi ảnh bị cắt</span>
+          <button
+            type="button"
+            class="relative block w-full overflow-hidden rounded-md border border-[var(--mds-border)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mds-brand-600)]"
+            :aria-label="`Điểm lấy nét: ${s.image?.pos?.x ?? 50}% ngang, ${s.image?.pos?.y ?? 50}% dọc`"
+            @click="setFocus"
+            @keydown="focusKey"
+          >
+            <img :src="accentUrl" alt="" class="block max-h-[180px] w-full object-contain" draggable="false" />
+            <span class="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--mds-brand-600)] shadow" :style="{ left: `${s.image?.pos?.x ?? 50}%`, top: `${s.image?.pos?.y ?? 50}%` }" />
+          </button>
+        </div>
       </div>
+    </FormField>
+
+    <FormField v-if="calloutOn" label="Hộp chú thích" group hint="Khung nổi bật cuối trang — sửa chữ ngay trên khung xem trước hoặc tại đây">
+      <div class="flex min-w-0 flex-col gap-2">
+        <MSelect v-model="calloutTone" :options="CALLOUT_OPTIONS" aria-label="Loại hộp chú thích" />
+        <MTextarea v-if="s.callout" v-bind="rx(s.callout, 'text')" :rows="2" :maxlength="L.callout" placeholder="Nội dung chú thích" />
+      </div>
+    </FormField>
+
+    <FormField label="Chuyển trang" hint="Hiệu ứng khi chuyển tới trang này lúc trình chiếu">
+      <MSelect v-model="transition" :options="TRANSITION_OPTIONS" />
     </FormField>
 
     <FormField v-if="canBuild" label="Trình chiếu khi bấm Sau" :hint="s.layout === 'free' ? 'Bật “Hiện khi bấm” ở từng phần tử để chúng hiện lần lượt' : 'Dùng phím →, PageDown hoặc bút trình chiếu. Bấm vào khối nội dung khi trình chiếu để phóng to'">
@@ -306,6 +402,7 @@ function setGalleryImage(i, v) {
     </section>
 
     <!-- Thông tin liên hệ (trang Liên hệ / Ưu đãi) -->
+    <ChartFields v-if="has('chart')" :slide="s" />
     <ContactFields v-if="has('contact') && s.contact" :contact="s.contact" :assets="assets" :upload="upload" :studio="studio" :offer="s.layout === 'offer'" @media="(m) => emit('media', m)" />
 
     <!-- Ảnh hoặc video (1 ô media) -->

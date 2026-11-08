@@ -32,10 +32,11 @@ Thư mục này chứa **toàn bộ tri thức về dự án MISA Presentation**
 
 ## Audit và bàn giao mới nhất
 
-### Bàn giao 08/11/2026 — cải tiến 11 mục (đọc trước khi làm tiếp)
+### Bàn giao 09/11/2026 — cải tiến 11 mục (đọc trước khi làm tiếp)
 - **Nhánh `feature/cai-tien-11-muc`** (từ `main` 827da35; **đã push nhánh lên GitHub `origin` 08/11/2026** sau Đợt 4 — `main` vẫn chưa đổi trên GitHub). Đã xong + commit Đợt 1 (73eda47), Đợt 2 (704918a),
   Đợt 3 (commit ngay sau 704918a). Đợt 4 — video (mục 3) **đã xong + kiểm thật trên Docker, commit ngay sau 12b718c** (`05` §28; script
-  `tmp/e2e-dot4.mjs`, `tmp/ui-dot4.mjs`). **Việc tiếp theo: Đợt 5** (mục 8 bố cục, mục 11 chuyển động — chốt danh mục bố cục với chủ dự án trước). Kế hoạch chi tiết +
+  `tmp/e2e-dot4.mjs`, `tmp/ui-dot4.mjs`). Đợt 5a — kiểu trình bày danh sách, ảnh nhấn, hộp chú thích, chuyển trang **đã xong + kiểm thật trên Docker 09/11/2026** (`05` §29; script
+  `tmp/e2e-dot5.mjs`, `tmp/tr-dot5.mjs`, `tmp/ui-dot5.mjs`, `tmp/dot5-preview.mjs`). Đợt 5b — sơ đồ (2×2, Venn, chu trình, đồng tâm, bia, A vs B) + biểu đồ 8 kiểu có bảng dữ liệu **đã xong + kiểm thật trên Docker 09/11/2026** (`05` §30; script `tmp/e2e-dot5b.mjs`, `tmp/ui-dot5b.mjs`, `tmp/dot5b-preview.mjs`); 5a + 5b commit chung 09/11. **Đã xong cả 11 mục của CT.** Việc có thể làm tiếp (chờ chủ dự án chọn): tinh chỉnh giao diện mobile cho khối mới (ảnh nhấn, chú thích, bảng dữ liệu), biểu đồ Gantt, cho AI đề xuất biểu đồ từ bảng số trong tài liệu nguồn. Kế hoạch chi tiết +
   yêu cầu gốc: [`docs/ROADMAP.md` mục CT](../docs/ROADMAP.md).
 - Môi trường: Docker local cổng 8088 (`docker compose up -d --build app` sau `npm run build`); Gemini qua Agent Platform (xem `07`). Chạy trên máy chủ MISA,
   **không Cloud Run**. Không đọc/in/commit secret (`.env`, khoá service account).

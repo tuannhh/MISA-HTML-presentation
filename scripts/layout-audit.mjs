@@ -8,6 +8,9 @@ import puppeteer from 'puppeteer-core';
 import { renderDeck, deckSize } from '../src/services/renderService.js';
 import { normalizeSpec } from '../src/services/specService.js';
 import { VARIANTS } from '../shared/deck/variants.js';
+import { ACCENT_LAYOUTS, CALLOUT_LAYOUTS } from '../shared/deck/blocks.js';
+
+const AUDIT_IMG = '00000000-0000-4000-8000-000000000001';
 
 const arg = (k, d) => {
   const i = process.argv.indexOf(`--${k}`);
@@ -21,6 +24,27 @@ const OUT = 'tmp/layout-audit';
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const base = JSON.parse(readFileSync('test/fixtures/sample-spec.json', 'utf8'));
+// Trang mẫu thêm cho các kiểu cần dữ liệu riêng (Đợt 5): thẻ có nhãn, số liệu phần trăm (thanh tiến độ), điểm 0–5 (xếp hạng sao).
+{
+  const pick = (l) => JSON.parse(JSON.stringify(base.slides.find((s) => s.layout === l)));
+  const cards = pick('cards');
+  cards.id = 'audit-cards-label';
+  cards.items = cards.items.slice(0, 4).map((it, i) => ({ ...it, value: ['Bước khởi đầu', 'Tăng tốc', 'Mở rộng', 'Dẫn đầu'][i] }));
+  const pct = pick('stats');
+  pct.id = 'audit-stats-pct';
+  pct.stats = [62, 85, 40, 73].map((v, i) => ({ value: v, suffix: '%', label: ['Giảm thời gian lập báo cáo', 'Chứng từ duyệt trên di động', 'Giảm sai sót nhập liệu', 'Nhân viên dùng hằng ngày'][i] }));
+  const star = pick('stats');
+  star.id = 'audit-stats-star';
+  star.stats = [4.8, 4.5, 4.2].map((v, i) => ({ value: v, suffix: '/5', label: ['Hài lòng của khách hàng', 'Dễ sử dụng', 'Tốc độ hỗ trợ'][i] }));
+  // Đợt 5b: thẻ 3 mục (Venn), biểu đồ 1 chuỗi (cột/thanh/đường/tròn/thác nước) và 3 chuỗi (cột chồng, vùng).
+  const cards3 = pick('cards');
+  cards3.id = 'audit-cards-3';
+  cards3.items = cards3.items.slice(0, 3);
+  const ch1 = { id: 'audit-chart-1', layout: 'chart', kicker: 'Kết quả', title: 'Doanh thu theo phân hệ năm 2026', caption: 'Nguồn: Báo cáo tài chính nội bộ 2026',
+    chart: { categories: ['Tài chính – Kế toán', 'Bán hàng', 'Kho vận', 'Nhân sự', 'Mua hàng', 'Hoá đơn điện tử'], series: [{ name: 'Doanh thu', values: [1250, 980.5, 640, 1500, 300, 720] }], unit: 'tỷ đồng' } };
+  const ch3 = { id: 'audit-chart-3', layout: 'chart', title: 'Doanh thu theo miền', chart: { categories: ['Quý 1', 'Quý 2', 'Quý 3', 'Quý 4'], series: [{ name: 'Miền Bắc', values: [50, 60, 70, 80] }, { name: 'Miền Trung', values: [20, 25, 30, 40] }, { name: 'Miền Nam', values: [50, 65, 70, 90] }], unit: '%' } };
+  base.slides.push(cards, pct, star, cards3, ch1, ch3);
+}
 
 // Câu tiếng Việt thật (dấu + từ dài) để kéo dài nội dung — gần với chữ AI/người dùng nhập.
 const FILL = ' giúp doanh nghiệp chuẩn hoá quy trình, đồng bộ dữ liệu giữa các phòng ban và ra quyết định nhanh hơn dựa trên số liệu tức thời';
@@ -65,6 +89,11 @@ function stress(slide, level) {
     }));
   }
   if (s.root) s.root = longer(s.root, 70);
+  if (s.chart) {
+    const n = level === 'day' ? 12 : s.chart.categories.length;
+    const cats = Array.from({ length: n }, (_, i) => longer(s.chart.categories[i % s.chart.categories.length], Math.round(32 * L)));
+    s.chart = { ...s.chart, categories: cats, series: s.chart.series.map((se) => ({ name: longer(se.name, 30), values: cats.map((_, i) => se.values[i % se.values.length] * (1 + i / 10)) })) };
+  }
   if (s.quote) s.quote = { ...s.quote, text: longer(s.quote.text, Math.round(420 * L)), author: longer(s.quote.author, 40), role: longer(s.quote.role, 50) };
   return s;
 }
@@ -131,8 +160,8 @@ function inspect() {
     if (tops.length > 1 && own.trim().length <= 24) out.push({ kind: 'wrap', text: label(e), box: [r.left, r.top, r.width, r.height] });
     if (e.scrollWidth > e.clientWidth + 2) out.push({ kind: 'label-overflow', text: label(e), box: [r.left, r.top, r.width, r.height] });
   }
-  // 6) icon đè chữ
-  const icons = [...slide.querySelectorAll('svg, .ib, .ic, .cv-ico')].filter((e) => visible(e) && !e.closest('.sbg, .cv-ghost, .ft, .vplay, .org-wire, .st-ring, .ring'));
+  // 6) icon đè chữ (bỏ nét vẽ biểu đồ/vòng chu trình — nhãn số liệu được đặt chủ ý trên vùng vẽ)
+  const icons = [...slide.querySelectorAll('svg, .ib, .ic, .cv-ico')].filter((e) => visible(e) && !e.closest('.sbg, .cv-ghost, .ft, .vplay, .org-wire, .st-ring, .ring, .chart, .cy-ring'));
   for (const ic of icons) {
     const a = R(ic);
     if (a.width < 6 || a.height < 6) continue;
@@ -172,6 +201,17 @@ try {
         for (const v of VARIANTS[sl.layout] || [null]) {
           slides.push({ ...stress(sl, level), id: `${sl.id}-${v}`, ...(v ? { variant: v } : {}) });
           meta.push({ layout: sl.layout, variant: v });
+        }
+        // Ảnh nhấn trái/trên (vùng nội dung hẹp lại) + hộp chú thích cuối trang — đo trên kiểu mặc định của bố cục.
+        if (ACCENT_LAYOUTS.includes(sl.layout) && !sl.video) {
+          for (const pos of ['left', 'top']) {
+            slides.push({ ...stress(sl, level), id: `${sl.id}-acc-${pos}`, image: { asset: AUDIT_IMG, alt: '' }, accent: pos, variant: '' });
+            meta.push({ layout: sl.layout, variant: `accent-${pos}` });
+          }
+        }
+        if (CALLOUT_LAYOUTS.includes(sl.layout)) {
+          slides.push({ ...stress(sl, level), id: `${sl.id}-callout`, callout: { tone: 'warn', text: 'Số liệu tạm tính đến hết quý III/2026 — cập nhật lại sau khi chốt sổ cuối năm.' } });
+          meta.push({ layout: sl.layout, variant: 'callout' });
         }
       }
       // Lenient = đúng đường AI sinh bài (cắt theo SPEC_LIMITS như thật).

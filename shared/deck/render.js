@@ -5,7 +5,9 @@
 import { ICONS } from './icons.js';
 import { THEME_PRESETS, CUSTOM_THEME, resolveTheme, themeVarsCss, inkVarsCss, presetsForTone } from './palette.js';
 import { fontStack, DECK_FONTS, DEFAULT_FONT } from './fonts.js';
-import { STYLES, resolveVariant } from './variants.js';
+import { STYLES, resolveVariant, userCols } from './variants.js';
+import { accentPos, CALLOUT_TONES, CALLOUT_LAYOUTS, TRANSITIONS } from './blocks.js';
+import { chartHtml } from './chartView.js';
 import { SPEC_LIMITS as LIM } from './limits.js';
 import { TEXT_STYLES } from './free.js';
 import { richHtml, plainText, linkAttrs } from './rich.js';
@@ -32,7 +34,8 @@ export const AI_LAYOUTS = Object.freeze([
 ]);
 // Bố cục có khối thông tin liên hệ (slide.contact).
 export const CONTACT_LAYOUTS = Object.freeze(['contact', 'offer']);
-export const LAYOUTS = Object.freeze([...AI_LAYOUTS, 'free']);
+// 'chart' (biểu đồ từ bảng số liệu) cũng chỉ tạo từ trình soạn thảo (người dùng nhập/dán dữ liệu — AI không tự vẽ biểu đồ).
+export const LAYOUTS = Object.freeze([...AI_LAYOUTS, 'chart', 'free']);
 // Tông màu: các bảng màu dựng sẵn (palette.js) + 'custom' (người dùng nhập 2 màu, xem spec.palette).
 export const THEMES = Object.freeze([...Object.keys(THEME_PRESETS), CUSTOM_THEME]);
 // Tông nền người dùng chọn khi tạo bài → AI chỉ được chọn theme trong nhóm tương ứng (phần tử đầu = mặc định).
@@ -224,7 +227,7 @@ function coreArt(ctx, iconName, pick = true) {
 function bleed(img, ctx) {
   const url = img && img.asset ? ctx.assetUrl(img.asset) : null;
   const kb = !(img && img.zoom > 1);
-  return url ? `<div class="bleed"${M(ctx, 'slot')}><img src="${esc(url)}" alt="${esc(img.alt || '')}" style="${imgPos(img)}"${kb ? ' data-loop="kb" data-p="24"' : ''}></div>` : '';
+  return url ? `<div class="bleed"${M(ctx, 'slot')}><img src="${esc(url)}" alt="${esc(img.alt || '')}" style="${imgPos(img)}"${kb ? ' data-loop="kb" data-p="24"' : ''}>${overlayHtml(img)}</div>` : '';
 }
 
 // Độ dài từ dài nhất (ký tự) — co cỡ chữ mốc thời gian để "T12/2026" không bị ngắt giữa từ trong thẻ hẹp.
@@ -300,6 +303,79 @@ function qrBlock(ct, ctx, d) {
   return `<div class="qr" data-a="zoom" data-d="${d}"${url ? M(ctx, 'contact.qr') : ''}><div class="qr-img">${img}</div>${cap}</div>`;
 }
 
+// Mũi tên nối hộp/bước: nét vẽ dần (engine 'draw', pathLength = 1).
+const arrowSvg = (d) =>
+  `<svg class="arw-a" viewBox="0 0 64 28" aria-hidden="true"><path d="M3 14H57M46 4l11 10-11 10" pathLength="1" data-a="draw" data-d="${d}" data-dur="16"/></svg>`;
+// 5 ngôi sao (xếp hạng): lớp nền mờ + lớp màu cắt theo tỷ lệ điểm.
+const STAR = 'M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.5l-5.9 3.1 1.2-6.5L2.5 9.5l6.6-.9z';
+const starRow = () => `<svg viewBox="0 0 120 24" aria-hidden="true">${[0, 1, 2, 3, 4].map((k) => `<path transform="translate(${k * 24} 0)" d="${STAR}"/>`).join('')}</svg>`;
+// Tầng kim tự tháp / phễu: hình thang theo vị trí tầng (tỷ lệ bề rộng đỉnh a → đáy b của khung).
+function tierClip(i, n, funnel) {
+  const w = (k) => (funnel ? 1 - (0.72 * k) / n : 0.16 + (0.84 * k) / n);
+  const [t, btm] = [w(i), w(i + 1)];
+  const p = (x) => `${Math.round((50 + x * 50) * 100) / 100}%`;
+  const m = (x) => `${Math.round((50 - x * 50) * 100) / 100}%`;
+  return `clip-path:polygon(${m(t)} 0,${p(t)} 0,${p(btm)} 100%,${m(btm)} 100%)`;
+}
+
+// Sơ đồ + chú giải (chu trình, vòng đồng tâm, bia, Venn): hình bên trái (ô vuông co theo khung), các bước bên phải.
+// Toạ độ trong hình là % của ô vuông; điểm/nhãn dùng margin để căn tâm (engine ghi đè transform khi chạy hiệu ứng).
+const P3 = (x) => Math.round(x * 100) / 100;
+function dgLegend(steps, ctx, key, d0, numbered = true) {
+  return `<div class="dg-lg">${steps
+    .map((st, i) => `<div class="dg-r" style="${accent(i)}" data-a="left" data-d="${d0 + i * 6}" data-dist="40"><span class="dg-n">${numbered ? pad2(i + 1) : ''}</span><div class="dg-t">${st.value ? `<span class="label"${E(ctx, `${key}.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${itemText(st, ctx, `${key}.${i}`)}</div></div>`)
+    .join('')}</div>`;
+}
+function dgArt(kind, steps, s) {
+  const k = steps.length;
+  let html = '';
+  if (kind === 'cycle') {
+    // Vòng tròn nét đứt vẽ dần + nút số đều quanh vòng + mũi tên chiều kim đồng hồ giữa 2 nút.
+    const R = 38;
+    const pt = (a, r = R) => [50 + r * Math.cos(a), 50 + r * Math.sin(a)];
+    const ang = (i) => -Math.PI / 2 + (2 * Math.PI * i) / k;
+    const heads = steps.map((_, i) => {
+      const a = ang(i) + Math.PI / k;
+      const [x, y] = pt(a);
+      const t = [-Math.sin(a), Math.cos(a)]; // hướng tiếp tuyến (chiều kim đồng hồ)
+      const nx = [Math.cos(a), Math.sin(a)];
+      const tip = [x + t[0] * 2.6, y + t[1] * 2.6];
+      const b1 = [x - t[0] * 1.6 + nx[0] * 2.4, y - t[1] * 1.6 + nx[1] * 2.4];
+      const b2 = [x - t[0] * 1.6 - nx[0] * 2.4, y - t[1] * 1.6 - nx[1] * 2.4];
+      return `<polygon class="cy-h" points="${[tip, b1, b2].map((p) => p.map(P3).join(',')).join(' ')}" data-a="fade" data-d="${30 + i * 4}"/>`;
+    }).join('');
+    html = `<svg viewBox="0 0 100 100" aria-hidden="true"><circle class="cy-ring" cx="50" cy="50" r="${R}" pathLength="1" data-a="draw" data-d="8" data-dur="40"/>${heads}</svg>${steps
+      .map((_, i) => {
+        const [x, y] = pt(ang(i));
+        return `<span class="dg-dot" style="${accent(i)};left:${P3(x)}%;top:${P3(y)}%" data-a="pop" data-d="${14 + i * 6}">${pad2(i + 1)}</span>`;
+      })
+      .join('')}<span class="dg-core" data-a="zoom" data-d="10">${icon(s.icon)}</span>`;
+  } else if (kind === 'concentric' || kind === 'bullseye') {
+    // Bước 1 = vòng nhỏ nhất (lõi / đích). Đồng tâm: các vòng chạm đáy; bia: cùng tâm + mũi tên cắm vào tâm.
+    const d = (i) => (k === 1 ? 100 : 30 + (70 * i) / (k - 1));
+    const bull = kind === 'bullseye';
+    const rings = steps
+      .map((_, i) => {
+        const D = d(i);
+        const top = bull ? (100 - D) / 2 : 100 - D;
+        return `<i class="dg-ring" style="${accent(i)};width:${P3(D)}%;height:${P3(D)}%;left:${P3((100 - D) / 2)}%;top:${P3(top)}%;z-index:${k - i}" data-a="zoom" data-d="${10 + (k - 1 - i) * 6}"></i>`;
+      })
+      .join('');
+    const nums = steps
+      .map((_, i) => {
+        const D = d(i);
+        const inner = i ? d(i - 1) : 0;
+        const y = bull ? 50 - (D + inner) / 4 : 100 - D + (D - inner) / 2;
+        const yy = i === 0 ? (bull ? 50 : 100 - D / 2) : y;
+        return `<span class="dg-num" style="${accent(i)};top:${P3(yy)}%;z-index:${k + 1}" data-a="pop" data-d="${20 + i * 6}">${pad2(i + 1)}</span>`;
+      })
+      .join('');
+    const arrow = bull ? `<svg class="dg-arw" viewBox="0 0 100 100" aria-hidden="true"><path d="M95 5L53 47M53 47l2-11M53 47l11-2" pathLength="1" data-a="draw" data-d="${24 + k * 6}" data-dur="18"/></svg>` : '';
+    html = rings + nums + arrow;
+  }
+  return `<div class="dg-art"><div class="dg-sq ${kind}">${html}</div></div>`;
+}
+
 // Sơ đồ tổ chức: hệ số cỡ chữ theo số nhánh (nhiều nhánh → cột hẹp).
 const ORG_SCALE = [1, 1, 1, 1, 0.92, 0.84, 0.76];
 
@@ -333,8 +409,9 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
   agenda(s, ctx, v) {
     const items = list(s.items);
     const row = (it, i) => `<div class="ag-i" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}"><span class="ag-n">${pad2(i + 1)}</span><div>${itemText(it, ctx, `items.${i}`)}</div></div>`;
+    const uc = userCols(s, v, items.length);
     if (v === 'tiles') {
-      return `${head(s, ctx)}<div class="body"><div class="tiles" style="--cols:${gridCols(items.length, ctx.W, 4)}">${items
+      return `${head(s, ctx)}<div class="body"><div class="tiles" style="--cols:${uc || gridCols(items.length, ctx.CW, 4)}">${items
         .map((it, i) => `<div class="panel tile" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}"><span class="ag-n">${pad2(i + 1)}</span>${itemText(it, ctx, `items.${i}`)}</div>`)
         .join('')}</div></div>`;
     }
@@ -344,19 +421,25 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
         .map((it, i) => `<div class="path-i" style="${accent(i)}"><div class="path-row"><span class="path-dot" data-a="pop" data-d="${14 + i * 7}">${pad2(i + 1)}</span>${i < items.length - 1 ? `<i class="path-seg" data-a="bar" data-to="100" data-d="${18 + i * 7}"></i>` : ''}</div><div data-a="up" data-d="${20 + i * 7}" data-dist="40">${itemText(it, ctx, `items.${i}`)}</div></div>`)
         .join('')}</div></div>`;
     }
-    const cols = Math.max(1, Math.min(gridCols(items.length, ctx.W, 3), Math.ceil(items.length / 3)));
+    const cols = uc || Math.max(1, Math.min(gridCols(items.length, ctx.CW, 3), Math.ceil(items.length / 3)));
     return `${head(s, ctx)}<div class="body"><div class="ag" style="--cols:${cols}">${items.map(row).join('')}</div></div>`;
   },
 
   bullets(s, ctx, v) {
     const items = list(s.items);
-    const img = hasMedia(s);
+    const img = hasMedia(s) && !ctx.accent;
+    if (v === 'big') {
+      return `${head(s, ctx)}<div class="body"><div class="bbig">${items
+        .map((it, i) => `<div class="bb-i" style="${accent(i)}" data-a="left" data-d="${18 + i * 7}" data-dist="60"><span class="bb-dot" aria-hidden="true"></span><div>${itemText(it, ctx, `items.${i}`)}${valueTag(it, ctx, `items.${i}`)}</div></div>`)
+        .join('')}</div></div>`;
+    }
     const mk = (it, i) => (v === 'numbered' && !it.image ? `<span class="bn">${pad2(i + 1)}</span>` : v === 'checks' && !it.image ? `<span class="ib ck">${icon('check')}</span>` : mark(it, ctx, `items.${i}`));
     const one = (it, i) => `<div class="bi${v === 'panels' ? ' panel' : ''}" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}">${mk(it, i)}<div>${itemText(it, ctx, `items.${i}`)}${valueTag(it, ctx, `items.${i}`)}</div></div>`;
     if (v === 'split') return `<div class="body"><div class="hsplit">${head(s, ctx)}<div class="bl" style="--cols:1">${items.map(one).join('')}</div></div></div>`;
-    const wideCols = Math.max(1, Math.round((ctx.W - 2 * PAD_X) / 1050));
+    const wideCols = Math.max(1, Math.round((ctx.CW - 2 * PAD_X) / 1050));
     // ≤3 ý: 1 cột (đọc dọc dễ hơn bố cục 2+1 lệch); nhiều hơn: chia cột theo độ rộng khung.
-    const cols = img ? Math.max(1, wideCols - 2) : items.length <= 3 ? 1 : v === 'panels' ? Math.min(2, wideCols) : Math.min(items.length, wideCols);
+    const uc = img ? null : userCols(s, v, items.length);
+    const cols = uc || (img ? Math.max(1, wideCols - 2) : items.length <= 3 ? 1 : v === 'panels' ? Math.min(2, wideCols) : Math.min(items.length, wideCols));
     const bl = `<div class="bl${!img && cols === 1 ? ' narrow' : ''}" style="--cols:${cols}">${items.map(one).join('')}</div>`;
     return `${head(s, ctx)}<div class="body">${img ? `<div class="split">${bl}${slot(s, ctx, { d: 14 })}</div>` : bl}</div>`;
   },
@@ -369,12 +452,46 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
         .map((it, i) => `<div class="crow" style="${accent(i)}" data-a="left" data-d="${18 + i * 5}">${mark(it, ctx, `items.${i}`)}<h4${E(ctx, `items.${i}.title`, LIM.itemTitle, true)}>${rt(it.title)}</h4><p${E(ctx, `items.${i}.text`, LIM.itemText, true)}>${rt(it.text)}</p>${it.value ? valueTag(it, ctx, `items.${i}`) : '<span></span>'}</div>`)
         .join('')}</div></div>`;
     }
+    const P = (i) => `items.${i}`;
+    if (v === 'alternate') {
+      // Mỗi mục một hàng, biểu tượng/số đổi bên — hàng so le như bậc zíc zắc.
+      return `${head(s, ctx)}<div class="body"><div class="alt">${items
+        .map((it, i) => `<div class="panel alt-i${i % 2 ? ' rev' : ''}" style="${accent(i)}" data-a="${i % 2 ? 'right' : 'left'}" data-d="${18 + i * 7}" data-dist="80"><div class="alt-m">${it.image ? mark(it, ctx, P(i)) : `<span class="alt-n">${pad2(i + 1)}</span>${mark(it, ctx, P(i))}`}</div><div class="alt-t">${itemText(it, ctx, P(i))}${valueTag(it, ctx, P(i))}</div></div>`)
+        .join('')}</div></div>`;
+    }
+    if (v === 'arrows') {
+      const tpl = items.map(() => 'minmax(0, 1fr)').join(' auto ');
+      return `${head(s, ctx)}<div class="body"><div class="arw" style="grid-template-columns:${tpl}">${items
+        .map((it, i) => `<div class="panel card arw-i" style="${accent(i)}" data-a="up" data-d="${18 + i * 8}">${mark(it, ctx, P(i))}${itemText(it, ctx, P(i))}${valueTag(it, ctx, P(i))}</div>${i < n - 1 ? arrowSvg(24 + i * 8) : ''}`)
+        .join('')}</div></div>`;
+    }
+    if (v === 'matrix') {
+      // Ma trận 2×2: 4 góc phần tư quanh 2 trục vẽ dần, biểu tượng trang ở tâm.
+      return `${head(s, ctx)}<div class="body"><div class="mx"><i class="mx-v" data-a="grow" data-to="100" data-d="6"></i><i class="mx-h" data-a="bar" data-to="100" data-d="6"></i>${items
+        .map((it, i) => `<div class="panel mx-q q${i}" style="${accent(i)}" data-a="zoom" data-d="${14 + i * 6}">${mark(it, ctx, P(i))}<div class="mx-t">${valueTag(it, ctx, P(i))}${itemText(it, ctx, P(i))}</div></div>`)
+        .join('')}<span class="mx-c" data-a="pop" data-d="40">${icon(s.icon)}</span></div></div>`;
+    }
+    if (v === 'venn') {
+      // Venn 2–3 vòng giao nhau: tên mục trong vòng, mô tả ở chú giải bên phải; biểu tượng trang ở vùng giao.
+      const pos = n === 2 ? [[2, 19, 62], [36, 19, 62]] : [[4, 2, 58], [38, 2, 58], [21, 34, 58]];
+      const circles = items
+        .map((it, i) => `<div class="vn-c p${i}" style="${accent(i)};left:${pos[i][0]}%;top:${pos[i][1]}%;width:${pos[i][2]}%;height:${pos[i][2]}%" data-a="zoom" data-d="${10 + i * 8}"><b>${rt(it.title)}</b></div>`)
+        .join('');
+      const core = `<span class="vn-core" style="top:${n === 2 ? 50 : 46}%" data-a="pop" data-d="${20 + n * 8}">${icon(s.icon)}</span>`;
+      return `${head(s, ctx)}<div class="body"><div class="dg vn n${n}"><div class="dg-art"><div class="dg-sq">${circles}${core}</div></div>${dgLegend(items, ctx, 'items', 24, false)}</div></div>`;
+    }
+    if (v === 'labeled') {
+      return `${head(s, ctx)}<div class="body"><div class="cards k-labeled" style="--cols:${userCols(s, v, n) || gridCols(n, ctx.CW)}">${items
+        .map((it, i) => `<div class="panel card" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}"><span class="lab"${E(ctx, `${P(i)}.value`, LIM.itemValue)}>${rt(it.value)}</span>${itemText(it, ctx, P(i))}</div>`)
+        .join('')}</div></div>`;
+    }
     // bento: thẻ đầu chiếm nhiều hàng (3 thẻ: 1+2 · 4 thẻ: 1+3 · 5 thẻ: 1 lớn + lưới 2×2).
     const bento = v === 'bento';
-    const cols = bento ? (n === 5 ? 3 : 2) : gridCols(n, ctx.W);
+    const cols = bento ? (n === 5 ? 3 : 2) : userCols(s, v, n) || gridCols(n, ctx.CW);
     const style = bento ? `--cols:${cols};--span:${n === 5 ? 2 : n - 1}` : `--cols:${cols}`;
-    return `${head(s, ctx)}<div class="body"><div class="cards${bento ? ' bento' : ''}" style="${style}">${items
-      .map((it, i) => `<div class="panel card${i === 0 && n > 2 ? ' hot' : ''}" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}">${v === 'numbered' && !it.image ? `<span class="cn">${pad2(i + 1)}</span>` : mark(it, ctx, `items.${i}`)}${itemText(it, ctx, `items.${i}`)}${valueTag(it, ctx, `items.${i}`)}</div>`)
+    const kind = v === 'solid' || v === 'outline' ? ` k-${v}` : '';
+    return `${head(s, ctx)}<div class="body"><div class="cards${bento ? ' bento' : ''}${kind}" style="${style}">${items
+      .map((it, i) => `<div class="panel card${i === 0 && n > 2 && !kind ? ' hot' : ''}" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}">${v === 'numbered' && !it.image ? `<span class="cn">${pad2(i + 1)}</span>` : mark(it, ctx, `items.${i}`)}${itemText(it, ctx, `items.${i}`)}${valueTag(it, ctx, `items.${i}`)}</div>`)
       .join('')}</div></div>`;
   },
 
@@ -382,7 +499,7 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
     const stats = list(s.stats);
     const items = list(s.items);
     const note = items.length
-      ? `<div class="bl stats-note" style="--cols:${Math.min(items.length, maxCols(ctx.W))}">${items
+      ? `<div class="bl stats-note" style="--cols:${Math.min(items.length, maxCols(ctx.CW))}">${items
           .map((it, i) => `<div class="bi" style="${accent(i + 2)}" data-a="up" data-d="${40 + i * 5}">${mark(it, ctx, `items.${i}`)}<div>${itemText(it, ctx, `items.${i}`)}</div></div>`)
           .join('')}</div>`
       : '';
@@ -403,8 +520,17 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
       main = `<div class="st-rings" style="--cols:${stats.length}">${stats
         .map((st, i) => `<div class="st-ring" style="${accent(i)}" data-a="up" data-d="${14 + i * 6}"><div class="ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" class="rg-bg"/><circle cx="60" cy="60" r="52" class="rg-fg" pathLength="100" stroke-dasharray="${st.value} 100" data-a="ring" data-to="${st.value}" data-dur="54" data-d="${20 + i * 6}"/></svg>${statValue(st, 20 + i * 6, ctx, `stats.${i}`)}</div><p${SL(i)}>${rt(st.label)}</p></div>`)
         .join('')}</div>`;
+    } else if (v === 'progress') {
+      // Thanh tiến độ: mỗi thanh so với 100%.
+      main = `<div class="st-prog">${stats
+        .map((st, i) => `<div class="st-pg" style="${accent(i)}" data-a="up" data-d="${14 + i * 6}" data-dist="40"><div class="st-pg-h"><p${SL(i)}>${rt(st.label)}</p>${statValue(st, 20 + i * 6, ctx, `stats.${i}`)}</div><div class="st-track"><i class="st-fill" data-a="bar" data-to="${Math.max(1, Math.min(100, st.value))}" data-d="${20 + i * 6}"></i></div></div>`)
+        .join('')}</div>`;
+    } else if (v === 'stars') {
+      main = `<div class="st-stars" style="--cols:${stats.length}">${stats
+        .map((st, i) => `<div class="panel st-star" style="${accent(i)}" data-a="up" data-d="${14 + i * 6}">${statValue(st, 20 + i * 6, ctx, `stats.${i}`)}<div class="stars" role="img" aria-label="${esc(`${st.value}/5`)}"><span class="stars-bg">${starRow()}</span><span class="stars-fg" data-a="bar" data-to="${Math.round((st.value / 5) * 1000) / 10}" data-d="${24 + i * 6}">${starRow()}</span></div><p${SL(i)}>${rt(st.label)}</p></div>`)
+        .join('')}</div>`;
     } else {
-      main = `<div class="stats${v === 'plain' ? ' plain' : ''}" style="--cols:${gridCols(stats.length, ctx.W, 4)}">${stats
+      main = `<div class="stats${v === 'plain' ? ' plain' : ''}" style="--cols:${userCols(s, v, stats.length) || gridCols(stats.length, ctx.CW, 4)}">${stats
         .map((st, i) => `<div class="panel stat" style="${accent(i)}" data-a="up" data-d="${14 + i * 6}">${statValue(st, 20 + i * 6, ctx, `stats.${i}`)}<p${SL(i)}>${rt(st.label)}</p></div>`)
         .join('')}</div>`;
     }
@@ -440,10 +566,10 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
         })
         .join('')}</div></div>`;
     }
-    const ratio = ctx.W / ctx.H;
+    const ratio = ctx.CW / ctx.H;
     // mosaic: ảnh đầu chiếm ô 2×2 (3 ảnh: lưới 3×2 · 5 ảnh: lưới 4×2).
     const mosaic = v === 'mosaic';
-    const cols = mosaic ? (n === 5 ? 4 : 3) : n <= 3 ? n : n === 4 ? (ratio >= 2.5 ? 4 : 2) : Math.min(gridCols(n, ctx.W, ratio >= 2.5 ? 4 : 3), n);
+    const cols = mosaic ? (n === 5 ? 4 : 3) : n <= 3 ? n : n === 4 ? (ratio >= 2.5 ? 4 : 2) : Math.min(gridCols(n, ctx.CW, ratio >= 2.5 ? 4 : 3), n);
     const rows = mosaic ? 2 : Math.ceil(n / cols);
     return `${head(s, ctx)}<div class="body"><div class="gal${mosaic ? ' mosaic' : ''}" style="--cols:${cols};--rows:${rows}">${imgs
       .map((im, i) => media(im, ctx, { d: 14 + i * 5, anim: 'pop', mp: `images.${i}`, capPath: `images.${i}.caption` }))
@@ -468,7 +594,23 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
         .map((st, i) => `<div class="panel ps" style="${accent(i)}" data-a="up" data-d="${18 + i * 7}"><span class="tlc-v"${st.value ? E(ctx, `steps.${i}.value`, LIM.itemValue) : ''}>${rt(st.value || pad2(i + 1))}</span>${itemText(st, ctx, `steps.${i}`)}${i < cols - 1 ? `<span class="arr">${icon('arrow')}</span>` : ''}</div>`)
         .join('')}</div></div>`;
     }
-    const per = maxCols(ctx.W) + 1;
+    const lab = (st, i, cls) => `<span class="${cls}"${st.value ? E(ctx, `steps.${i}.value`, LIM.itemValue) : ''}>${rt(st.value || pad2(i + 1))}</span>`;
+    if (v === 'minimal') {
+      return `${head(s, ctx)}<div class="body"><div class="tmin" style="--cols:${steps.length}"><i class="tmin-line" data-a="bar" data-to="100" data-d="8"></i>${steps
+        .map((st, i) => `<div class="tmin-i" style="${accent(i)}" data-a="up" data-d="${16 + i * 7}" data-dist="40"><i class="tmin-tick"></i>${lab(st, i, 'tmin-v')}${itemText(st, ctx, `steps.${i}`)}</div>`)
+        .join('')}</div></div>`;
+    }
+    if (v === 'pills') {
+      return `${head(s, ctx)}<div class="body"><div class="tpill" style="--cols:${steps.length}"><i class="tpill-line" data-a="bar" data-to="100" data-d="8"></i>${steps
+        .map((st, i) => `<div class="tp-i" style="${accent(i)}"><div class="tp-p" data-a="pop" data-d="${14 + i * 7}">${lab(st, i, 'tp-v')}</div><div class="tp-c" data-a="up" data-d="${20 + i * 7}" data-dist="40">${itemText(st, ctx, `steps.${i}`)}</div></div>`)
+        .join('')}</div></div>`;
+    }
+    if (v === 'arrows') {
+      return `${head(s, ctx)}<div class="body"><div class="tarw" style="--cols:${steps.length}">${steps
+        .map((st, i) => `<div class="ta-i" style="${accent(i)}"><div class="ta-h" data-a="left" data-d="${14 + i * 7}">${lab(st, i, 'ta-v')}</div><div class="ta-c" data-a="up" data-d="${20 + i * 7}" data-dist="40">${itemText(st, ctx, `steps.${i}`)}</div></div>`)
+        .join('')}</div></div>`;
+    }
+    const per = maxCols(ctx.CW) + 1;
     const cols = steps.length <= per ? Math.max(1, steps.length) : Math.ceil(steps.length / Math.ceil(steps.length / per));
     return `${head(s, ctx)}<div class="body"><div class="tl" style="--cols:${cols}">${steps
       .map((st, i) => {
@@ -494,7 +636,16 @@ ${st.value ? `<span class="label" data-a="up" data-d="${18 + i * 7}" data-dist="
         .map((st, i) => `<div class="panel stair" style="${accent(i)};min-height:${Math.round(42 + (58 * i) / k)}%" data-a="up" data-d="${16 + i * 7}"><span class="ps-n">${pad2(i + 1)}</span>${st.value ? `<span class="label"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${itemText(st, ctx, `steps.${i}`)}</div>`)
         .join('')}</div></div>`;
     }
-    const cols = gridCols(steps.length, ctx.W, 4);
+    if (v === 'pyramid' || v === 'funnel') {
+      const k = steps.length;
+      return `${head(s, ctx)}<div class="body"><div class="tier ${v}" style="--n:${k}">${steps
+        .map((st, i) => `<div class="tr-i" style="${accent(i)}"><div class="tr-s" style="${tierClip(i, k, v === 'funnel')}" data-a="zoom" data-d="${12 + i * 6}"><span>${pad2(i + 1)}</span></div><div class="tr-t" data-a="left" data-d="${18 + i * 6}" data-dist="50">${st.value ? `<span class="label"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${itemText(st, ctx, `steps.${i}`)}</div></div>`)
+        .join('')}</div></div>`;
+    }
+    if (v === 'cycle' || v === 'concentric' || v === 'bullseye') {
+      return `${head(s, ctx)}<div class="body"><div class="dg dg-${v}">${dgArt(v, steps, s)}${dgLegend(steps, ctx, 'steps', 22)}</div></div>`;
+    }
+    const cols = gridCols(steps.length, ctx.CW, 4);
     return `${head(s, ctx)}<div class="body"><div class="proc" style="--cols:${cols}">${steps
       .map((st, i) => {
         const rowEnd = (i + 1) % cols === 0 || i === steps.length - 1;
@@ -531,9 +682,16 @@ ${st.value ? `<span class="label" data-a="up" data-d="${18 + i * 7}" data-dist="
     return `${head(s, ctx)}<div class="body"><div class="org${v === 'boxes' ? ' boxes' : ''}${s.root ? '' : ' noroot'}" style="--n:${n};--ok:${ORG_SCALE[Math.min(n, 6)] * (most > 5 ? 0.9 : 1)}">${rootHtml}${wire}<div class="org-row">${cols.map(branch).join('')}</div></div></div>`;
   },
 
-  quote(s, ctx) {
+  quote(s, ctx, v) {
     const q = s.quote || {};
     const img = hasMedia(s);
+    if (v === 'bubble') {
+      // Bong bóng lời thoại: lời trích trong khung có đuôi, người nói (biểu tượng + tên) dưới đuôi.
+      return `${s.title || s.kicker ? head(s, ctx, { sub: false }) : ''}<div class="body"><div class="qb">
+<div class="qb-b" data-a="pop" data-d="4"><blockquote class="qt-text" data-a="words" data-d="12" data-s="2"${q.text || !s.subtitle ? E(ctx, 'quote.text', LIM.quoteText, true) : E(ctx, 'subtitle', LIM.subtitle, true)}>${rt(q.text || s.subtitle || '')}</blockquote></div>
+${q.author ? `<div class="qb-by" data-a="up" data-d="40" data-dist="30"><span class="ib">${icon('user')}</span><div><b${E(ctx, 'quote.author', LIM.quoteAuthor)}>${rt(q.author)}</b>${q.role ? `<span${E(ctx, 'quote.role', LIM.quoteAuthor)}>${rt(q.role)}</span>` : ''}</div></div>` : ''}
+</div></div>`;
+    }
     // center/band chỉ khác cách đặt khối trích dẫn → CSS.
     return `${s.title || s.kicker ? head(s, ctx, { sub: false }) : ''}<div class="body"><div class="qt${img ? ' has-media' : ''}"><div class="qt-c">
 <div class="qt-mark" data-a="pop" data-d="0"${DC(ctx, 'qmark')}>“</div>
@@ -557,10 +715,22 @@ ${c.subtitle ? `<span class="label"${E(ctx, `columns.${i}.subtitle`, LIM.colSubt
       // Hai nửa trang đối lập, mũi tên chuyển đổi ở giữa (vị trí ở lớp ngoài, hiệu ứng ở lớp trong — engine ghi đè transform).
       return `${head(s, ctx)}<div class="body"><div class="cmp-split">${colHtml(cols[0], 0)}${colHtml(cols[1], 1)}<div class="cmp-mid"${DC(ctx, 'vs')}><span data-a="pop" data-d="30">${icon('arrow')}</span></div></div></div>`;
     }
+    if (v === 'versus' && two) {
+      // Đối đầu A vs B: hai nửa màu đối lập, đường chia chéo, huy hiệu VS lớn ở giữa.
+      return `${head(s, ctx)}<div class="body"><div class="vsx">${colHtml(cols[0], 0)}${colHtml(cols[1], 1)}<div class="vsx-m"${DC(ctx, 'vs')}><span data-a="pop" data-d="26">VS</span></div></div></div>`;
+    }
     const inner = two
       ? `${colHtml(cols[0], 0)}<div class="vs" data-a="pop" data-d="30"${DC(ctx, 'vs')}>VS</div>${colHtml(cols[1], 1)}`
       : cols.map(colHtml).join('');
     return `${head(s, ctx)}<div class="body"><div class="cmp${two ? ' two' : ''}" style="--cols:${Math.max(1, cols.length)}">${inner}</div></div>`;
+  },
+
+  // Biểu đồ: dữ liệu bảng (slide.chart), kiểu = loại biểu đồ; dòng nguồn số liệu (caption) dưới biểu đồ.
+  chart(s, ctx, v) {
+    const ch = s.chart && s.chart.categories?.length && s.chart.series?.length ? s.chart : null;
+    const main = ch ? chartHtml(ch, v, { d0: 14 }) : ctx.edit ? '<div class="ch-empty">Chưa có dữ liệu — nhập hoặc dán bảng số liệu ở mục "Dữ liệu biểu đồ"</div>' : '';
+    const src = s.caption ? `<p class="ch-src" data-a="fade" data-d="40"${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</p>` : '';
+    return `${head(s, ctx)}<div class="body"><div class="ch-wrap">${main}${src}</div></div>`;
   },
 
   // Trang Liên hệ: thông tin liên hệ bên trái, mã QR lớn bên phải (≈ 40% chiều cao trang — dễ quét từ xa).
@@ -601,6 +771,26 @@ ${s.caption ? `<div class="cv-cap" data-a="fade" data-d="40"${E(ctx, 'caption', 
 </div></div>`;
   },
 };
+
+/* ---------------- ảnh nhấn + hộp chú thích (shared/deck/blocks.js) ---------------- */
+// Ảnh nhấn sát mép trái/phải/trên (khung tràn mép, ảnh cắt theo điểm lấy nét pos) hoặc làm nền (lớp phủ tối như ảnh tràn trang).
+function accentFig(s, ctx, pos) {
+  const img = s.image;
+  if (pos === 'bg') return bleed(img, ctx);
+  const url = ctx.assetUrl(img.asset);
+  if (!url) return '';
+  const look = lookCss(img);
+  // Ảnh trọn khung (sơ đồ, giao diện phần mềm — fit contain): không cắt, đặt trên nền trắng, không hiệu ứng phóng chậm.
+  const fit = img.fit === 'contain' ? ' acc-fit' : '';
+  const kb = !(img.zoom > 1) && !fit;
+  return `<figure class="acc acc-${pos}${fit}" data-a="fade" data-d="0" data-dur="30"${look ? ` style="${look}"` : ''}${M(ctx, 'slot')}><img src="${esc(url)}" alt="${esc(img.alt || '')}" style="${imgPos(img)}"${kb ? ' data-loop="kb" data-p="24"' : ''}>${overlayHtml(img)}</figure>`;
+}
+const CALLOUT_ICON = { note: 'bulb', warn: 'alert', ok: 'check' };
+function calloutHtml(s, ctx) {
+  const c = s.callout;
+  if (!c || !CALLOUT_LAYOUTS.includes(s.layout) || !CALLOUT_TONES.includes(c.tone) || !(c.text || ctx.edit)) return '';
+  return `<aside class="callout co-${c.tone}" data-a="up" data-d="44" data-dist="30"><span class="co-ic">${icon(CALLOUT_ICON[c.tone])}</span><div class="co-t"${E(ctx, 'callout.text', LIM.callout, true)}${ctx.edit ? ' data-ph="Nhập nội dung chú thích…"' : ''}>${rt(c.text)}</div></aside>`;
+}
 
 /* ---------------- trang tự do ---------------- */
 // Màu theo token theme (không nhận mã màu tự do — xem shared/deck/free.js).
@@ -764,7 +954,10 @@ export function deckParts(spec, opts) {
 
   const slideHtml = slides.map((s, index) => {
     if (s.layout === 'section') sectionNo += 1;
-    const ctx = { W, H, index, total, sectionNo, assetUrl, assetMeta: opts.assetMeta, videoEmbed: opts.videoEmbed, edit, moves: s.moves || null };
+    const acc = accentPos(s);
+    // Ảnh nhấn trái/phải chiếm ~40% khung → các bố cục chia cột theo phần còn lại (CW).
+    const CW = acc === 'left' || acc === 'right' ? Math.round(W * 0.6) : W;
+    const ctx = { W, H, CW, index, total, sectionNo, assetUrl, assetMeta: opts.assetMeta, videoEmbed: opts.videoEmbed, edit, moves: s.moves || null, accent: acc };
     const fn = L[s.layout] || L.bullets;
     const v = resolveVariant(s, W / H);
     const lg = logoOn(logo, s) ? logo : null;
@@ -777,19 +970,20 @@ export function deckParts(spec, opts) {
     const ft = s.layout === 'cover' ? '' : `<div class="ft${inFooter ? ` ft-lg ft-${lg.pos}` : ''}">${ftInner}</div>`;
     const abs = lg && !inFooter ? logoImg(lg, `lg-${lg.pos}`) : '';
     const b = brandFor(brand, s, tone);
-    const cls = `${lg ? ` lg-${lg.top ? 'top' : 'bot'}` : ''}${b.cls}${hideClasses(s.hide)}`;
+    const cls = `${lg ? ` lg-${lg.top ? 'top' : 'bot'}` : ''}${b.cls}${hideClasses(s.hide)}${acc ? ` A-${acc}` : ''}`;
     const vars = `${lg ? `--lw:${lg.w}px;--lh:${lg.h}px;` : ''}${b.vars}`;
     const style = vars ? ` style="${vars}"` : '';
     // Lớp phần tử chèn thêm (ảnh, logo, chữ…) phía trên bố cục — trang tự do đã tự vẽ phần tử của nó.
     const over = s.layout !== 'free' && list(s.elements).length ? `<div class="free over">${list(s.elements).map((e, k) => freeEl(e, k + 8, ctx)).join('')}</div>` : '';
     const label = `Trang ${index + 1}/${total}${s.title ? `: ${plainText(s.title).replace(/\s+/g, ' ')}` : ''}`;
     const build = BUILDS.includes(s.build) ? ` data-build="${s.build}"` : '';
-    return `<section class="slide L-${esc(s.layout)}${v ? ` V-${v}` : ''}${cls}"${style}${build} data-id="${esc(s.id)}" aria-label="${esc(label)}"><div class="sbg"></div>${glows(index, W)}${b.html}${fn(s, ctx, v)}${ft}${abs}${over}</section>`;
+    const tr = TRANSITIONS.includes(s.transition) ? ` data-tr="${s.transition}"` : '';
+    return `<section class="slide L-${esc(s.layout)}${v ? ` V-${v}` : ''}${cls}"${style}${build}${tr} data-id="${esc(s.id)}" aria-label="${esc(label)}"><div class="sbg"></div>${glows(index, W)}${b.html}${acc ? accentFig(s, ctx, acc) : ''}${fn(s, ctx, v)}${calloutHtml(s, ctx)}${ft}${abs}${over}</section>`;
   });
 
   return {
     W, H, mode,
-    attrs: { theme, tone, font: fontBody, style: deckStyle, bg, tcase: spec.font?.titleCase === 'upper' ? 'upper' : 'sentence' },
+    attrs: { theme, tone, font: fontBody, style: deckStyle, bg, tcase: spec.font?.titleCase === 'upper' ? 'upper' : 'sentence', tr: TRANSITIONS.includes(spec.transition) ? spec.transition : TRANSITIONS[0] },
     rootCss: `:root{--W:${W}px;--H:${H}px;--f-sans:${fontStack(fontBody)};--f-head:${fontStack(fontHead)}}`,
     themeCss: `${themeVarsCss(theme, spec.palette)}${brand ? inkVarsCss(theme, spec.palette) : ''}`,
     fontIds: [fontHead, fontBody],
@@ -830,7 +1024,7 @@ ${opts.css || ''}
 ${d.themeCss}</style>
 </head>
 <body>
-<div id="stage"><div id="deck" data-w="${d.W}" data-h="${d.H}" data-mode="${d.mode}" data-bg="${a.bg}"><canvas id="bg" aria-hidden="true"></canvas>
+<div id="stage"><div id="deck" data-w="${d.W}" data-h="${d.H}" data-mode="${d.mode}" data-bg="${a.bg}" data-tr="${a.tr}"><canvas id="bg" aria-hidden="true"></canvas>
 ${d.slides.join('\n')}
 </div></div>
 ${hud}

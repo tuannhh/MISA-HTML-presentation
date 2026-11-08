@@ -1,11 +1,11 @@
 # Kế hoạch tiếp theo — MISA Presentation
 
-Cập nhật: 08/11/2026 (thêm mục CT — cải tiến 11 mục). Phạm vi đã chốt: **1 máy chủ, 1 instance, cao điểm ~500 người dùng cùng lúc**; người dùng vào qua mạng/VPN MISA (không giới hạn theo IP); không có đăng ký (admin cấp tài khoản).
+Cập nhật: 09/11/2026 (mục CT — cải tiến 11 mục xong cả 5 đợt). Phạm vi đã chốt: **1 máy chủ, 1 instance, cao điểm ~500 người dùng cùng lúc**; người dùng vào qua mạng/VPN MISA (không giới hạn theo IP); không có đăng ký (admin cấp tài khoản).
 Nguồn: review chặng A của Codex ([09-review-chang-a-codex.md](audits/2026-10-12-codex/09-review-chang-a-codex.md) §5) + yêu cầu mới của chủ dự án.
 
 Thứ tự: **A bổ sung ✅ → P (Publish) ✅ → H + L (hyperlink, trang Liên hệ / Ưu đãi — đề xuất 12/10) → B → Gate DevOps → C (khi có số đo)**. Mỗi sửa lỗi theo đỏ → xanh: test tái hiện trước, xác nhận đỏ, sửa, xác nhận xanh.
 
-## CT — Cải tiến 11 mục (yêu cầu chủ dự án 08/11/2026) — đang làm, nhánh `feature/cai-tien-11-muc`
+## CT — Cải tiến 11 mục (yêu cầu chủ dự án 08/11/2026) — xong cả 5 đợt 09/11/2026, nhánh `feature/cai-tien-11-muc` (chưa merge `main`)
 
 Làm theo 5 đợt (chủ dự án chốt). Nhánh tách từ `main` 827da35; nhánh đã push lên GitHub sau Đợt 4 (08/11/2026); `main` chưa merge/push (chỉ làm khi chủ dự án yêu cầu). Mỗi đợt: code → unit test →
 `npm run build` → `docker compose up -d --build app` → kiểm thật trên Docker 8088 (desktop + mobile, tài khoản thử `tmp/e2e-user.json` — tệp gitignore,
@@ -17,7 +17,8 @@ không in mật khẩu ra) → cập nhật `memory-bank/` → commit khi chủ 
 | 2 | 6, 7 | Ảnh: kéo-thả/dán, di chuyển, bo góc, đổ bóng, màu viền · lớp phủ màu + độ mờ | ✅ 704918a (`memory-bank/05` §26) |
 | 3 | 1, 2 | Giữ nguyên nội dung + số trang (> 40 trang từ chối) · tải lên bài trình bày HTML làm ở công cụ khác (người dùng chọn giữ nguyên thiết kế / chuyển thành bài sửa được) | ✅ commit Đợt 3 (`memory-bank/05` §27) |
 | 4 | 3 | Video: YouTube + Vimeo + tải lên ≤ 200 MB, nén ffmpeg nền, tự phát / toàn màn hình / tắt tiếng, căn + cỡ (chi tiết dưới) | ✅ commit Đợt 4 (`memory-bank/05` §28) |
-| 5 | 8, 11 | Thêm nhiều bố cục (áp cả cho trang đang có) · thêm chuyển động | ⏳ tiếp theo |
+| 5a | 8 (phần 1), 11 | Kiểu trình bày danh sách (đổi giữ nội dung, số cột), ảnh nhấn + điểm lấy nét, thanh tiến độ / sao, hộp chú thích, bong bóng lời thoại, chuyển trang | ✅ 09/11/2026 (`memory-bank/05` §29) |
+| 5b | 8 (phần 2) | Sơ đồ (2×2, đồng tâm, bia, chu trình, Venn 2–3, A vs B) + biểu đồ (cột, thanh, cột chồng, đường, vùng, tròn, vành khuyên, thác nước) có bảng dữ liệu sửa được / dán từ bảng tính | ✅ 09/11/2026 (`memory-bank/05` §30) |
 
 ### Đợt 4 — mục 3: video (✅ 08/11/2026 — cách làm thật xem `memory-bank/05` §28; phần dưới là kế hoạch ban đầu)
 Yêu cầu: chèn video nhúng YouTube, Vimeo hoặc tải lên (tối đa **200 MB**); bật **tự phát** và **tự toàn màn hình** khi trình chiếu; hiển thị ảnh bìa
@@ -44,6 +45,10 @@ trong bố cục có sẵn.
 6. Test: nhận dạng link Vimeo, làm sạch trường mới (`specService`), renderer, lệnh ffmpeg (mock), e2e tải 1 video ~150 MB → nén → phát theo đoạn (206).
 
 ### Đợt 5 — mục 8 (bố cục) + mục 11 (chuyển động)
+**Chủ dự án chốt 09/11/2026:** chia 5a (✅ — kiểu danh sách, ảnh nhấn, số liệu tiến độ/sao, hộp chú thích + bong bóng, chuyển trang; cách làm thật
+xem `memory-bank/05` §29) và 5b (✅ — sơ đồ + biểu đồ có bảng dữ liệu; cách làm thật xem `memory-bank/05` §30). **Bỏ hẳn**: bánh răng, quỹ đạo, ghép hình, tảng băng trôi, lưới chấm. AI chỉ tự chọn
+kiểu an toàn (các bước, mốc thời gian, số lớn, A vs B, 2×2); kiểu mới khác chỉ người dùng chọn. Ưu tiên desktop trước, mobile tinh chỉnh sau.
+Danh mục ban đầu (giữ để đối chiếu):
 Mục 8 — nhiều kiểu bố cục hơn, **áp được cho cả trang đang có** (đổi bố cục giữ nguyên nội dung), gồm cả sơ đồ, biểu đồ, hình khối. Nguyên tắc: không
 bắt chước sản phẩm nào; chọn cái hay nhất mà vẫn dễ dùng. Danh mục đề xuất (chốt với chủ dự án trước khi làm):
 - **Đổi kiểu trình bày danh sách giữ nội dung** ("bố cục thông minh"): cùng 1 danh sách mục → cột 2–6, hộp đặc/viền/có biểu tượng/có nhãn/xen kẽ,

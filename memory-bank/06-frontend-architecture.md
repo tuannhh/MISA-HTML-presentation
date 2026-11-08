@@ -87,7 +87,7 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 ## Trình soạn thảo (`useEditor` + `SlideFields`)
 
 - Layout `org` (Sơ đồ tổ chức): `SlideFields` có ô **Ô đứng đầu** (`root`), icon ô đứng đầu, mục **Nhánh (n/6)** — mỗi nhánh: tên, `IconPicker`, mục con (mỗi dòng 1 mục), nút sang trái/phải; dàn ý có gợi ý cách viết (`POINT_HINT.org`). `editPaths` cho sửa `root` trên khung.
-- `SlideFields.vue` sinh form theo layout: **chip "Kiểu trình bày"** (`VARIANT_LABELS`, mờ khi không hợp nội dung), kicker, tiêu đề, highlight (phải nằm trong tiêu đề), subtitle, caption, tags (phân tách dấu phẩy), icon (`IconPicker`, lưới có tìm kiếm), quote, danh sách stats/items/steps/columns (thêm/xoá/di chuyển; mục ở `ITEM_IMAGE_LAYOUTS` có nút "Ảnh/logo" thay biểu tượng), ImagePicker (tải ảnh mới hoặc chọn ảnh đã có trong bài), gallery, ghi chú. Lỗi độ dài tính từ `SPEC_LIMITS` theo **chữ hiển thị** ngay khi gõ.
+- `SlideFields.vue` sinh form theo layout: **bảng "Kiểu trình bày"** (`StylePicker`, hình xem trước — xem mục Đợt 5a bên dưới), kicker, tiêu đề, highlight (phải nằm trong tiêu đề), subtitle, caption, tags (phân tách dấu phẩy), icon (`IconPicker`, lưới có tìm kiếm), quote, danh sách stats/items/steps/columns (thêm/xoá/di chuyển; mục ở `ITEM_IMAGE_LAYOUTS` có nút "Ảnh/logo" thay biểu tượng), ImagePicker (tải ảnh mới hoặc chọn ảnh đã có trong bài), gallery, ghi chú. Lỗi độ dài tính từ `SPEC_LIMITS` theo **chữ hiển thị** ngay khi gõ.
 - Chữ định dạng (`05` §13): ô nhập hiện `plainText`, ghi lại bằng `repaintRich` (giữ định dạng theo vị trí) qua helper `rx(obj, key)`; tiêu đề trong danh sách trang/aria dùng `plainText`. Định dạng (màu, đậm, VIẾT HOA, giữ liền) chỉ làm trên khung (thanh `#rtb` của engine) → `deck:edit` với chuỗi có thẻ → `editPaths` (`cutR` kiểm/cắt).
 - `DecorPanel.vue` ("Hoạ tiết, vị trí & cỡ chữ", trong `SlideFields`, cả desktop + mobile): MSwitch từng hoạ tiết của bố cục, *Hiện lại tất cả*, *Áp cho mọi trang* (emit `decor-all` → trang cha `ed.setDecorAll` + toast), số ô chữ đã chỉnh + *Đặt lại vị trí, cỡ chữ & khung* (xoá cả giãn dòng / độ rộng khung); gợi ý nhắc tay nắm trái (dời), tay nắm mép phải (độ rộng),
   ô Cỡ (pt) / Giãn dòng trên thanh định dạng. Thanh định dạng, tay nắm và nhãn tràn chữ nằm trong engine (`shared/deck/engine.js`, `05` §22) — app chỉ nhận `deck:move`. Thông báo từ khung (vd. đầy 30 phần tử) qua `useLiveDeck({ onNotice })` → `toast.info`.
@@ -112,7 +112,7 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 - `render.js`: spec → HTML (escape mọi chuỗi), 16 layout (thêm `contact`, `offer` — không có biến thể) × biến thể (`variants.js`, lớp `V-<biến thể>`), `data-style` phong cách bài, 20 mẫu màu + tuỳ chỉnh, `data-bg`/`data-tone` trên trang, khung video 16:9, logo, `mode: present|print`; chữ định dạng (`rich.js` → `span.rt`), ảnh mục `.ib-img`, lớp chèn đè `.free.over`, bộ nhận diện (`brandFor`: `.bimg`/`.bhd`/`.bft`, lớp `has-bimg`/`bspec`/`no-ftt`/`ink-light`/`ink-dark`, biến `--bt`/`--bb`).
 - `rich.js`: cú pháp `⟦…⟧…⟦/⟧` (parse/serialize/plainText/cutRich/repaintRich/formatRange/richHtml, `safeHref`/`linkPhrase`/`richLinks`/`hrefWeight` cho liên kết) — dùng chung server, renderer, giao diện.
 - `contact.js` (kênh liên hệ, kiểm số/email, href), `brands.js` (logo kênh SVG màu), `qr.js` (mã QR SVG từ link, lõi `qrcode/lib/core/qrcode.js` — Vite bundle được), `mdLinks.js` (`[nhãn](URL)` của dàn ý).
-- `variants.js`: danh sách biến thể/phong cách, điều kiện hợp nội dung, `artDirect` (server) + `resolveVariant` (renderer) — xem `05` §9.
+- `variants.js`: danh sách biến thể/phong cách, điều kiện hợp nội dung, `artDirect` (server) + `resolveVariant` (renderer) — xem `05` §9; kiểu chỉ-người-dùng (`MANUAL_VARIANTS`), họ danh sách, số cột — `05` §29. `blocks.js`: ảnh nhấn, hộp chú thích, chuyển trang (`05` §29). `chart.js` (dữ liệu biểu đồ: làm sạch, đọc số, dán bảng, trục) + `chartView.js` (vẽ 8 kiểu biểu đồ) — `05` §30.
 - `engine.js`: điều khiển trang (phím mũi tên/Space/PageUp/Down, chạm, HUD), hiệu ứng spring, đếm số, vẽ đường, nền động (`window.DeckBg` từ `backgrounds.js` ghép trước engine), lớp phát video; mode print tắt chuyển động.
 - `theme.css`: biến màu 5 mẫu gốc, bố cục theo tỷ lệ; `palette.js` sinh biến cho các mẫu còn lại + tuỳ chỉnh (đảm bảo tương phản); `fonts.js` + `fonts/`: @font-face theo phông đã chọn.
 - `icons.js`: tập icon SVG nội tuyến (dùng chung server + editor).
@@ -136,3 +136,25 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
   Tiêu đề trang ("AI đang lập dàn ý / dựng bài …") hiện thẳng `<h1>`, đã bỏ đoạn mô tả phụ ở cả desktop + mobile (`05` §22). 3 bước dưới đây là bản cũ.
 - Hiện khi bài `outlining`/`generating` và API trả `deck.queue` (xem `05` §2): 3 bước **Đã nhận yêu cầu → Đang chờ đến lượt (vị trí, dự kiến bắt đầu / "sắp đến lượt" khi < 30 giây) → AI đang lập dàn ý / dựng bài (đã chạy, dự kiến còn; quá trung bình → "lâu hơn dự kiến — AI vẫn đang xử lý", không ghi "sắp xong")**. Bước đã qua: icon `check` nền success-light; bước hiện tại: `MSpinner`/`clock` nền brand-light; bước sau: neutral, chữ placeholder. Chưa có mẫu đo → ghi "đang ước tính thời gian chờ" / "chưa đủ số liệu để ước tính" thay vì con số (không bịa).
 - Desktop: `OutlinePage`, `EditorPage` (`<JobProgress :queue="deck.queue" />`); mobile: cùng 2 trang với `compact` (giãn hết chiều ngang, desktop tối đa 420px). `queue = null` (tiến trình vừa khởi động lại) → không hiện khối này, giữ trạng thái chờ cũ.
+
+## Kiểu trình bày, ảnh nhấn, chú thích, chuyển trang (Đợt 5a, 2026-11-09)
+- `shared/StylePicker.vue` thay chip "Kiểu trình bày" trong `SlideFields`: lưới ô có **hình xem trước SVG** (`lib/stylePreviews.js` — `stylePreview(layout,
+  variant)` trả chuỗi SVG hằng 80×45 cho mọi kiểu, gắn bằng `v-html` vì là hằng trong mã, không có dữ liệu người dùng), radiogroup `aria-label="Kiểu trình bày"`,
+  kiểu không hợp nội dung bị mờ + tooltip lý do. Mục gập "Đổi sang bố cục khác — giữ nguyên nội dung" (họ `LIST_LAYOUTS`) phát `pick {layout, variant}` →
+  `SlideFields.pickStyle` gửi `change-layout` rồi đặt `variant`. Nhãn kiểu ở `slideModel.VARIANT_LABELS`.
+- `SlideFields` thêm: **Số cột** (`COLS_OPTIONS`, chỉ hiện với kiểu có cột), **Ảnh nhấn** (chip Không/Trái/Phải/Trên/Nền — `aria-label="Vị trí ảnh nhấn"`;
+  bố cục không có ô media thì kèm `ImagePicker`; ô **điểm lấy nét** bấm chọn hoặc phím mũi tên, `aria-label` đọc "x% ngang, y% dọc"; gợi ý khi > 6 mục),
+  **Hộp chú thích** (`role=group`, chọn loại + ô chữ, giới hạn 300), **Chuyển trang** (riêng trang, có "Theo cả bài"). `DesignPanel` tab Nền: MSelect
+  "Chuyển trang" cả bài (chỉ khi `isDeck`). Mobile dùng chung các khối này (đã kiểm: không cuộn ngang ở 390px); tinh chỉnh mobile làm sau.
+
+## Sơ đồ + biểu đồ (Đợt 5b, 2026-11-09)
+- `StylePicker` nhóm "Đổi sang bố cục khác" theo **họ** `LAYOUT_FAMILIES`/`familyOf` (`shared/deck/variants.js`): họ danh sách (bullets, cards, agenda, process,
+  timeline) và họ số liệu (`stats` ↔ `chart`). Kiểm "hợp nội dung" của bố cục đích dựng tạm nội dung đã chuyển (`asLayout`: items↔steps, stats↔chart) rồi
+  gọi `fits`. Mọi kiểu sơ đồ/biểu đồ đều có hình xem trước trong `lib/stylePreviews.js` (test bảo đảm không thiếu kiểu nào).
+- `shared/ChartFields.vue` (hiện khi `LAYOUT_FIELDS` có `chart`, đặt trong `SlideFields` trước khối Liên hệ): bảng hạng mục × chuỗi (`<table>`, tiêu đề cột
+  là ô tên chuỗi + nút xoá, nút "+ Chuỗi"; mỗi hàng: ô hạng mục, ô số `inputmode=decimal` căn phải, nút xoá hàng), "Thêm hạng mục", ô **Đơn vị**, công tắc
+  **"Hiện số liệu trên biểu đồ"**. Ô số giữ chuỗi người dùng đang gõ tới khi rời ô (`draft`), gõ sai → viền đỏ + `aria-invalid`. **Dán** nhiều ô (Tab/xuống
+  dòng) vào ô bất kỳ → `parseTable` thay toàn bộ dữ liệu (giữ đơn vị + cờ ẩn số; hoàn tác được), báo "Đã dán m hạng mục × n chuỗi" (`role=status`).
+  Cảm ứng (`pointer: coarse` hoặc prop `touch`): ô + nút cao 44px, cột chuỗi rộng 156px, bảng cuộn ngang trong khung (trang không cuộn ngang ở 390px).
+- `SlideFields`: ô `caption` của trang biểu đồ mang nhãn **"Nguồn số liệu"**. `slideModel`: bố cục "Biểu đồ" (icon `chart-bar`, có trong `BUILD_LAYOUTS`),
+  `emptyChart()`, `ensureLayoutContent` (từ Con số hoặc dữ liệu mẫu); `useEditor.changeLayout` chuyển stats ↔ chart khi bên đích còn rỗng.

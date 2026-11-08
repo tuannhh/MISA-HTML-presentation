@@ -6,6 +6,8 @@ import { newSlide, duplicateSlide, ensureLayoutContent, prepareSpecForSave, clon
 import { useMedia, videoKey } from '@/composables/useMedia.js';
 import { withDesignDefaults } from '@/lib/design.js';
 import { decorsFor } from '@shared/deck/layers.js';
+import { VARIANTS, LIST_KEY } from '@shared/deck/variants.js';
+import { chartFromStats, statsFromChart } from '@shared/deck/chart.js';
 import { createEditHistory, historyKey, isTextField } from '@/lib/editHistory.js';
 
 // Bản nháp chưa lưu được giữ tạm khi trang bị gỡ (vd. đổi bề mặt desktop ↔ mobile khi xoay/thu nhỏ cửa sổ).
@@ -266,7 +268,20 @@ export function useEditor(id, { onOutline } = {}) {
 
   function changeLayout(layout) {
     if (!slide.value) return;
-    slide.value.layout = layout;
+    const s = slide.value;
+    // Họ bố cục danh sách (Ý chính, Thẻ, Mục lục ↔ Quy trình, Dòng thời gian): chuyển các mục đang hiển thị sang danh sách của
+    // bố cục mới (items ↔ steps) → đổi kiểu không mất nội dung, đổi ngược lại vẫn đúng bản đã sửa gần nhất.
+    const from = LIST_KEY[s.layout];
+    const to = LIST_KEY[layout];
+    if (from && to && from !== to && (s[from] || []).length) {
+      s[to] = s[from].slice(0, SPEC_LIMITS[to]);
+      s[from] = [];
+    }
+    // Con số nổi bật ↔ Biểu đồ: dựng dữ liệu bên kia từ số liệu đang có (chỉ khi bên kia còn trống — đổi qua lại giữ bản đã sửa).
+    if (s.layout === 'stats' && layout === 'chart' && !s.chart) s.chart = chartFromStats(s.stats) || undefined;
+    if (s.layout === 'chart' && layout === 'stats' && !(s.stats || []).length && s.chart) s.stats = statsFromChart(s.chart, SPEC_LIMITS.stats);
+    s.layout = layout;
+    if (s.variant && !VARIANTS[layout]?.includes(s.variant)) delete s.variant;
     // Vị trí chữ đã dời thuộc về bố cục cũ; hoạ tiết đã tắt chỉ giữ loại bố cục mới còn có.
     delete slide.value.moves;
     const keep = (slide.value.hide || []).filter((k) => decorsFor(layout).includes(k));

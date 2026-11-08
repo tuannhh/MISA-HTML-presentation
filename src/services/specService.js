@@ -3,6 +3,7 @@
 //  - lenient (kết quả AI): tự cắt chuỗi quá dài, thay giá trị lạ bằng mặc định, bỏ phần tử thừa.
 //  - strict (người dùng lưu): vượt giới hạn → trả danh sách lỗi để API báo 422 (không âm thầm cắt dữ liệu người dùng).
 import { randomUUID } from 'node:crypto';
+import { cleanChart } from '../../shared/deck/chart.js';
 import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE, BRAND_SLOTS, BUILDS } from '../../shared/deck/render.js';
 import { hasRich, canonicalRich, plainText, cutRich, hrefWeight, safeHref } from '../../shared/deck/rich.js';
 import { CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
@@ -11,7 +12,8 @@ import { ICON_NAMES } from '../../shared/deck/icons.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 import { LOGO_MOTIONS } from '../../shared/deck/bg3d.js';
-import { VARIANTS, STYLES } from '../../shared/deck/variants.js';
+import { VARIANTS, STYLES, COLS_RANGE } from '../../shared/deck/variants.js';
+import { CALLOUT_TONES, cleanAccent, cleanTransition } from '../../shared/deck/blocks.js';
 import { cleanImgLook } from '../../shared/deck/imgstyle.js';
 import { cleanVideoOpts, VIMEO_ID_RE, VIMEO_HASH_RE } from '../../shared/deck/video.js';
 import { cleanMoves, cleanHide } from '../../shared/deck/layers.js';
@@ -187,7 +189,9 @@ export function cleanDesign(c, o) {
       };
     } else if (c.strict) c.errors.push('logo: mã ảnh logo không hợp lệ');
   }
-  return { theme, palette, background, font, logo, brand: cleanBrand(c, o.brand) };
+  // Chuyển trang mặc định cả bài (shared/deck/blocks.js) — 'fade' = mặc định, không lưu.
+  const transition = cleanTransition(o.transition, true);
+  return { theme, palette, background, font, logo, brand: cleanBrand(c, o.brand), ...(transition ? { transition } : {}) };
 }
 
 // Bộ nhận diện thương hiệu: ảnh nền trang bìa / trang nội dung / trang mở đầu phần / trang kết + dải đầu trang, chân trang.
@@ -369,6 +373,7 @@ function fallbackLayout(s) {
     // Liên hệ: phải có ít nhất 1 thông tin liên hệ / mã QR (AI không được tự bịa — xem outlineService.verifyContacts).
     contact: !!(s.contact && (s.contact.phones.length || s.contact.emails.length || s.contact.addresses.length || s.contact.website || s.contact.qr.asset || s.contact.qr.link)),
     offer: s.items.length > 0 || !!s.contact,
+    chart: !!s.chart,
     free: true,
   };
   if (!(s.layout in has) || has[s.layout]) return s.layout;
@@ -429,6 +434,9 @@ function cleanSlide(c, v, i, seen) {
   // Thông tin liên hệ: giữ cả khi đổi sang bố cục khác (đổi qua lại không mất dữ liệu đã nhập), chỉ hiển thị ở contact/offer.
   const contact = cleanContact(c, o.contact, `${p}.contact`);
   if (contact) slide.contact = contact;
+  // Dữ liệu biểu đồ (bảng hạng mục × chuỗi số): giữ cả khi đổi bố cục (đổi Biểu đồ ↔ Con số qua lại không mất bảng). Sai → bỏ, không báo lỗi.
+  const chart = cleanChart(o.chart);
+  if (chart) slide.chart = chart;
   // Phần tử đặt tự do: là toàn bộ nội dung của trang tự do; ở bố cục khác là lớp CHÈN THÊM phía trên (ảnh, logo, chữ, hình khối…).
   if (layout === 'free' || (Array.isArray(o.elements) && o.elements.length)) {
     const seenEl = new Set();
@@ -441,6 +449,15 @@ function cleanSlide(c, v, i, seen) {
   slide.variant = VARIANTS[slide.layout]?.includes(o.variant) ? o.variant : '';
   // Cách trình chiếu (người dùng chọn, không qua AI): mặc định 'auto' = không lưu trường.
   if (BUILDS.includes(o.build)) slide.build = o.build;
+  // Trình bày người dùng chọn (không qua AI — shared/deck/variants.js, blocks.js): số cột, ảnh nhấn, hộp chú thích, chuyển trang riêng.
+  // Giá trị lạ bị bỏ, không báo lỗi; giữ cả khi bố cục hiện tại không dùng (đổi qua lại không mất lựa chọn).
+  const cols = Number(o.cols);
+  if (Number.isInteger(cols) && cols >= COLS_RANGE.min && cols <= COLS_RANGE.max) slide.cols = cols;
+  const accent = cleanAccent(o.accent);
+  if (accent) slide.accent = accent;
+  if (o.callout && CALLOUT_TONES.includes(o.callout.tone)) slide.callout = { tone: o.callout.tone, text: c.str(o.callout.text, SPEC_LIMITS.callout, `${p}.callout.text`) };
+  const tr = cleanTransition(o.transition);
+  if (tr) slide.transition = tr;
   // Tinh chỉnh tay (không qua AI, shared/deck/layers.js): ô chữ đã dời (trang có bố cục) + hoạ tiết đã tắt. Mục sai bị bỏ, không báo lỗi.
   const moves = slide.layout !== 'free' ? cleanMoves(o.moves) : null;
   if (moves) slide.moves = moves;

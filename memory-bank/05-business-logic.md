@@ -245,7 +245,7 @@ Người dùng không chọn gì thêm — mọi thứ dưới đây tự độn
 - `outlineService.keepPhotoImages`: bỏ ảnh không phải photo; trang `image`/`gallery` hết ảnh (không video) → `auto`; gallery còn 1 ảnh → `image`. Log `outline_ready` ghi `kinds`, `photos`, `droppedImages`, `sourceType`.
 
 ### Biến thể bố cục + phong cách bài (`shared/deck/variants.js`)
-- `VARIANTS`: 14 layout × 2–5 biến thể (59 kiểu; org: `tree|boxes`), phần tử đầu = giao diện gốc. Ví dụ stats: `cards|hero|bars|rings|plain`; timeline: `line|vertical|zigzag|cards`; process: `cards|chevrons|stairs|vertical`; gallery: `grid|mosaic|polaroid`; image: `side|right|full`.
+- `VARIANTS`: 14 layout × 2–9 biến thể (64 kiểu từ Đợt 5a — §29; org: `tree|boxes`), phần tử đầu = giao diện gốc. Ví dụ stats: `cards|hero|bars|rings|plain`; timeline: `line|vertical|zigzag|cards`; process: `cards|chevrons|stairs|vertical`; gallery: `grid|mosaic|polaroid`; image: `side|right|full`.
 - `STYLES`: `neon` (gốc) · `editorial` (đường kẻ, số lớn) · `solid` (khối màu đặc) · `outline` (viền, không nền) · `soft` (bo tròn, đổ bóng mềm) — CSS `[data-style]` trên `<html>`, kết hợp với mẫu màu/nền/phông người dùng chọn.
 - `FITS` — biến thể chỉ được chọn khi hợp nội dung: `rings` chỉ khi mọi số là % 0–100 (1–4 số); `bars` khi cùng đơn vị, số ≥ 0, 2–8 số; `hero` cho 1–4 số (1 số → ưu tiên ×6); `mosaic` 3 hoặc 5 ảnh; `polaroid` 2–4 ảnh; `chevrons` tên bước ngắn, ≤ 5 bước (khung hẹp ≤ 3); `zigzag` 4–7 bước (hẹp 4–5); `image:full` có ảnh, không video, ≤ 3 ý…
 - `artDirect(spec, {seed, ratio, style})`: chọn phong cách ngẫu nhiên đều; mỗi trang bốc thăm có trọng số = hợp dữ liệu × hợp phong cách (`AFFINITY`) × `0.2^(số lần đã dùng trong bài)`; trang liền kề trùng `layout:variant` ×0.05. Hạt giống = UUID mới mỗi lần dựng → dựng lại = bài khác; cùng hạt giống → cùng kết quả (test).
@@ -751,3 +751,90 @@ Yêu cầu chủ dự án: người dùng tạo thư mục, kể cả thư mục
 - Đổi video khác vào cùng ô (tải lên / link / "Video trong bài") giữ chú thích + tuỳ chọn của ô (`VideoPicker.pick`).
 - Bảng "Video" (`VideoPicker`): "Khi trình chiếu" (3 công tắc + giải thích) và — khi mở từ ô media của bố cục (`layout`) — "Vị trí và kích thước" (3 nút căn
   + thanh "Cỡ video"). Trên mobile cả hàng công tắc là vùng chạm 44px.
+
+## 29. Kiểu trình bày mới cho danh sách, ảnh nhấn, hộp chú thích, chuyển trang (2026-11-09, Đợt 5a — mục 8 phần 1 + mục 11)
+
+Chủ dự án chốt danh mục 09/11/2026: Đợt 5a = kiểu danh sách + ảnh nhấn + số liệu + hộp chú thích + chuyển trang; **Đợt 5b** (sau) = sơ đồ + biểu đồ có
+bảng dữ liệu. Bỏ hẳn: bánh răng, quỹ đạo, ghép hình, tảng băng trôi, lưới chấm. **AI chỉ tự chọn kiểu "an toàn"** (các bước, mốc thời gian, số lớn, A vs B,
+2×2 — đều là kiểu đã có hoặc thuộc 5b); mọi kiểu mới của 5a là **chỉ người dùng chọn** (`MANUAL_VARIANTS` — `artDirect` không bao giờ bốc).
+
+### Kiểu mới (`shared/deck/variants.js`, vẽ ở `render.js` + `theme.css`)
+| Bố cục | Kiểu mới (`variant`) | Điều kiện hợp nội dung (`FITS`) |
+|---|---|---|
+| bullets | `big` — gạch đầu dòng lớn | không có media, 2–4 ý |
+| cards | `solid` hộp đặc · `outline` hộp viền · `labeled` có nhãn trên tên · `alternate` xen kẽ trái/phải · `arrows` hộp nối mũi tên | labeled: mọi mục có `value`; alternate 2–4; arrows 2–5 (khung hẹp < 1,7: 2–3) |
+| stats | `progress` thanh tiến độ · `stars` xếp hạng sao | progress: 1–6 số, mọi số % 0–100; stars: 1–4 số, giá trị 0–5, hậu tố ∈ '', '/5', 'sao', 'điểm'… |
+| timeline | `minimal` tối giản · `pills` viên thuốc · `arrows` mũi tên | minimal/pills 2–6 (hẹp 2–4); arrows 2–5 (hẹp 2–4) |
+| process | `pyramid` kim tự tháp · `funnel` phễu | 3–6 bước |
+| quote | `bubble` bong bóng lời thoại | không có media |
+
+Đường mũi tên vẽ bằng SVG `pathLength=1` + `data-a="draw"` (engine vẽ dần); kim tự tháp/phễu là các tầng `clip-path` (`tierClip`); sao là SVG với lớp phủ
+theo `--pct` (container query `100cqi`). Các lớp đơn vị mới được thêm vào `UNIT`/`ZOOM` của engine → trình chiếu từng ý + bấm phóng to chạy cho kiểu mới.
+
+### Đổi bố cục giữ nội dung ("cùng danh sách, khác hình")
+- `LIST_LAYOUTS` = bullets, cards, agenda (`items`) · process, timeline (`steps`) — `LIST_KEY`. Bảng chọn kiểu có mục "Đổi sang bố cục khác — giữ nguyên
+  nội dung": chọn kiểu của bố cục khác trong họ → `useEditor.changeLayout` chuyển `items` ↔ `steps` (cắt theo `SPEC_LIMITS` của khoá mới), **làm rỗng danh
+  sách nguồn** (không để bản sao), bỏ `variant` không thuộc bố cục mới, rồi đặt kiểu vừa chọn.
+- **Số cột** `slide.cols` (2–6, `COLS_RANGE`): chỉ áp cho `COLS_VARIANTS` (agenda list/tiles; bullets icons/numbered/checks/panels; cards
+  grid/numbered/solid/outline/labeled; stats cards/plain); `userCols()` không cho vượt số mục. Kiểu khác bỏ qua trường này.
+
+### Ảnh nhấn (`slide.accent` = `left|right|top|bg`, `shared/deck/blocks.js`)
+- Dùng ảnh `slide.image` sẵn có, vẽ thành khối tràn mép `figure.acc acc-<vị trí>`; trang có lớp `A-<vị trí>` (đệm thêm, dời chân trang/logo). Trái/phải:
+  vùng nội dung `ctx.CW` = 0,6 × chiều rộng — mọi chỗ trong hàm bố cục trước dùng `ctx.W` nay dùng `ctx.CW`. `bg` = ảnh nền tràn trang qua `bleed()` (kèm
+  lớp phủ màu Đợt 2).
+- Bố cục được dùng: `ACCENT_LAYOUTS` (agenda, bullets, cards, stats, timeline, process, comparison, closing). **Ẩn** khi trang > 6 mục (`accentTooDense` —
+  trình soạn thảo hiện gợi ý) hoặc trang có video. Ảnh `fit: contain` (sơ đồ/ảnh chụp màn hình) → `acc-fit`: nền trắng, không cắt, không Ken Burns.
+- **Điểm lấy nét**: dùng lại `image.pos` {x, y} (object-position) — bấm vào ảnh xem trước hoặc phím mũi tên trong `SlideFields`.
+
+### Hộp chú thích (`slide.callout` = `{tone: note|warn|ok, text}`)
+- `<aside class="callout co-<tone>">` đứng sau `.body`; chữ định dạng như các ô khác, sửa trực tiếp trên khung (`editPaths` `callout.text`, chỉ khi trang có
+  callout). Giới hạn `SPEC_LIMITS.callout` = 300. Bố cục được dùng: `CALLOUT_LAYOUTS` (agenda, bullets, cards, stats, timeline, process, comparison, image).
+
+### Chuyển trang (mục 11)
+- `spec.transition` (cả bài; 'fade' là mặc định nên không lưu) + `slide.transition` (riêng trang, được lưu cả 'fade' để ghi đè). Giá trị:
+  `fade | push | zoom | flip | curtain | none` (`TRANSITIONS`, làm sạch bằng `cleanTransition`).
+- Renderer gắn `data-tr` lên `#deck` và `<section>`; engine (`show()`) đặt `#deck[data-tr][data-dir]` theo trang tới (riêng trang > cả bài), trang vào nhận
+  `.pre` (tư thế đầu, `transition: none`, ép reflow) rồi `.on`; trang ra `.off`, dọn sau 900 ms. Lùi trang → `data-dir="back"` đảo chiều đẩy/mở màn.
+- Chỉ chạy ở chế độ `present` (khung soạn thảo/thumbnail/PDF không chuyển); `prefers-reduced-motion` → luôn 'fade' (engine + khối `@media` trong CSS).
+  Chạy được trong bản HTML xuất offline.
+
+### Làm sạch (`specService.cleanSlide` / `cleanDesign`)
+`cols` ngoài 2–6, `accent` lạ, `callout` sai tone/rỗng, `transition` lạ → **bỏ im lặng** (không báo lỗi, bài cũ không đổi). Không đổi CSDL, không đổi API
+(các trường nằm trong spec JSON). Prompt/schema AI không đổi (AI không đặt accent/callout/transition/kiểu mới).
+
+## 30. Sơ đồ + biểu đồ có bảng dữ liệu (2026-11-09, Đợt 5b — mục 8 phần 2)
+
+Danh mục đã chốt ở §29. **AI chỉ tự chọn được `cards:matrix` (2×2) và `comparison:versus` (A vs B)** khi hợp nội dung (`artDirect`; `contentWeight` của
+matrix = 0,6). Các sơ đồ còn lại và mọi kiểu biểu đồ trừ "Cột" nằm trong `MANUAL_VARIANTS`; **bố cục `chart` chỉ người dùng tạo** (có trong `LAYOUTS` của
+renderer, không có trong `AI_LAYOUTS` — prompt/schema AI không đổi).
+
+### Sơ đồ (biến thể của bố cục có sẵn — dùng lại `items`/`steps`/`columns`, không thêm trường)
+| Bố cục | Kiểu (`variant`) | `FITS` | Cách vẽ |
+|---|---|---|---|
+| cards | `matrix` ma trận 2×2 | đúng 4 mục | 4 ô `.mx-q` quanh 2 trục `.mx-v/.mx-h`, biểu tượng ở góc |
+| cards | `venn` vòng giao nhau | 2–3 mục | `.dg.vn.n2|n3`: hình vuông `.dg-art` (vòng `.vn-c` + lõi) + chú giải `.dg-lg` không đánh số |
+| process | `cycle` chu trình | 3–6 bước | vòng SVG `.cy-ring` vẽ dần (`draw`) + đầu mũi tên tính theo lượng giác + nút đánh số `.dg-dot` + biểu tượng giữa |
+| process | `concentric` đồng tâm | 2–5 bước | vòng `.dg-ring` lồng nhau, số thứ tự `.dg-num` + chú giải đánh số |
+| process | `bullseye` bia | 3–5 bước | như đồng tâm, thêm mũi tên `.dg-arw` cắm vào tâm (bước cuối = đích) |
+| comparison | `versus` đối đầu A vs B | đúng 2 cột | 2 nửa cắt chéo (`clip-path`) + huy hiệu "VS" ở giữa |
+
+Sơ đồ + chú giải dùng chung khung `.dg` (lưới: hình vuông `container-type: size`, cỡ `100cqmin` | chú giải). Lớp đơn vị mới (`.mx-q`, `.dg-r`) được thêm vào
+`UNIT`/`ZOOM` của engine → trình chiếu từng ý + bấm phóng to chạy cho sơ đồ.
+
+### Biểu đồ (bố cục `chart`, `shared/deck/chart.js` + `chartView.js`)
+- Dữ liệu: `slide.chart = { categories: string[], series: [{ name, values: (number|null)[] }], unit?, values?: false }`. **Kiểu biểu đồ = `slide.variant`**
+  (`VARIANTS.chart` = column · bar · stacked · line · area · pie · donut · waterfall; mặc định cột). Giới hạn `CHART_LIMITS`: 12 hạng mục, 4 chuỗi, nhãn 40,
+  đơn vị 16 ký tự, |số| ≤ 1e15.
+- `FITS`: bar ≥ 1 hạng mục; stacked ≥ 2 chuỗi, không số âm; line/area ≥ 2 hạng mục; pie/donut 1 chuỗi, 2–8 lát, không âm, tổng > 0; waterfall 1 chuỗi,
+  2–10 hạng mục. Không hợp → renderer về "Cột" (`resolveVariant`), bảng chọn kiểu làm mờ kèm lý do.
+- Làm sạch (`cleanChart`, gọi ở `specService.cleanSlide`): chữ thuần (bỏ ký tự điều khiển, cắt độ dài), ô số đọc bằng `parseNum` — nhận cả "1.234,5" lẫn
+  "1,234.5", ký hiệu tiền/%, số âm dạng "(5)"; ô không đọc được → `null` (ô trống). Không có hạng mục/chuỗi → bỏ `slide.chart`. `slide.chart` **được giữ khi
+  đổi sang bố cục khác** (đổi lại không mất số liệu). Chế độ không nghiêm (kết quả AI): `chart` không có dữ liệu → hạ bố cục (`fallbackLayout`).
+- Vẽ (HTML theo % vùng vẽ + SVG khi cần, mọi chữ qua `esc()`): trục "đẹp" `niceScale` (bước 1/2/2,5/5 × 10ⁿ, luôn có 0; số âm mọc xuống từ trục 0), số kiểu
+  Việt Nam `fmtNum` (vạch trục lớn rút gọn "1,2 Tr"). **Đơn vị**: "%" gắn vào từng số; đơn vị khác ghi một lần "Đơn vị: …" ở góc, nhãn chỉ có số. Nhãn số
+  liệu hiện khi `values !== false` (đường/vùng: chỉ khi 1 chuỗi). Thác nước tự thêm cột "Tổng" + đường nối. Tròn/vành khuyên: chú giải có % từng lát, vành
+  khuyên ghi tổng ở giữa. Màu chuỗi `--ch0..7` (mẫu sáng đổi thứ tự để 2 chuỗi đầu tách màu rõ). `role="img"` + `aria-label` đọc đơn vị, tên chuỗi, số từng
+  hạng mục. Trang có `caption` → dòng "Nguồn số liệu" nhỏ dưới biểu đồ. Hộp chú thích (§29) dùng được trên trang biểu đồ.
+- Trình soạn thảo: bảng **"Dữ liệu biểu đồ"** (xem `06`) — gõ trực tiếp hoặc **dán bảng từ Excel/Google Sheets** (Tab hoặc ";"; cột đầu = hạng mục, hàng đầu =
+  tên chuỗi nếu có ô chữ hoặc toàn là năm). Đổi **Con số → Biểu đồ** (cùng họ `['stats','chart']` trong bảng chọn kiểu): số liệu dạng số → 1 chuỗi, hậu tố
+  chung → đơn vị (`chartFromStats`); ngược lại `statsFromChart` (chuỗi đầu, tối đa 8). Trang biểu đồ mới (chưa có số) nhận dữ liệu mẫu "Mục A–D".
