@@ -1,0 +1,10 @@
+{
+  "temporaryDatabasesRemainingBeforeTeardown": 0,
+  "mysqlContainerRemoved": "codex-ct-mysql-20261109",
+  "networkRemoved": "codex-ct-audit-20261109",
+  "mysqlAnonymousVolumeRemoved": "668a0680e127d09e68eb93c7511e8a81758f96e1a7956a8443c29d74be56725c",
+  "disposableAppContainers": "--rm",
+  "productionDataTouched": false,
+  "existing8088TestAccountsCreated": 0,
+  "retained": "audit reports, logs, probes, screenshots, isolated source snapshot under repo tmp"
+}

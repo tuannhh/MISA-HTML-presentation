@@ -1,5 +1,14 @@
 # 10 — Lịch sử phát triển
 
+## 2026-11-09 — Audit độc lập CT (Codex) + phản biện (Claude)
+
+- Codex audit chỉ đọc 11 mục (HEAD `3e2c5d3`): `docs/audits/2026-11-09-ct-11-muc/01-audit.md`, bằng chứng `02` + `evidence/`, kế hoạch `03`. Kết luận chưa
+  merge: CT-001 P0 (HTML nhập vào gọi mạng được qua popup/WebSocket), CT-002/003/004/005/006/008 P1, CT-007/009 P2. Unit 315/315, integration 44/44.
+- Claude phản biện ở `04-phan-bien-claude.md`: đồng ý cả 9 là lỗi thật. Đã tự tái hiện CT-001 và CT-008 (CT-008 rộng hơn: mọi số có 3 chữ số thập phân). Đề
+  xuất P2 cho CT-003/004/005; CT-001 sửa bằng proxy chết cấp tiến trình Chromium (thử: 9 kênh → 0 request,
+  `evidence/claude-ct001-proxy-probe.log`), worker không egress để cổng G; CT-002 sửa bằng kiểm số trang + gọi lại 1 lần + cảnh báo ở bước duyệt dàn ý.
+- Việc cần làm: `05-viec-can-sua.md` + mục **CT-FIX** trong `docs/ROADMAP.md` (chặn merge `main`). Chưa sửa mã.
+
 ## 2026-11-09 — Cải tiến 11 mục, Đợt 5b: sơ đồ + biểu đồ có bảng dữ liệu (mục 8 phần 2)
 
 - Mới: `shared/deck/chart.js` (`CHART_LIMITS`, `parseNum`, `cleanChart`, `parseTable`, `chartFromStats`/`statsFromChart`, `niceScale`, `fmtNum`, `withUnit`),

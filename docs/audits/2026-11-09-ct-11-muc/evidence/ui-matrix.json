@@ -1,0 +1,717 @@
+[
+  {
+    "surface": "desktop",
+    "route": "decks",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "login": false,
+    "smallButtons": [
+      {
+        "label": "Chuyển ứng dụng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "MMISA Presentation",
+        "width": 228,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản Người thử ct-ui 1",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Tạo bài mới",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Bài của tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Được chia sẻ với tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thư viện công khai",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thu gọn menu",
+        "width": 199,
+        "height": 40
+      },
+      {
+        "label": "Tạo bài mới",
+        "width": 121,
+        "height": 32
+      },
+      {
+        "label": "Bài của tôi",
+        "width": 89,
+        "height": 34
+      },
+      {
+        "label": "Được chia sẻ với tôi",
+        "width": 145,
+        "height": 34
+      },
+      {
+        "label": "Thư viện công khai",
+        "width": 142,
+        "height": 34
+      },
+      {
+        "label": "Bài của tôi",
+        "width": 105,
+        "height": 28
+      },
+      {
+        "label": "Thư mục mới",
+        "width": 133,
+        "height": 32
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      }
+    ],
+    "errors": []
+  },
+  {
+    "surface": "desktop",
+    "route": "create",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "login": false,
+    "smallButtons": [
+      {
+        "label": "Chuyển ứng dụng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "MMISA Presentation",
+        "width": 228,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản Người thử ct-ui 1",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Tạo bài mới",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Bài của tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Được chia sẻ với tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thư viện công khai",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thu gọn menu",
+        "width": 199,
+        "height": 40
+      },
+      {
+        "label": "Tải tệp lên",
+        "width": 89,
+        "height": 30
+      },
+      {
+        "label": "Dán đường link",
+        "width": 117,
+        "height": 30
+      },
+      {
+        "label": "Nhập nội dung",
+        "width": 115,
+        "height": 30
+      },
+      {
+        "label": "Hủy",
+        "width": 80,
+        "height": 32
+      },
+      {
+        "label": "Lập dàn ý bằng AI",
+        "width": 162,
+        "height": 32
+      }
+    ],
+    "errors": []
+  },
+  {
+    "surface": "desktop",
+    "route": "outline",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "login": false,
+    "smallButtons": [
+      {
+        "label": "Chuyển ứng dụng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "MMISA Presentation",
+        "width": 228,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản Người thử ct-ui 1",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Tạo bài mới",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Bài của tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Được chia sẻ với tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thư viện công khai",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thu gọn menu",
+        "width": 199,
+        "height": 40
+      },
+      {
+        "label": "Về danh sách",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Xóa",
+        "width": 80,
+        "height": 32
+      },
+      {
+        "label": "Trang bìa",
+        "width": 180,
+        "height": 36
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Chuyển dòng lên",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Chuyển dòng xuống",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Xoá dòng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Thêm dòng",
+        "width": 121,
+        "height": 32
+      },
+      {
+        "label": "Thêm ảnh / video",
+        "width": 158,
+        "height": 32
+      },
+      {
+        "label": "Ghi chú",
+        "width": 97,
+        "height": 32
+      },
+      {
+        "label": "Con số nổi bật",
+        "width": 180,
+        "height": 36
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Chuyển dòng lên",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Chuyển dòng xuống",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Xoá dòng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Chuyển dòng lên",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Chuyển dòng xuống",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Xoá dòng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Chuyển dòng lên",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Chuyển dòng xuống",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Xoá dòng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Thêm dòng",
+        "width": 121,
+        "height": 32
+      },
+      {
+        "label": "Thêm ảnh / video",
+        "width": 158,
+        "height": 32
+      },
+      {
+        "label": "Ghi chú",
+        "width": 97,
+        "height": 32
+      },
+      {
+        "label": "Màu sắc",
+        "width": 77,
+        "height": 30
+      },
+      {
+        "label": "Nền",
+        "width": 49,
+        "height": 30
+      },
+      {
+        "label": "Phông chữ",
+        "width": 91,
+        "height": 30
+      },
+      {
+        "label": "Logo",
+        "width": 55,
+        "height": 30
+      },
+      {
+        "label": "Thương hiệu",
+        "width": 102,
+        "height": 30
+      },
+      {
+        "label": "Hủy thay đổi",
+        "width": 106,
+        "height": 32
+      },
+      {
+        "label": "Lưu nháp",
+        "width": 108,
+        "height": 32
+      },
+      {
+        "label": "Dựng bài",
+        "width": 106,
+        "height": 32
+      }
+    ],
+    "errors": []
+  },
+  {
+    "surface": "desktop",
+    "route": "edit",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "login": false,
+    "smallButtons": [
+      {
+        "label": "Chuyển ứng dụng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "MMISA Presentation",
+        "width": 228,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản Người thử ct-ui 1",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Tạo bài mới",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Bài của tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Được chia sẻ với tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thư viện công khai",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thu gọn menu",
+        "width": 199,
+        "height": 40
+      },
+      {
+        "label": "Về danh sách",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Hoàn tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Làm lại",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "16:9 — Màn hình rộng",
+        "width": 180,
+        "height": 36
+      },
+      {
+        "label": "Phiên bản",
+        "width": 114,
+        "height": 32
+      },
+      {
+        "label": "Chia sẻ",
+        "width": 98,
+        "height": 32
+      },
+      {
+        "label": "Trình chiếu",
+        "width": 121,
+        "height": 32
+      },
+      {
+        "label": "Tải xuống",
+        "width": 128,
+        "height": 32
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Thêm trang",
+        "width": 124,
+        "height": 32
+      },
+      {
+        "label": "1Biểu đồ thử nghiệmBiểu đồ",
+        "width": 175,
+        "height": 34
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "2Kết quả nổi bậtCon số nổi bật",
+        "width": 175,
+        "height": 34
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "3Lộ trình triển khaiQuy trình",
+        "width": 175,
+        "height": 34
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "4Cách làm cũ và mớiSo sánh",
+        "width": 175,
+        "height": 34
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "5Cảm ơn quý kháchTrang kết",
+        "width": 175,
+        "height": 34
+      },
+      {
+        "label": "Thêm thao tác",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Nội dung trang",
+        "width": 118,
+        "height": 34
+      },
+      {
+        "label": "Thiết lập bài",
+        "width": 100,
+        "height": 34
+      },
+      {
+        "label": "Biểu đồ",
+        "width": 367,
+        "height": 36
+      },
+      {
+        "label": "Đổi sang bố cục khác — giữ nguyên nội dung",
+        "width": 301,
+        "height": 18
+      },
+      {
+        "label": "Không có",
+        "width": 367,
+        "height": 36
+      },
+      {
+        "label": "Theo cả bài",
+        "width": 367,
+        "height": 36
+      },
+      {
+        "label": "Hủy thay đổi",
+        "width": 106,
+        "height": 32
+      },
+      {
+        "label": "Lưu",
+        "width": 80,
+        "height": 32
+      }
+    ],
+    "errors": []
+  },
+  {
+    "surface": "desktop",
+    "route": "view",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "login": false,
+    "smallButtons": [
+      {
+        "label": "Chuyển ứng dụng",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "MMISA Presentation",
+        "width": 228,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản Người thử ct-ui 1",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Tạo bài mới",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Bài của tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Được chia sẻ với tôi",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thư viện công khai",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Tài khoản",
+        "width": 183,
+        "height": 32
+      },
+      {
+        "label": "Thu gọn menu",
+        "width": 199,
+        "height": 40
+      },
+      {
+        "label": "Quay lại",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Trước",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Sau",
+        "width": 32,
+        "height": 32
+      },
+      {
+        "label": "Toàn màn hình",
+        "width": 143,
+        "height": 32
+      },
+      {
+        "label": "Tải xuống",
+        "width": 128,
+        "height": 32
+      },
+      {
+        "label": "Chỉnh sửa",
+        "width": 112,
+        "height": 32
+      }
+    ],
+    "errors": []
+  },
+  {
+    "surface": "mobile",
+    "route": "decks",
+    "width": 390,
+    "scrollWidth": 390,
+    "login": false,
+    "smallButtons": [],
+    "errors": []
+  },
+  {
+    "surface": "mobile",
+    "route": "create",
+    "width": 390,
+    "scrollWidth": 390,
+    "login": false,
+    "smallButtons": [],
+    "errors": []
+  },
+  {
+    "surface": "mobile",
+    "route": "outline",
+    "width": 390,
+    "scrollWidth": 390,
+    "login": false,
+    "smallButtons": [],
+    "errors": []
+  },
+  {
+    "surface": "mobile",
+    "route": "edit",
+    "width": 390,
+    "scrollWidth": 390,
+    "login": false,
+    "smallButtons": [],
+    "errors": []
+  },
+  {
+    "surface": "mobile",
+    "route": "view",
+    "width": 390,
+    "scrollWidth": 390,
+    "login": false,
+    "smallButtons": [],
+    "errors": []
+  }
+]

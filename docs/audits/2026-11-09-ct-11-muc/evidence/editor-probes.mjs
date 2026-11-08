@@ -1,0 +1,14 @@
+import {register} from 'node:module';
+register('./snapshot/test/helpers/alias-loader.mjs',import.meta.url);
+const {useEditor}=await import('./snapshot/frontend/src/composables/useEditor.js');
+const {useImageDrop}=await import('./snapshot/frontend/src/composables/useImageDrop.js');
+const {ref}=await import('vue');
+globalThis.window={addEventListener(){},removeEventListener(){}};
+globalThis.__fakeApi=async()=>({data:{id:'D1',status:'ready',canEdit:true,isOwner:true,specVersion:1,title:'Audit',ratio:'16:9',assets:[],spec:{title:'Audit',slides:[{id:'s1',layout:'bullets',title:'List',items:Array.from({length:12},(_,i)=>({title:'Mục '+(i+1),text:'Chi tiết '+(i+1)}))}]}}});
+const ed=useEditor('D1');await ed.load();ed.changeLayout('timeline');const after=ed.slide.value.steps.length;ed.changeLayout('bullets');
+console.log(JSON.stringify({case:'layout-roundtrip',before:12,timeline:after,returned:ed.slide.value.items.length,lost:['Mục 11','Mục 12'].filter(t=>!ed.slide.value.items.some(x=>x.title===t))}));
+let release;const pending=new Promise(r=>release=r);const inserted=[];const messages=[];
+const draft=ref({spec:{slides:[{id:'A',layout:'free'},{id:'B',layout:'free'}]}});const selected=ref(0);
+const drop=useImageDrop({ed:{uploadImage:()=>pending},live:{addElement:el=>inserted.push({slide:draft.value.spec.slides[selected.value]?.id,asset:el.image.asset})},draft,deck:ref({ratio:'16:9'}),selected,toast:{success:m=>messages.push(m),error:m=>messages.push(m),info:m=>messages.push(m)}});
+const task=drop.onDrop({index:0,files:[{type:'image/png'}]});draft.value.spec.slides.splice(0,1);release({id:'asset-test'});await task;
+console.log(JSON.stringify({case:'drop-delete-race',originalTarget:'A',inserted,messages}));

@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-09 Asia/Ho_Chi_Minh",
+  "base": "827da35",
+  "head": "3e2c5d36cf4d03c9b9b10e9cd297e29e790af673",
+  "branch": "feature/cai-tien-11-muc",
+  "realGeminiCalls": 0,
+  "nodeHost": "v24.16.0",
+  "nodeContainer": "v24.22.2",
+  "appImage": "misa-presentation:latest",
+  "appImageId": "sha256:0f4230dab9a1794241a4e9932122796410ddd9a7dfd6711eb6d5ba254c57788b",
+  "mysqlImage": "mysql:8.4",
+  "runtimeSourceFilesMatched": 131
+}

@@ -5,6 +5,25 @@ Nguồn: review chặng A của Codex ([09-review-chang-a-codex.md](audits/2026-
 
 Thứ tự: **A bổ sung ✅ → P (Publish) ✅ → H + L (hyperlink, trang Liên hệ / Ưu đãi — đề xuất 12/10) → B → Gate DevOps → C (khi có số đo)**. Mỗi sửa lỗi theo đỏ → xanh: test tái hiện trước, xác nhận đỏ, sửa, xác nhận xanh.
 
+## CT-FIX — Sửa sau audit độc lập CT (09/11/2026) — ⏳ chặn merge `main`
+
+Codex audit độc lập 11 mục (`docs/audits/2026-11-09-ct-11-muc/01-audit.md`): 1 P0 + 6 P1 + 2 P2. Claude phản biện (`04-phan-bien-claude.md`): đồng ý cả 9
+là lỗi thật, đề xuất hạ CT-003/004/005 xuống P2 và cách sửa gọn hơn cho CT-001/002 (phần nặng chuyển sang cổng production). **Danh sách việc + cách sửa +
+test: `docs/audits/2026-11-09-ct-11-muc/05-viec-can-sua.md`** (~3–4 ngày công).
+
+| # | ID | Mức | Việc | Trạng thái |
+|---|---|---|---|---|
+| 1 | CT-001 | P0 | Chặn mạng cấp tiến trình Chromium cho HTML nhập vào (popup/WebSocket đang lọt) | ⏳ |
+| 2 | CT-008 | P1 | Ô số biểu đồ: 0,123 → 123 khi sửa (tách bộ đọc ô nhập / dán bảng) | ⏳ |
+| 3 | CT-006 | P1 | Đổi bố cục 12 mục → Quy trình mất 2 mục | ⏳ |
+| 4 | CT-002 | P1 | Giữ nguyên nội dung: kiểm số trang, cảnh báo, không cắt chữ im lặng | ⏳ |
+| 5 | CT-003 | P2 | Video hỏng lọt qua đường tạo bài / nhập HTML | ⏳ |
+| 6 | CT-004 | P2 | Tệp nén mồ côi khi DB lỗi | ⏳ |
+| 7 | CT-005 | P2 | Trần tải video cùng lúc + semaphore kiểm video | ⏳ |
+| 8 | CT-007 | P2 | Ảnh đang tải chèn nhầm trang khi trang đích bị xoá | ⏳ |
+| 9 | CT-009 | P2 | Nút chữ cao 18px trên mobile → 44px | ⏳ |
+| 10 | — | — | Codex audit xác nhận trên bản sửa → mới merge `main` | ⏳ |
+
 ## CT — Cải tiến 11 mục (yêu cầu chủ dự án 08/11/2026) — xong cả 5 đợt 09/11/2026, nhánh `feature/cai-tien-11-muc` (chưa merge `main`)
 
 Làm theo 5 đợt (chủ dự án chốt). Nhánh tách từ `main` 827da35; nhánh đã push lên GitHub sau Đợt 4 (08/11/2026); `main` chưa merge/push (chỉ làm khi chủ dự án yêu cầu). Mỗi đợt: code → unit test →
