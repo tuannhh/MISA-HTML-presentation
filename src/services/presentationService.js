@@ -9,7 +9,8 @@
 //   viewer — được mời xem hoặc bài công khai: xem, trình chiếu, tải, nhân bản.
 // Thao tác chỉ chủ bài (xoá, công khai, mời người, khôi phục, dàn ý) dùng owned().
 import { randomUUID, randomBytes } from 'node:crypto';
-import { open, readFile, rm } from 'node:fs/promises';
+import { mkdir, open, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { logger } from '../lib/logger.js';
 import { createJobTracker } from '../lib/jobTracker.js';
 import { createCoalescingQueue } from '../lib/coalescingQueue.js';
@@ -22,6 +23,8 @@ import { collectSourceFacts } from './sourceFacts.js';
 import { buildCaseIndex, deckTexts, sentenceCaseOutline, sentenceCaseSpec } from '../../shared/deck/textCase.js';
 import { precheckSource, precheckMedia, ingestSource, fitPieces } from './ingestService.js';
 import { prepareMedia } from './mediaService.js';
+import { paginateSource, quickPageCount, splitTextPages, tooManyPages, KEEP_MAX_PAGES } from './pageSource.js';
+import { looksLikeHtml, stripHeavyMedia, decodeDataImage, assignVideos, designSlide, slidesText, MAX_IMPORT_SLIDES, MAX_LIGHT_HTML } from './htmlDeckService.js';
 import { extractVisuals, mergeEmbedded } from './visualService.js';
 import { TONE_THEMES, CONTACT_LAYOUTS } from '../../shared/deck/render.js';
 import { THEME_PRESETS, CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
@@ -110,6 +113,14 @@ export function parseThemeChoice(input) {
   return { tone: preset.tone, theme, palette: null };
 }
 
+const truthy = (v) => ['1', 'true', 'on', 'yes'].includes(String(v ?? '').trim().toLowerCase());
+// Khung trình duyệt khi đọc bài HTML: cạnh dài 1920 px theo tỷ lệ bài (bài HTML lệch tỷ lệ → ảnh chụp đặt trọn khung).
+export function importViewport(ratio) {
+  const [rw, rh] = String(ratio || '16:9').split(':').map(Number);
+  if (!(rw > 0 && rh > 0)) return { width: 1920, height: 1080 };
+  return rw >= rh ? { width: 1920, height: Math.round((1920 * rh) / rw) } : { width: Math.round((1920 * rw) / rh), height: 1920 };
+}
+
 export function createPresentationService({ config, repos, storage, gemini, browser, signer, audit, stock, templates, folders }) {
   const { presentations, assets, versions } = repos;
   const genQueue = new Semaphore(config.limits.generationConcurrency);
@@ -156,6 +167,11 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const autoSlides = String(input.slideCount ?? 'auto').trim().toLowerCase() === 'auto';
     const slideCount = autoSlides ? null : Math.min(40, Math.max(3, Number.parseInt(input.slideCount, 10) || 12));
     const instructions = String(input.instructions || '').trim().slice(0, 2000);
+    // "Giữ nguyên nội dung và số trang": mỗi trang nguồn → 1 trang, chép nguyên văn (từ chối khi vượt KEEP_MAX_PAGES trang).
+    // Bài HTML làm ở công cụ khác: 'design' = giữ nguyên thiết kế (mỗi trang thành ảnh + video, không qua AI);
+    // 'edit' = chuyển thành bài sửa được (đọc chữ/ảnh/video từng trang → dàn ý AI như tư liệu thường).
+    const keepOriginal = truthy(input.keepOriginal);
+    const htmlMode = input.htmlMode === 'design' ? 'design' : input.htmlMode === 'edit' ? 'edit' : null;
     // Tệp multer: tư liệu (files) + media gửi kèm (media, ảnh bìa video posters) — xoá hết khi lỗi hoặc job xong.
     const uploads = [...(input.files || []), ...(input.media || []), ...(input.posters || [])];
     let src;
@@ -171,6 +187,17 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       }
       src = await precheckSource({ files: input.files, url: input.url, urls: input.urls, text: input.text }, config.limits, { driveFolders: Boolean(config.google.apiKey) });
       userMedia = await precheckMedia(input.media, input.posters, config.limits);
+      // Tệp HTML (nhận diện theo nội dung, không theo đuôi tệp).
+      for (const f of src.files || []) if (f.kind === 'text' && looksLikeHtml(await readHead(f.path, 16384))) f.html = true;
+      if (htmlMode === 'design' && !(src.files?.length === 1 && src.files[0].html)) throw badRequest('Giữ nguyên thiết kế: chọn đúng 1 tệp bài trình bày HTML', 'HTML_REQUIRED');
+      if (htmlMode === 'design' && (userMedia.images.length || userMedia.videos.length)) throw badRequest('Giữ nguyên thiết kế không kèm ảnh/video — thêm media sau khi nhập bài', 'MEDIA_NOT_ALLOWED');
+      // Đếm trang sớm (PDF, PPTX) — vượt giới hạn thì báo ngay, không vào hàng chờ.
+      if (keepOriginal && htmlMode !== 'design') {
+        let n = 0;
+        for (const f of src.files || []) n += (await quickPageCount(f)) || 0;
+        if (src.sourceKind === 'text') n += splitTextPages(input.text)?.length || 0;
+        if (n > KEEP_MAX_PAGES) throw tooManyPages(n);
+      }
       const total = [...(input.files || []), ...(input.media || [])].reduce((n, f) => n + (f.size || 0), 0);
       if (total > config.limits.maxUploadMb * 1048576) throw tooLarge(`Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB`, 'UPLOAD_TOO_LARGE');
       // Giữ chỗ trong hàng TRƯỚC khi ghi DB (A03): nhiều yêu cầu cùng lúc không cùng lọt qua kiểm tra rồi vượt trần.
@@ -188,8 +215,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const aiImages = config.aiImages.enabled && config.aiImages.perDeck > 0 && !['0', 'false', 'off', 'no'].includes(String(input.aiImages ?? '1').trim().toLowerCase());
     let code;
     try {
-      code = await withCode((c) => presentations.createForTenant(user.id, { id, code: c, title, ratio, sourceKind: src.sourceKind, sourceLabel: src.sourceLabel, instructions, status: 'outlining' }));
-      await audit.record({ actorId: user.id, action: 'presentation.create', targetType: 'presentation', targetId: id, ip, meta: { source: src.sourceKind, files: src.files?.length || 0, mediaImages: userMedia.images.length, mediaVideos: userMedia.videos.length, ratio, slideCount: slideCount ?? 'auto', tone, theme: choice.theme, aiImages } });
+      code = await withCode((c) => presentations.createForTenant(user.id, { id, code: c, title, ratio, sourceKind: src.sourceKind, sourceLabel: src.sourceLabel, instructions, status: htmlMode === 'design' ? 'generating' : 'outlining' }));
+      await audit.record({ actorId: user.id, action: htmlMode === 'design' ? 'presentation.import' : 'presentation.create', targetType: 'presentation', targetId: id, ip, meta: { source: src.sourceKind, files: src.files?.length || 0, mediaImages: userMedia.images.length, mediaVideos: userMedia.videos.length, ratio, slideCount: slideCount ?? 'auto', tone, theme: choice.theme, aiImages, keepOriginal, htmlMode } });
     } catch (err) {
       ticket.release();
       await removeUploads(uploads);
@@ -197,12 +224,116 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     }
 
     // Chạy nền; client theo dõi trạng thái bằng GET /api/presentations/:id.
-    const job = { urls: src.urls, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages, templateId: input.templateId ? String(input.templateId) : null };
+    const job = { urls: src.urls, text: input.text, files: src.files, userMedia, title: input.title, ratio, slideCount, autoSlides, tone, choice, instructions, sourceLabel: src.sourceLabel, aiImages, keepOriginal, htmlMode, templateId: input.templateId ? String(input.templateId) : null };
+    const run = htmlMode === 'design' ? jobs.wrap(id, 'import', () => importHtmlDesign(user.id, id, job)) : jobs.wrap(id, 'outline', () => generateOutline(user.id, id, job));
     ticket
-      .run(jobs.wrap(id, 'outline', () => generateOutline(user.id, id, job)))
+      .run(run)
       .catch((err) => logger.error('outline_unhandled', { id, err }))
       .finally(() => removeUploads(uploads));
-    return { id, code, title, status: 'outlining' };
+    return { id, code, title, status: htmlMode === 'design' ? 'generating' : 'outlining' };
+  }
+
+  /* ---------------- nhập bài trình bày HTML làm ở công cụ khác ---------------- */
+  // Đọc 1 tệp HTML: tách video nhúng (không đưa trăm MB vào trình duyệt) → Chromium cô lập (chặn mạng) đi qua từng trang.
+  // limit: trần số trang; strict → vượt trần thì từ chối (giữ nguyên thiết kế / giữ nguyên nội dung).
+  async function analyseHtml(file, { ratio, shots, maxVideos, limit, strict }) {
+    const buf = await readFile(file.path);
+    const { html, videos, skipped } = stripHeavyMedia(buf, { maxVideos, maxVideoBytes: config.limits.maxVideoMb * 1048576 });
+    if (html.length > MAX_LIGHT_HTML) throw unprocessable(`"${file.name}": phần trang HTML (không tính video) quá lớn để đọc — tối đa ${MAX_LIGHT_HTML / 1048576} MB`, 'HTML_TOO_LARGE');
+    let res;
+    try {
+      res = await browser.inspectHtmlDeck(html, { ...importViewport(ratio), shots, refs: videos.map((v) => v.ref), maxSlides: limit, tooMany: strict });
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 503) throw unavailable(`Chưa đọc được bài "${file.name}" (quá thời gian hoặc trình duyệt lỗi), vui lòng thử lại`, 'HTML_IMPORT_FAILED');
+      throw err;
+    }
+    if (strict && res.total > limit) throw unprocessable(`Bài "${file.name}" có ${res.total} trang — vượt giới hạn ${limit} trang. Hãy tách bài thành nhiều phần hoặc chọn "AI biên tập lại".`, 'TOO_MANY_PAGES');
+    if (!res.slides.length) throw unprocessable(`Không tìm thấy trang nào trong "${file.name}"`, 'SOURCE_EMPTY');
+    return { ...res, videos, skipped };
+  }
+
+  async function storeVideoBuffer(tenantId, id, v, name) {
+    const assetId = randomUUID();
+    const key = assetKey(tenantId, id, assetId, v.type);
+    await storage.put(key, v.buffer);
+    await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[v.type], bytes: v.buffer.length, width: null, height: null, storageKey: key, originalName: name });
+    return assetId;
+  }
+
+  // "Giữ nguyên thiết kế": mỗi trang → trang tự do gồm ảnh chụp trang (sau bước hiện nội dung cuối cùng) + video đặt đúng khung
+  // video của trang gốc. Không gọi AI; chữ từng trang lưu vào ghi chú (nếu bài gốc không có ghi chú) để tìm kiếm/thuyết trình.
+  async function importHtmlDesign(tenantId, id, input) {
+    const started = Date.now();
+    try {
+      const file = input.files[0];
+      const res = await analyseHtml(file, { ratio: input.ratio, shots: true, maxVideos: config.limits.maxVideosPerDeck, limit: KEEP_MAX_PAGES, strict: true });
+      const deck = { tenant_id: tenantId, id };
+      const byVideo = assignVideos(res.slides, res.videos);
+      const slides = [];
+      for (const [i, sl] of res.slides.entries()) {
+        const img = await normalizeImage(sl.shot, { maxSide: 1920, quality: 88 });
+        const shot = await storeImage(deck, 'image', img, `Trang ${i + 1}${sl.title ? ` - ${sl.title}` : ''}`.slice(0, 200));
+        const vids = [];
+        for (const [k, v] of (byVideo.get(i) || []).entries()) {
+          const title = `${sl.title || `Trang ${i + 1}`}${k ? ` (${k + 1})` : ''}`.slice(0, 200);
+          vids.push({ asset: await storeVideoBuffer(tenantId, id, v, `${title}.${v.type}`), title, box: sl.vbox });
+        }
+        const notes = sl.notes || String(sl.text || '').replace(/\s+/g, ' ').trim().slice(0, 1500);
+        slides.push(designSlide({ title: sl.title, notes, shotAsset: shot.id, fit: sl.fit, videos: vids }, randomUUID));
+      }
+      const { choice } = input;
+      const theme = choice.theme === 'auto' ? themeForTone(null, input.tone, TONE_THEMES) : choice.theme;
+      const title = String(input.title || '').trim() || res.title || file.name.replace(/\.[a-z0-9]+$/i, '');
+      const { spec } = normalizeSpec({ title, footer: '', theme, palette: choice.palette, font: { heading: DEFAULT_FONT, body: DEFAULT_FONT }, slides });
+      if (!spec.slides.length) throw unprocessable('Không nhập được trang nào từ tệp HTML', 'SOURCE_EMPTY');
+      dropForeignAssets(spec, new Set((await assets.listMediaForPresentation(id)).map((a) => a.id)));
+      await presentations.setGenerationResult(tenantId, id, { status: 'ready', spec, title: input.title ? null : spec.title });
+      logger.info('html_import_ready', { id, slides: spec.slides.length, videos: res.videos.length, videosSkipped: res.skipped, mode: res.mode, ms: Date.now() - started });
+      scheduleThumbnail(tenantId, id, 0);
+    } catch (err) {
+      const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi nhập bài trình bày. Vui lòng thử lại.';
+      if (!(err instanceof HttpError)) logger.error('html_import_failed', { id, err });
+      else logger.warn('html_import_failed', { id, code: err.code });
+      await presentations.setGenerationResult(tenantId, id, { status: 'failed', errorMessage: msg }).catch(() => {});
+    }
+  }
+
+  // "Chuyển thành bài sửa được": các tệp HTML → chữ từng trang ("--- Trang N ---") + ảnh nhúng + video (tệp tạm, như media gửi kèm);
+  // tệp khác đọc như thường. Trả tư liệu dạng ingestSource + video tạm + số trang của các bài HTML.
+  async function ingestWithHtml(input) {
+    const htmlFiles = (input.files || []).filter((f) => f.html);
+    const others = (input.files || []).filter((f) => !f.html);
+    const source = others.length ? await ingestSource({ ...input, files: others }, { limits: config.limits, googleApiKey: config.google.apiKey }) : { pieces: [], media: [], images: [], docs: [] };
+    source.docs ||= [];
+    const tmpDir = path.join(config.storage.tempDir, `html-${randomUUID()}`);
+    const videos = [];
+    let room = Math.max(0, config.limits.maxVideosPerDeck - (input.userMedia?.videos?.length || 0));
+    try {
+      for (const f of htmlFiles) {
+        const res = await analyseHtml(f, { ratio: input.ratio, shots: false, maxVideos: room, limit: input.keepOriginal ? KEEP_MAX_PAGES : MAX_IMPORT_SLIDES, strict: input.keepOriginal });
+        source.pieces.push({ label: f.name, text: slidesText(res.slides) });
+        const firstPage = new Map();
+        res.slides.forEach((sl, i) => sl.images.forEach((k) => firstPage.has(k) || firstPage.set(k, i)));
+        for (const [k, uri] of res.images.entries()) {
+          const buffer = decodeDataImage(uri);
+          if (buffer) source.images.push({ buffer, name: `${f.name} - ảnh ${k + 1}`.slice(0, 200), hint: `ảnh trên trang ${(firstPage.get(k) ?? 0) + 1} của bài HTML "${f.name}"` });
+        }
+        const byVideo = assignVideos(res.slides, res.videos);
+        for (const [i, list] of byVideo) {
+          for (const v of list) {
+            await mkdir(tmpDir, { recursive: true });
+            const p = path.join(tmpDir, `${randomUUID()}.${v.type}`);
+            await writeFile(p, v.buffer);
+            videos.push({ path: p, name: `Video trang ${i + 1}.${v.type}`, size: v.buffer.length, type: v.type, poster: null });
+          }
+        }
+        room = Math.max(0, room - res.videos.length);
+      }
+    } catch (err) {
+      await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      throw err;
+    }
+    return { source, videos, cleanup: () => rm(tmpDir, { recursive: true, force: true }).catch(() => {}) };
   }
 
   // Lưu media gửi kèm thành asset của bài (ảnh → WebP ≤1920px; video giữ nguyên tệp + ảnh bìa trình duyệt chụp) và chuẩn bị
@@ -240,15 +371,34 @@ export function createPresentationService({ config, repos, storage, gemini, brow
 
   async function generateOutline(tenantId, id, input) {
     const started = Date.now();
+    const cleanups = [];
     try {
-      const source = await ingestSource(input, { limits: config.limits, googleApiKey: config.google.apiKey });
+      let source;
+      let userMedia = input.userMedia;
+      if ((input.files || []).some((f) => f.html)) {
+        const h = await ingestWithHtml(input);
+        cleanups.push(h.cleanup);
+        source = h.source;
+        // Video tách từ bài HTML: đưa vào như video người dùng gửi kèm (bắt buộc có trong bài, AI đặt đúng trang).
+        userMedia = { images: input.userMedia?.images || [], videos: [...(input.userMedia?.videos || []), ...h.videos] };
+      } else source = await ingestSource(input, { limits: config.limits, googleApiKey: config.google.apiKey });
       if (!source.pieces.length && !source.media.length && !source.images.length) throw unprocessable('Không tìm thấy nội dung trong tài liệu', 'SOURCE_EMPTY');
+      const V = config.visuals;
+      // Giữ nguyên nội dung: chia tư liệu đúng theo trang gốc (đánh dấu "--- Trang N ---") + đếm trang; vượt giới hạn → từ chối.
+      let pageCount = null;
+      if (input.keepOriginal) {
+        const pg = await paginateSource(source, { pdftotext: V.pdftotext, soffice: V.soffice, office: V.office, officeTimeoutMs: V.officeTimeoutMs, tempDir: config.storage.tempDir });
+        cleanups.push(pg.cleanup);
+        pageCount = pg.pages;
+      }
+      const keep = !!input.keepOriginal;
+      // Sơ đồ đơn giản được VẼ LẠI (đổi chữ theo bố cục) chỉ khi AI biên tập; giữ nguyên nội dung → giữ ảnh sơ đồ gốc.
+      const isRedraw = (x) => !keep && !!x.redraw;
       // Media người dùng gửi kèm: lưu thành asset của bài trước khi gọi AI (AI xem để đặt đúng trang).
-      const user = await storeUserMedia(tenantId, id, input.userMedia);
+      const user = await storeUserMedia(tenantId, id, userMedia);
       let previewBytes = user.previewBytes;
       // Tư liệu có trang (PDF, slide/văn bản Office): render trang → AI nhận diện + cắt ảnh giao diện phần mềm và sơ đồ (ưu tiên đưa
       // vào bài) — đứng đầu danh sách ảnh để AI dựng dàn ý luôn được xem. Ảnh nhúng trùng hình đã cắt → gộp làm 1.
-      const V = config.visuals;
       // Ảnh tải lên riêng lẻ (ảnh chụp sơ đồ, màn hình…) cũng được xem như trang — gom 1 lượt gọi AI.
       const loose = source.images.filter((im) => im.standalone);
       const pages = [
@@ -263,10 +413,10 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const replaced = new Set(shots.map((x) => x.source).filter(Boolean));
       const { images: embedded, merged } = await mergeEmbedded(shots, source.images.filter((im) => !replaced.has(im)));
       const redraws = shots
-        .filter((x) => x.redraw)
+        .filter(isRedraw)
         .map((x, i) => ({ ref: `DR${i + 1}`, title: x.diagram?.title || '', where: x.name, ...x.redraw }))
         .map((r) => ({ ...r, points: redrawPoints(r) }));
-      const images = await normalizeExtractedImages([...shots.filter((x) => !x.redraw), ...embedded], { max: config.limits.maxImagesPerDeck });
+      const images = await normalizeExtractedImages([...shots.filter((x) => !isRedraw(x)), ...embedded], { max: config.limits.maxImagesPerDeck });
       const saveExtracted = async (img) => {
         const assetId = randomUUID();
         const key = assetKey(tenantId, id, assetId);
@@ -279,7 +429,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       // Ảnh gốc của sơ đồ đã vẽ lại: giữ trong thư viện ảnh của bài (KHÔNG đặt vào trang, không vào IMGn) — nếu AI chép sai nhãn,
       // người dùng vẫn lấy lại ảnh gốc được thay vì mất hẳn.
       const originals = await normalizeExtractedImages(
-        shots.filter((x) => x.redraw).map((x) => ({ buffer: x.buffer, name: `Ảnh gốc sơ đồ${x.diagram?.title ? ` - ${x.diagram.title}` : ''}`.slice(0, 200) })),
+        shots.filter(isRedraw).map((x) => ({ buffer: x.buffer, name: `Ảnh gốc sơ đồ${x.diagram?.title ? ` - ${x.diagram.title}` : ''}`.slice(0, 200) })),
         { max: Math.max(0, config.limits.maxImagesPerDeck - images.length) },
       );
       for (const img of originals) await saveExtracted(img);
@@ -295,7 +445,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         traits.push(await imageTraits(img.buffer).catch(() => null));
       }
       // PDF/ghi âm: đính kèm trực tiếp hoặc chuyển thành văn bản trước (tư liệu lớn) — xem mediaService.
-      const media = await prepareMedia(source.media, { gemini });
+      // PDF đã lấy được chữ từng trang (giữ nguyên nội dung) → gửi chữ đánh dấu trang thay cho tệp.
+      const media = await prepareMedia(source.media.filter((m) => !m.asText), { gemini });
       // Dữ kiện nguồn để đối chiếu: liên kết (AI chỉ được gắn liên kết có trong tư liệu) + chữ toàn bộ tư liệu (thông tin liên hệ).
       let facts;
       let raw;
@@ -304,7 +455,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         const text = fitPieces([...source.pieces, ...media.pieces], config.limits.maxSourceChars);
         raw = await gemini.generateOutline({
           text, media: media.direct, images: modelImages, userImages: user.images, userVideos: user.videos, redraws, links: facts.links,
-          slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: AUTO_MAX_SLIDES,
+          slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: keep ? KEEP_MAX_PAGES : AUTO_MAX_SLIDES, keepOriginal: keep, pages: pageCount,
           tone: input.tone, instructions: input.instructions, ratio: input.ratio, sourceLabel: input.sourceLabel,
         });
       } finally {
@@ -385,38 +536,45 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       for (const sl of draft.slides) {
         if (CONTACT_LAYOUTS.includes(sl.layout) && !sl.images.length && !sl.video && qrLeft.length) sl.images = [{ asset: qrLeft.shift(), caption: '', fit: 'contain' }];
       }
-      const { outline } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: input.autoSlides, slideCount: input.slideCount, aiImages: !!input.aiImages } });
+      const { outline } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: keep ? !pageCount : input.autoSlides, slideCount: keep ? pageCount : input.slideCount, aiImages: !!input.aiImages, keepOriginal: keep } });
       if (!outline.slides.length) throw unprocessable('AI không lập được dàn ý từ tài liệu này', 'AI_EMPTY');
       // Chống bịa: liên kết có URL không có trong tư liệu → bỏ (giữ nhãn); số điện thoại/email/website không có trong tư liệu → bỏ dòng.
       const verified = verifyOutlineFacts(outline, facts);
       // Tiêu đề AI hay "Viết Hoa Từng Chữ" → viết hoa đầu câu (giữ tên riêng có bằng chứng trong tư liệu, MISA/AMIS/…).
-      const recased = sentenceCaseOutline(outline, buildCaseIndex(facts.corpus));
+      // Giữ nguyên nội dung → giữ cả cách viết hoa của nguồn.
+      const recased = keep ? 0 : sentenceCaseOutline(outline, buildCaseIndex(facts.corpus));
+      // Giữ nguyên nội dung: bỏ ký hiệu gạch đầu dòng chép theo nguồn ("- ", "• ") — bố cục tự vẽ dấu đầu dòng, chữ giữ nguyên.
+      if (keep) for (const sl of outline.slides) sl.points = sl.points.map((p) => p.replace(/^\s*[-•*–]\s+/, '')).filter(Boolean);
       // Mã DRn AI ghi ở từng trang (ghép theo chỉ số TRƯỚC capOutline — sau đó bám theo đối tượng trang).
       const drRefs = new Map();
       outline.slides.forEach((sl, i) => {
         const ref = raw?.slides?.[i]?.diagram;
         if (typeof ref === 'string' && ref.trim()) drRefs.set(sl, ref);
       });
-      const maxSlides = input.autoSlides ? AUTO_MAX_SLIDES : input.slideCount;
+      const maxSlides = keep ? pageCount || KEEP_MAX_PAGES : input.autoSlides ? AUTO_MAX_SLIDES : input.slideCount;
       capOutline(outline, maxSlides);
       const placed = placeUserMedia(outline.slides, { images: required, videos: user.videos.map((v) => v.video) }, { room: Math.max(0, maxSlides - outline.slides.length) });
+      // Giữ nguyên nội dung: không tự thêm trang sơ đồ/ảnh giao diện (giữ đúng số trang nguồn).
+      const room = () => (keep ? 0 : Math.max(0, maxSlides - outline.slides.length));
       // Sơ đồ vẽ lại: sau media bắt buộc (không đè trang có ảnh/video), trước sơ đồ ảnh cắt + ảnh giao diện (không bắt buộc).
-      const rd = applyRedraws(outline.slides, redraws, { room: Math.max(0, maxSlides - outline.slides.length), refs: drRefs });
+      const rd = applyRedraws(outline.slides, redraws, { room: room(), refs: drRefs });
       // Sơ đồ: mỗi sơ đồ 1 trang ảnh lớn; sơ đồ AI chưa dùng → trang riêng cạnh nội dung liên quan khi còn hạn mức (không bắt buộc).
-      const dgPlaced = placeDiagrams(outline.slides, [...diagrams.values()], { room: Math.max(0, maxSlides - outline.slides.length) });
+      const dgPlaced = placeDiagrams(outline.slides, [...diagrams.values()], { room: room() });
       // Ảnh giao diện đã cắt mà AI chưa dùng: chèn vào trang chữ còn trống / gom thành trang ảnh khi còn hạn mức trang (không bắt buộc).
       const uiLeft = [...ui].filter((aid) => !outline.slides.some((sl) => (sl.images || []).some((im) => im.asset === aid))).map((aid) => ({ asset: aid, ...look.get(aid) }));
-      const uiPlaced = placeUserMedia(outline.slides, { images: uiLeft, videos: [] }, { room: Math.max(0, maxSlides - outline.slides.length), force: false, chunk: 4, title: 'Giao diện sản phẩm' });
+      const uiPlaced = placeUserMedia(outline.slides, { images: uiLeft, videos: [] }, { room: room(), force: false, chunk: 4, title: 'Giao diện sản phẩm' });
       if (input.templateId) outline.design = await designFromTemplate(tenantId, id, input.templateId, outline.design);
       await presentations.setOutlineResult(tenantId, id, { outline, title: input.title ? null : outline.title });
       const kinds = {};
       for (const k of kindOf.values()) if (k) kinds[k] = (kinds[k] || 0) + 1;
-      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, visualShots: shots.length, embeddedMerged: merged, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, diagrams: diagrams.size, diagramsPlaced: dgPlaced.placed, diagramsAdded: dgPlaced.added, redraws: redraws.length, redrawApplied: rd.applied, redrawAdded: rd.added, redrawConverted: rd.converted, droppedImages, kinds, qrImages: qrs.size, sourceLinks: facts.links.length, linksDropped: verified.links, contactLinesDropped: verified.contacts, recased, sourceType: raw?.sourceType, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
+      logger.info('outline_ready', { id, slides: outline.slides.length, images: assetIds.length, photos: photo.size, visualShots: shots.length, embeddedMerged: merged, uiImages: ui.size, uiAdded: uiPlaced.added, uiLeft: uiLeft.length, diagrams: diagrams.size, diagramsPlaced: dgPlaced.placed, diagramsAdded: dgPlaced.added, redraws: redraws.length, redrawApplied: rd.applied, redrawAdded: rd.added, redrawConverted: rd.converted, droppedImages, kinds, qrImages: qrs.size, sourceLinks: facts.links.length, linksDropped: verified.links, contactLinesDropped: verified.contacts, recased, sourceType: raw?.sourceType, keepOriginal: keep, pages: pageCount, userImages: user.images.length, userVideos: user.videos.length, mediaAddedSlides: placed.added, mediaMoved: placed.moved, ms: Date.now() - started });
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi lập dàn ý. Vui lòng thử lại.';
       if (!(err instanceof HttpError)) logger.error('outline_failed', { id, err });
       else logger.warn('outline_failed', { id, code: err.code });
       await presentations.setGenerationResult(tenantId, id, { status: 'failed', errorMessage: msg }).catch(() => {});
+    } finally {
+      for (const c of cleanups) await c();
     }
   }
 
@@ -479,7 +637,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const row = await presentations.findOwned(tenantId, id);
       if (!row?.outline) throw unprocessable('Không tìm thấy dàn ý', 'NOT_OUTLINE');
       const aiImages = row.outline.options?.aiImages === true && config.aiImages.enabled && config.aiImages.perDeck > 0;
-      const raw = await gemini.designDeck({ outline: row.outline, ratio: row.ratio, instructions: row.instructions, imagePrompts: aiImages });
+      const keep = row.outline.options?.keepOriginal === true;
+      const raw = await gemini.designDeck({ outline: row.outline, ratio: row.ratio, instructions: row.instructions, imagePrompts: aiImages, keepOriginal: keep });
       const composed = composeDeckFromOutline(row.outline, mapModelDeck(raw, []).slides);
       // Câu lệnh ảnh minh hoạ theo thứ tự trang (normalizeSpec bỏ trường lạ nên lấy trước).
       const prompts = composed.slides.map((sl) => (typeof sl.imagePrompt === 'string' ? sl.imagePrompt : ''));
@@ -488,7 +647,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       // Liên kết "[nhãn](URL)" của dàn ý → liên kết trên chữ của bài (mở tab mới khi trình chiếu).
       const linked = applyOutlineLinks(spec, row.outline);
       // Chữ AI dựng bài viết thêm (nhãn chủ đề, tiêu đề mục…) cũng về viết hoa đầu câu; bằng chứng tên riêng = nội dung dàn ý.
-      const recased = sentenceCaseSpec(spec, buildCaseIndex(deckTexts(row.outline)));
+      const recased = keep ? 0 : sentenceCaseSpec(spec, buildCaseIndex(deckTexts(row.outline)));
       const illustrated = aiImages ? await illustrate(tenantId, id, spec, prompts, row.outline.options?.tone) : 0;
       // Phong cách + biến thể từng trang chọn ngầm theo nội dung; hạt giống ngẫu nhiên → mỗi lần dựng một diện mạo khác.
       const [rw, rh] = String(row.ratio || '16:9').split(':').map(Number);

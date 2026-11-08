@@ -32,5 +32,19 @@ Thư mục này chứa **toàn bộ tri thức về dự án MISA Presentation**
 
 ## Audit và bàn giao mới nhất
 
+### Bàn giao 08/11/2026 — cải tiến 11 mục (đọc trước khi làm tiếp)
+- **Nhánh `feature/cai-tien-11-muc`** (từ `main` 827da35, **chưa push** — chỉ push khi chủ dự án yêu cầu). Đã xong + commit Đợt 1 (73eda47), Đợt 2 (704918a),
+  Đợt 3 (commit ngay sau 704918a). **Việc tiếp theo: Đợt 4 — video** (mục 3), rồi Đợt 5 (mục 8 bố cục, mục 11 chuyển động). Kế hoạch chi tiết +
+  yêu cầu gốc: [`docs/ROADMAP.md` mục CT](../docs/ROADMAP.md).
+- Môi trường: Docker local cổng 8088 (`docker compose up -d --build app` sau `npm run build`); Gemini qua Agent Platform (xem `07`). Chạy trên máy chủ MISA,
+  **không Cloud Run**. Không đọc/in/commit secret (`.env`, khoá service account).
+- Kiểm thử thật: tài khoản thử trong `tmp/e2e-user.json` (thư mục `tmp/` gitignore — **không in mật khẩu ra**; đăng nhập bằng script qua `/api/auth/csrf` +
+  `/api/auth/login`). Script mẫu: `tmp/e2e-dot3.mjs` (tạo bài qua API), `tmp/dot3-shots.mjs` (puppeteer-core + Chrome local, chụp desktop/mobile),
+  `tmp/verify-dot2*.mjs` (chỉ có trên máy đang làm — `tmp/` không vào Git; máy khác viết lại theo mẫu này). Khung soạn thảo là iframe sandbox → kiểm bằng puppeteer, không dùng browser pane của ứng dụng Claude (bị chặn).
+- Tệp mẫu nhập HTML: `/Users/tuanbui/Downloads/MISA_Xu_huong_lua_dao_va_Phan_xa_an_toan-4.html` (137 MB, 38 trang, 5 video).
+- Quy ước: mỗi thay đổi cập nhật `memory-bank/` (tệp liên quan + `10`); không chạy prettier lên tệp dự án (không có cấu hình → đổi định dạng cả tệp);
+  commit kết thúc bằng dòng `Co-Authored-By` theo quy ước; **không ghi tên sản phẩm tham khảo** (trang trình bày AI bên ngoài) vào mã, tài liệu, commit,
+  giao diện — chạy `git grep -i` tên đó trước khi commit, phải rỗng.
+
 - [Kế hoạch tiếp theo (`docs/ROADMAP.md`)](../docs/ROADMAP.md): A bổ sung A01–A06 → Publish HTML ra domain công khai → B → gate DevOps → C.
 - [Hồ sơ Codex 12/10/2026 — đọc trước khi tiếp tục trên máy khác](../docs/audits/2026-10-12-codex/README.md). Có audit gốc, phản hồi Claude, review commit `233d348`, log và probe tái hiện. Sáu finding A01–A06 còn mở; không hiểu việc lưu hồ sơ là đã sửa lỗi hoặc đã được duyệt sửa.

@@ -15,7 +15,7 @@ const IMAGE_EXT = new Set(IMAGES);
 export const SOURCE_ACCEPT = [
   ...[...SOURCE_EXT].map((e) => `.${e}`),
   '.doc', '.xls', '.ppt', '.pps', '.key', '.pages', '.numbers',
-  'application/pdf', 'text/plain', 'text/markdown', 'text/csv', 'audio/*', 'image/heic', 'image/heif',
+  'application/pdf', 'text/html', 'text/plain', 'text/markdown', 'text/csv', 'audio/*', 'image/heic', 'image/heif',
 ].join(',');
 export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/avif,image/heic,image/heif,.heic,.heif,.avif';
 
@@ -41,7 +41,7 @@ const ADVICE = {
 export function sourceProblem(file) {
   const e = ext(file.name);
   if (!e || SOURCE_EXT.has(e)) return null;
-  return `"${file.name}": ${ADVICE[e] || 'định dạng chưa hỗ trợ (dùng PPTX, DOCX, XLSX, PDF, CSV, TXT/MD, ảnh hoặc ghi âm)'}`;
+  return `"${file.name}": ${ADVICE[e] || 'định dạng chưa hỗ trợ (dùng PPTX, DOCX, XLSX, PDF, CSV, TXT/MD, HTML, ảnh hoặc ghi âm)'}`;
 }
 
 export const isImageFile = (file) => /^image\//.test(file.type || '') || IMAGE_EXT.has(ext(file.name));

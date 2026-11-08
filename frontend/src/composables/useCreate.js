@@ -1,8 +1,10 @@
 // Logic form "Tạo bài trình bày" dùng chung desktop/mobile: nguồn (nhiều tệp / tối đa 5 link / văn bản), tỷ lệ, tông màu
 // (nền tối/sáng + Tự động / mẫu / tuỳ chỉnh 2 màu), số trang (tự động/tuỳ chỉnh), yêu cầu thêm.
 // Nhập nội dung: chữ là cơ sở nội dung, ảnh/video gửi kèm (media) là thứ BẮT BUỘC đưa vào bài — AI đặt vào trang hợp nội dung.
+// Cách dùng nội dung: AI biên tập lại (mặc định) hoặc giữ nguyên nội dung + số trang nguồn (≤ KEEP_MAX_PAGES trang).
+// Tệp HTML (bài trình bày làm ở công cụ khác): giữ nguyên thiết kế (nhập thẳng thành bài, không qua dàn ý) hoặc chuyển thành bài sửa được.
 // Giới hạn khớp server (MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_CREATE_MEDIA, AUTO_MAX_SLIDES). Tạo xong → bước duyệt dàn ý.
-import { reactive, ref, computed, onBeforeUnmount } from 'vue';
+import { reactive, ref, computed, watch, onBeforeUnmount } from 'vue';
 import { api, uploadForm } from '@/lib/api.js';
 import { SOURCE_ACCEPT, sourceProblem, heicToJpeg, isImageFile, IMAGE_ACCEPT } from '@/lib/fileKinds.js';
 import { capturePoster, MAX_IMAGE_MB, MAX_VIDEO_MB, VIDEO_ACCEPT } from '@/composables/useMedia.js';
@@ -12,6 +14,9 @@ export const MAX_UPLOAD_MB = 300;
 export const MAX_UPLOAD_FILES = 20;
 export const MAX_TEXT_CHARS = 200000;
 export const AUTO_MAX_SLIDES = 25;
+// Giữ nguyên nội dung: tối đa số trang của dàn ý (SPEC_LIMITS.outlineSlides).
+export const KEEP_MAX_PAGES = 40;
+export const isHtmlFile = (f) => /\.html?$/i.test(f?.name || '') || f?.type === 'text/html';
 export const ACCEPT = SOURCE_ACCEPT;
 // Ảnh/video gửi kèm khi nhập nội dung.
 export const MAX_CREATE_MEDIA = 20;
@@ -31,6 +36,10 @@ export function useCreate() {
   const form = reactive({
     mode: 'file', files: [], media: [], urls: [{ id: 'u0', value: '' }], text: '', ratio: '16:9', tone: 'dark', theme: 'auto', primary: '', secondary: '',
     slideMode: 'auto', slideCount: 12, instructions: '', title: '',
+    // 'ai' = AI biên tập lại · 'keep' = giữ nguyên nội dung và số trang.
+    contentMode: 'ai',
+    // Tệp HTML: 'design' = giữ nguyên thiết kế · 'edit' = chuyển thành bài sửa được.
+    htmlMode: 'design',
     // AI tạo ảnh minh hoạ (Nano Banana 2 Lite) cho trang cần ảnh mà chưa có ảnh thật — mặc định bật.
     aiImages: true,
     // Mẫu thiết kế (của mình hoặc người khác chia sẻ cho mọi người trong MISA) — '' = không dùng, theo Tông màu.
@@ -50,6 +59,14 @@ export function useCreate() {
     }
   }
   loadTemplates();
+  // Có tệp HTML trong tư liệu → hỏi cách nhập; "giữ nguyên thiết kế" bỏ qua dàn ý AI (các tuỳ chọn AI ẩn đi).
+  const hasHtml = computed(() => form.mode === 'file' && form.files.some((f) => isHtmlFile(f.file)));
+  const importDesign = computed(() => hasHtml.value && form.htmlMode === 'design');
+  const keepContent = computed(() => !importDesign.value && form.contentMode === 'keep');
+  // Chuyển bài HTML thành bài sửa được: mặc định giữ nguyên nội dung (người dùng đổi lại được).
+  watch(() => form.htmlMode, (m) => {
+    if (m === 'edit') form.contentMode = 'keep';
+  });
   const errors = reactive({});
   const submitting = ref(false);
   const progress = ref(null); // % tải tệp lên khi đang gửi
@@ -89,7 +106,8 @@ export function useCreate() {
     if (form.mode === 'text' && form.text.length > MAX_TEXT_CHARS) errors.text = `Tối đa ${MAX_TEXT_CHARS.toLocaleString('vi-VN')} ký tự`;
     if (form.mode === 'text' && mediaBytes.value > MAX_UPLOAD_MB * MB) errors.media = `Tổng dung lượng ảnh/video tối đa ${MAX_UPLOAD_MB} MB`;
     if (form.title.length > 200) errors.title = 'Tên bài tối đa 200 ký tự';
-    if (form.slideMode === 'custom') {
+    if (importDesign.value && form.files.length !== 1) errors.file = 'Giữ nguyên thiết kế: chỉ chọn 1 tệp HTML (bỏ các tệp khác hoặc chọn "Chuyển thành bài sửa được")';
+    if (!keepContent.value && !importDesign.value && form.slideMode === 'custom') {
       const n = Number(form.slideCount);
       if (!Number.isInteger(n) || n < 3 || n > 40) errors.slideCount = 'Số trang từ 3 đến 40';
     }
@@ -125,6 +143,8 @@ export function useCreate() {
         if (form.secondary.trim()) fd.set('secondary', form.secondary.trim());
       }
       fd.set('slideCount', form.slideMode === 'auto' ? 'auto' : String(form.slideCount));
+      if (keepContent.value) fd.set('keepOriginal', '1');
+      if (hasHtml.value) fd.set('htmlMode', form.htmlMode);
       if (form.instructions.trim()) fd.set('instructions', form.instructions.trim());
       if (form.title.trim()) fd.set('title', form.title.trim());
       progress.value = form.mode === 'file' || (form.mode === 'text' && form.media.length) ? 0 : null;
@@ -260,7 +280,7 @@ export function useCreate() {
 
   return {
     form, errors, submitting, progress, submitError, totalBytes, validate, submit, fileList, onSelectFiles, onOversized, removeFile,
-    mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions,
+    mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions, hasHtml, importDesign, keepContent,
   };
 }
 
@@ -269,6 +289,23 @@ export const SOURCE_MODES = [
   { label: 'Dán đường link', value: 'url', key: 'url' },
   { label: 'Nhập nội dung', value: 'text', key: 'text' },
 ];
+
+export const CONTENT_MODES = [
+  { label: 'AI biên tập lại', value: 'ai' },
+  { label: 'Giữ nguyên nội dung và số trang', value: 'keep' },
+];
+export const HTML_MODES = [
+  { label: 'Giữ nguyên thiết kế', value: 'design' },
+  { label: 'Chuyển thành bài sửa được', value: 'edit' },
+];
+export const CONTENT_HINT = {
+  ai: 'AI sắp xếp lại mạch trình bày, viết gọn và chọn số trang phù hợp.',
+  keep: `Mỗi trang nguồn thành đúng 1 trang, giữ nguyên câu chữ và thứ tự (PDF, PowerPoint, Word, bài HTML: theo trang gốc; văn bản: ngăn trang bằng dòng chỉ có ---). Tối đa ${KEEP_MAX_PAGES} trang — vượt quá sẽ bị từ chối.`,
+};
+export const HTML_HINT = {
+  design: 'Mỗi trang giữ đúng giao diện gốc (thành ảnh, video vẫn phát được); không qua dàn ý AI. Thêm chữ, ảnh, video lên trang được ở trình soạn thảo.',
+  edit: 'AI đọc chữ, ảnh, video từng trang để lập dàn ý — sau đó dựng lại bằng giao diện của hệ thống, sửa được mọi chữ.',
+};
 
 export const SLIDE_MODES = [
   { label: `Tự động (tối đa ${AUTO_MAX_SLIDES})`, value: 'auto' },

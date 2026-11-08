@@ -30,7 +30,7 @@ export const AGENT_INLINE_MAX = 48 * MB;
 
 const readItem = (m) => (m.buffer ? Promise.resolve(m.buffer) : readFile(m.path));
 
-async function pdfPageCount(buffer) {
+export async function pdfPageCount(buffer) {
   try {
     return (await PDFDocument.load(buffer, { ignoreEncryption: true, updateMetadata: false })).getPageCount();
   } catch {

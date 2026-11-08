@@ -122,6 +122,7 @@ Guard bổ sung: `mustChangePassword=true` → mọi route (trừ `allowMustChan
 - `SOURCE_ACCEPT` liệt kê cả .doc/.xls/.ppt/.key/.pages/.numbers để người dùng chọn được và nhận hướng dẫn ngay (`sourceProblem`), thay vì tệp bị làm mờ không rõ lý do. Nhiều tệp lỗi → gộp tối đa 3 lý do + "và N tệp khác".
 - `heicToJpeg`: ảnh HEIC → JPEG ≤ 2560px trên trình duyệt (Safari); trình duyệt không giải mã được → lỗi `HEIC_UNSUPPORTED` kèm cách đổi. Dùng ở tư liệu (`useCreate`), ảnh trang + logo (`useMedia`).
 - `OutlineMedia.vue`: kéo-thả nhiều ảnh vào khung media của trang (desktop).
+- Trang Tạo bài (2026-11-08, Đợt 3): `useCreate` thêm `contentMode` ('ai' | 'keep' — "Cách dùng nội dung", giữ nguyên thì ẩn số trang, gợi ý ngăn trang `---` ở ô nội dung), `htmlMode` ('design' | 'edit' — khối "Bài trình bày HTML" hiện khi có tệp .html; chọn `edit` bật sẵn giữ nguyên nội dung), computed `hasHtml`/`importDesign`/`keepContent`. `importDesign` ẩn mẫu, tông màu, ảnh AI, số trang, yêu cầu AI; nút chính "Nhập bài trình bày" (mobile "Nhập bài"). Trang dàn ý: `generating` mà chưa có `outline` = đang nhập bài HTML (chữ "Đang nhập bài…"), xong tự mở trình soạn thảo.
 - `CreateMediaPicker.vue` (trang Tạo bài, tab Nhập nội dung — desktop + mobile `touch`): ảnh/video gửi kèm, lưới ảnh thu nhỏ (video hiện ảnh bìa + nhãn Video), nút bỏ 32px/44px, kéo-thả (desktop), tóm tắt "2 ảnh · 1 video · 1,3 MB"; logic ở `useCreate` (`addMedia`/`removeMedia`, giới hạn `MAX_CREATE_MEDIA` 20, video 10).
 
 ### Trình chiếu từng ý / 3D (2026-10-06)

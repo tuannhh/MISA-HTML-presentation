@@ -92,6 +92,7 @@ export const DECORS = Object.freeze({
   glow: { label: 'Quầng sáng nền', layouts: null },
   grid: { label: 'Lưới kẻ nền', layouts: null },
   bg: { label: 'Nền động (riêng trang này)', layouts: null },
+  ft: { label: 'Chân trang (tên bài, số trang)', layouts: null },
   art: { label: 'Hình trang trí trang bìa', layouts: ['cover'], pick: true },
   secno: { label: 'Số thứ tự phần cỡ lớn', layouts: ['section'], pick: true },
   qmark: { label: 'Dấu ngoặc kép lớn', layouts: ['quote'], pick: true },

@@ -35,7 +35,7 @@ useDeckUrl(deck, 'outline')
 // Chỉ hiện trình sửa khi bài đang chờ duyệt (sau "Dựng bài" draft vẫn còn nhưng trạng thái đã là generating).
 const editing = computed(() => !loading.value && !loadError.value && !!deck.value?.isOwner && deck.value.status === 'outline' && !!draft.value)
 const working = computed(() => ['outlining', 'generating'].includes(deck.value?.status))
-const shellTitle = computed(() => (deck.value?.status === 'outlining' ? 'Đang lập dàn ý' : deck.value?.status === 'generating' ? 'Đang dựng bài' : 'Duyệt dàn ý'))
+const shellTitle = computed(() => (deck.value?.status === 'outlining' ? 'Đang lập dàn ý' : deck.value?.status === 'generating' ? (deck.value.outline ? 'Đang dựng bài' : 'Đang nhập bài') : 'Duyệt dàn ý'))
 
 const titleError = computed(() => {
   const t = draft.value?.title ?? ''
@@ -194,13 +194,13 @@ onMounted(ol.load)
     <!-- AI đang lập dàn ý / đang dựng bài: useOutline tự hỏi lại trạng thái, xong tự chuyển màn -->
     <div v-else-if="working" class="flex flex-col items-center gap-4 px-6 py-16 text-center" role="status">
       <MSpinner :size="40" />
-      <p class="mds-mobile-readable text-[16px] font-semibold leading-6">{{ deck.status === 'outlining' ? `AI đang lập dàn ý “${deck.title}”` : `AI đang dựng “${deck.title}” theo dàn ý` }}</p>
+      <p class="mds-mobile-readable text-[16px] font-semibold leading-6">{{ deck.status === 'outlining' ? `AI đang lập dàn ý “${deck.title}”` : deck.outline ? `AI đang dựng “${deck.title}” theo dàn ý` : `Đang nhập bài “${deck.title}” — giữ nguyên thiết kế` }}</p>
       <JobProgress :queue="deck.queue" compact />
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>
     </div>
 
     <div v-else-if="deck?.status === 'failed'" class="px-4 py-10">
-      <MEmptyState type="no-result" title="AI chưa lập được dàn ý" :description="deck.errorMessage || 'Đã có lỗi xảy ra.'">
+      <MEmptyState type="no-result" :title="deck.outline || deck.sourceKind !== 'file' ? 'AI chưa lập được dàn ý' : 'Chưa tạo được bài trình bày'" :description="deck.errorMessage || 'Đã có lỗi xảy ra.'">
         <template #actions>
           <MButton variant="outline" @click="confirmRemove = true">Xóa bài</MButton>
           <MButton variant="primary" @click="router.push('/create')">Tạo lại</MButton>

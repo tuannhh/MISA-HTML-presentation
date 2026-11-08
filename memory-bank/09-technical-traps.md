@@ -398,3 +398,10 @@ Khi chép MDS mới đè lên: áp lại các vá này (tìm chú thích `[MISA 
 
 
 - Vue: truyền object chứa `ref`/`computed` (vd. kết quả composable `useFolderView`) qua 1 prop → template **không** tự mở `.value` ở thuộc tính lồng (`view.moveNodes` là ComputedRef). Bọc `reactive(props.view)` hoặc dùng `.value` rõ ràng (2026-11-08, `FolderDialogs.vue`).
+
+## Nhập bài HTML lạ (2026-11-08)
+- **Không regex trên chuỗi HTML trăm MB** (video base64 nhúng): backtracking treo tiến trình. Tách video bằng `Buffer.indexOf` duyệt tuyến tính (`stripHeavyMedia`) rồi mới đưa HTML nhẹ vào Chromium.
+- Bài HTML hay tự chạy hiệu ứng bằng JS khi chuyển trang (`go()`): bật lớp CSS "active" không đủ (chỉ thấy nền). Phải **bấm phím như người trình chiếu**; ép hiện chỉ là phương án dự phòng.
+- Số đếm chạy (count-up bằng requestAnimationFrame) không nằm trong `getAnimations()` → đọc ngay sẽ ra "0"; chờ chữ ổn định (so sánh innerText 350 ms/lần, tối đa ~2,5 giây).
+- Chữ IN HOA do CSS `text-transform` lọt vào `innerText` → bật tạm lớp `imp-plain` (text-transform none) khi đọc chữ.
+- Hàm chạy trong trang (`htmlDeckPage.js`) được puppeteer tuần tự hoá bằng `toString` → phải tự chứa, không dùng biến/hàm ngoài.

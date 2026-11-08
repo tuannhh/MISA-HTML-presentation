@@ -134,7 +134,7 @@ export async function sanitizeOffice(buffer) {
 
 // LibreOffice dùng chung hồ sơ người dùng → chạy song song dễ treo/khoá: xếp hàng từng lượt chuyển.
 let officeQueue = Promise.resolve();
-function officeToPdf(src, dir, { soffice, timeoutMs }) {
+export function officeToPdf(src, dir, { soffice, timeoutMs }) {
   const job = officeQueue.then(async () => {
     const profile = pathToFileURL(path.join(dir, 'lo-profile')).href;
     await run(soffice, [`-env:UserInstallation=${profile}`, '--headless', '--norestore', '--nologo', '--nolockcheck', '--convert-to', 'pdf', '--outdir', dir, src], {
@@ -236,6 +236,8 @@ export async function extractVisuals(docs, { gemini, bin = 'pdftoppm', soffice =
       let pdfPath = doc.path;
       if (doc.kind === 'images') {
         pdfPath = null;
+      } else if (doc.kind === 'office' && doc.pdfPath) {
+        pdfPath = doc.pdfPath; // đã chuyển sang PDF ở bước chia trang (chế độ giữ nguyên nội dung) — không chạy LibreOffice lần 2
       } else if (doc.kind === 'office') {
         step = 'office';
         const src = path.join(dir, `src.${doc.ext}`);

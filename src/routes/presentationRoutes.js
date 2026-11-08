@@ -79,7 +79,7 @@ export function presentationRoutes({ service, templates, sharing, publications, 
   });
 
   r.post('/', auth, limits.generate, capSourceBody, upload, async (req, res) => {
-    const body = pick(req.body, ['url', 'urls', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title', 'aiImages', 'templateId']);
+    const body = pick(req.body, ['url', 'urls', 'text', 'ratio', 'slideCount', 'tone', 'theme', 'primary', 'secondary', 'instructions', 'title', 'aiImages', 'templateId', 'keepOriginal', 'htmlMode']);
     // 'file' (1 tệp) giữ cho client cũ; giao diện mới gửi 'files' (nhiều tệp).
     const files = [...(req.files?.files || []), ...(req.files?.file || [])];
     const result = await service.create(req.user, { ...body, files, media: req.files?.media || [], posters: req.files?.posters || [] }, req.ip);

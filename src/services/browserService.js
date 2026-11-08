@@ -6,6 +6,7 @@ import puppeteer from 'puppeteer-core';
 import { Semaphore } from '../lib/semaphore.js';
 import { HttpError } from '../lib/httpError.js';
 import { logger } from '../lib/logger.js';
+import { PAGE_SETUP, PAGE_VISIBLE, PAGE_SETTLE, PAGE_FORCE, PAGE_READ, PAGE_SIG } from './htmlDeckPage.js';
 
 const CANDIDATES = [
   '/usr/bin/chromium',
@@ -51,7 +52,7 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
 
   // Lỗi trình duyệt (không khởi động được, hết thời gian, tab bị đóng) → 503 có mã riêng thay vì 500 chung (EXPORT-08):
   // người dùng biết thử lại sau, giám sát đếm được theo mã; chi tiết chỉ ghi log.
-  async function withPage(html, viewport, fn) {
+  async function withPage(html, viewport, fn, { allowBlob = false, timeout = timeoutMs } = {}) {
     return sem.run(async () => {
       let browser;
       try {
@@ -61,13 +62,13 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
         throw new HttpError(503, 'RENDER_UNAVAILABLE', 'Máy chủ chưa xuất được bài lúc này, vui lòng thử lại sau ít phút');
       }
       const page = await browser.newPage();
-      const timer = setTimeout(() => page.close().catch(() => {}), timeoutMs);
+      const timer = setTimeout(() => page.close().catch(() => {}), timeout);
       try {
-        page.setDefaultTimeout(timeoutMs);
+        page.setDefaultTimeout(timeout);
         await page.setRequestInterception(true);
         page.on('request', (req) => {
           const url = req.url();
-          if (url.startsWith('data:') || url === 'about:blank') req.continue();
+          if (url.startsWith('data:') || url === 'about:blank' || (allowBlob && url.startsWith('blob:'))) req.continue();
           else req.abort('blockedbyclient');
         });
         await page.setViewport(viewport);
@@ -104,6 +105,72 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
         }
         return out;
       });
+    },
+
+    /**
+     * Phân tích bài trình bày HTML thiết kế ở công cụ khác (đã tách video — htmlDeckService.stripHeavyMedia). Mạng vẫn bị chặn hết
+     * (chỉ data:/blob:) — script của trang chạy cô lập. Cách 1: bấm phím → như người trình chiếu, mỗi trang lấy trạng thái SAU
+     * bước cuối (đã hiện hết nội dung bấm-mới-hiện); bài không điều khiển được bằng phím (hoặc dừng giữa chừng) → cách 2: ép hiện
+     * từng trang còn lại. Mỗi trang: tiêu đề, chữ, ghi chú, ảnh nhúng, khung video, (shots) ảnh chụp.
+     * tooMany: tổng số trang > maxSlides → không phân tích, trả { slides: [], total } để báo vượt giới hạn.
+     * @returns {{ slides: Array<{ title, text, notes, images: number[], videoRefs: string[], vbox, shot: Buffer|null, fit }>, images: string[], title: string, total: number, mode: string }}
+     */
+    async inspectHtmlDeck(html, { width, height, shots = false, refs = [], maxSlides = 60, tooMany = false, settleMs = 260, maxSteps = 10, timeout = 300000 }) {
+      return withPage(html, { width, height, deviceScaleFactor: 1 }, async (page) => {
+        const info = await page.evaluate(PAGE_SETUP, maxSlides);
+        // Quá số trang cho phép → trả ngay tổng số trang để báo người dùng (không phân tích/chụp từng trang).
+        if (tooMany && info.total > maxSlides) return { slides: [], images: [], title: info.title, total: info.total, mode: 'none' };
+        const out = new Array(info.count).fill(null);
+        // Trang mới vào: chờ chữ ổn định (số đếm chạy bằng JS, chữ gõ dần…) — tối đa ~2,5 giây; số đếm liên tục (đồng hồ) thì thôi.
+        const steady = async (i) => {
+          let prev = await page.evaluate(PAGE_SIG, i);
+          for (let k = 0; k < 7; k += 1) {
+            await new Promise((r) => setTimeout(r, 350));
+            const sig = await page.evaluate(PAGE_SIG, i);
+            if (sig === prev) return;
+            prev = sig;
+          }
+        };
+        const capture = async (i, fresh = false) => {
+          if (fresh) await steady(i);
+          const s = await page.evaluate(PAGE_READ, i, refs);
+          const shot = shots ? await page.screenshot({ type: 'jpeg', quality: 90, clip: s.clip }) : null;
+          out[i] = { ...s, shot };
+        };
+        let mode = 'keys';
+        await page.evaluate(PAGE_SETTLE, settleMs);
+        let k = info.count > 1 ? await page.evaluate(PAGE_VISIBLE) : -1;
+        if (k === 0) {
+          await capture(0, true);
+          let steps = 0;
+          for (let presses = 0; presses < info.count * (maxSteps + 1); presses += 1) {
+            await page.keyboard.press('ArrowRight');
+            await page.evaluate(PAGE_SETTLE, settleMs);
+            const v = await page.evaluate(PAGE_VISIBLE);
+            if (v === k) {
+              // Bước trong trang (hiện thêm nội dung) → chụp lại; trang cuối hết bước thì dừng.
+              steps += 1;
+              if (steps > maxSteps) break;
+              await capture(k);
+            } else if (v === k + 1) {
+              k = v;
+              steps = 0;
+              await capture(k, true);
+            } else break;
+          }
+        }
+        const missing = out.map((x, i) => (x ? -1 : i)).filter((i) => i >= 0);
+        if (missing.length) {
+          mode = missing.length === info.count ? 'force' : 'keys+force';
+          for (const i of missing) {
+            await page.evaluate(PAGE_FORCE, i);
+            await page.evaluate(PAGE_SETTLE, settleMs);
+            await capture(i, true);
+          }
+        }
+        const images = await page.evaluate(() => window.__imp.images);
+        return { slides: out, images, title: info.title, total: info.total, mode };
+      }, { allowBlob: true, timeout });
     },
 
     // HTML phải render ở mode 'print' (mỗi slide 1 trang).

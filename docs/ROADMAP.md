@@ -1,9 +1,68 @@
 # Kế hoạch tiếp theo — MISA Presentation
 
-Cập nhật: 12/10/2026. Phạm vi đã chốt: **1 máy chủ, 1 instance, cao điểm ~500 người dùng cùng lúc**; người dùng vào qua mạng/VPN MISA (không giới hạn theo IP); không có đăng ký (admin cấp tài khoản).
+Cập nhật: 08/11/2026 (thêm mục CT — cải tiến 11 mục). Phạm vi đã chốt: **1 máy chủ, 1 instance, cao điểm ~500 người dùng cùng lúc**; người dùng vào qua mạng/VPN MISA (không giới hạn theo IP); không có đăng ký (admin cấp tài khoản).
 Nguồn: review chặng A của Codex ([09-review-chang-a-codex.md](audits/2026-10-12-codex/09-review-chang-a-codex.md) §5) + yêu cầu mới của chủ dự án.
 
 Thứ tự: **A bổ sung ✅ → P (Publish) ✅ → H + L (hyperlink, trang Liên hệ / Ưu đãi — đề xuất 12/10) → B → Gate DevOps → C (khi có số đo)**. Mỗi sửa lỗi theo đỏ → xanh: test tái hiện trước, xác nhận đỏ, sửa, xác nhận xanh.
+
+## CT — Cải tiến 11 mục (yêu cầu chủ dự án 08/11/2026) — đang làm, nhánh `feature/cai-tien-11-muc`
+
+Làm theo 5 đợt (chủ dự án chốt). Nhánh tách từ `main` 827da35; **chưa push** GitHub (chỉ push khi chủ dự án yêu cầu). Mỗi đợt: code → unit test →
+`npm run build` → `docker compose up -d --build app` → kiểm thật trên Docker 8088 (desktop + mobile, tài khoản thử `tmp/e2e-user.json` — tệp gitignore,
+không in mật khẩu ra) → cập nhật `memory-bank/` → commit khi chủ dự án bảo.
+
+| Đợt | Mục | Nội dung | Trạng thái |
+|---|---|---|---|
+| 1 | 4, 5, 9, 10 | Bôi chọn chữ trang kết không mất chữ · bấm ảnh xem toàn màn hình · chọn mẫu thiết kế được chia sẻ khi tạo bài · rà lỗi bố cục tự động (`npm run audit:layout`) | ✅ 73eda47 (+ thư mục lồng nhau) |
+| 2 | 6, 7 | Ảnh: kéo-thả/dán, di chuyển, bo góc, đổ bóng, màu viền · lớp phủ màu + độ mờ | ✅ 704918a (`memory-bank/05` §26) |
+| 3 | 1, 2 | Giữ nguyên nội dung + số trang (> 40 trang từ chối) · tải lên bài trình bày HTML làm ở công cụ khác (người dùng chọn giữ nguyên thiết kế / chuyển thành bài sửa được) | ✅ commit Đợt 3 (`memory-bank/05` §27) |
+| 4 | 3 | Video (chi tiết dưới) | ⏳ tiếp theo |
+| 5 | 8, 11 | Thêm nhiều bố cục (áp cả cho trang đang có) · thêm chuyển động | ⏳ |
+
+### Đợt 4 — mục 3: video
+Yêu cầu: chèn video nhúng YouTube, Vimeo hoặc tải lên (tối đa **200 MB**); bật **tự phát** và **tự toàn màn hình** khi trình chiếu; hiển thị ảnh bìa
+(thumbnail của nền tảng / khung hình của tệp tải lên); **di chuyển, căn trái/phải/giữa, kéo đổi kích thước** khung video; tệp tải lên được **nén** tối đa
+mà vẫn giữ chất lượng để trình chiếu không phải chờ tải lâu.
+
+Hiện trạng (kiểm lại khi bắt đầu): đã có video `provider:'file'` (≤ `MAX_VIDEO_MB` = 150, MP4/MOV/WebM, ảnh bìa trình duyệt chụp) và `provider:'youtube'`
+(ảnh bìa 16:9, trình chiếu phủ toàn màn hình qua postMessage `deck:video`); phần tử video trên trang tự do đã kéo/đổi cỡ được (`shared/deck/free.js`);
+xuất HTML nhúng video khi tổng ≤ `EXPORT_VIDEO_MB`. Chưa có: Vimeo, nén, tuỳ chọn tự phát/tự toàn màn hình từng video, căn trái/phải/giữa cho video
+trong bố cục có sẵn.
+
+Đề xuất làm:
+1. **Vimeo**: nhận link `vimeo.com/<id>` / `player.vimeo.com/video/<id>` → `provider:'vimeo'`; ảnh bìa qua oEmbed `https://vimeo.com/api/oembed.json`
+   (thêm tên miền vào allowlist chiều ra + `docs/DEVOPS-NETWORK.md`; tải ảnh bìa về lưu thành asset như YouTube — không nhúng ảnh từ ngoài vào bài);
+   trình chiếu nhúng `player.vimeo.com` (CSP `frame-src` thêm tên miền). Cập nhật `youtubeService` → dịch vụ video nhúng chung.
+2. **Tải lên ≤ 200 MB**: `MAX_VIDEO_MB` mặc định 200 (kiểm `client_max_body_size` nginx, `cappedDiskStorage`, giới hạn frontend `useMedia.MAX_VIDEO_MB`).
+3. **Nén bằng ffmpeg** (cài trong Dockerfile): job nền sau khi tải lên — H.264 (libx264, `-crf 23–26`, `-preset veryfast/medium`), AAC 128k,
+   cạnh dài ≤ 1920 (giữ tỷ lệ), `-movflags +faststart` (phát được khi chưa tải hết), chỉ thay tệp khi bản nén nhỏ hơn rõ rệt; trạng thái "đang tối ưu"
+   trên khung video; hàng chờ riêng (Semaphore 1) để không tranh CPU với tạo bài; cờ tắt `VIDEO_TRANSCODE=0`. Ảnh bìa: khung hình giây 1 bằng ffmpeg.
+   Bẫy: chặn tệp hỏng/độc (giới hạn thời gian chạy, `-nostdin`, không đọc giao thức mạng: `-protocol_whitelist file`).
+4. **Tuỳ chọn từng video**: `video.autoplay` (tự phát khi tới trang/bước), `video.fullscreen` (tự phóng toàn màn hình khi phát), `muted` nếu trình duyệt
+   chặn tự phát có tiếng; áp ở trình chiếu + bản HTML xuất + trang công khai. Khung xem trước trong trình soạn thảo không tự phát.
+5. **Vị trí/kích thước**: bố cục có sẵn → căn trái/phải/giữa + cỡ (S/M/L hoặc %) cho ô video; trang tự do → giữ kéo/đổi cỡ, thêm nút căn nhanh.
+6. Test: nhận dạng link Vimeo, làm sạch trường mới (`specService`), renderer, lệnh ffmpeg (mock), e2e tải 1 video ~150 MB → nén → phát theo đoạn (206).
+
+### Đợt 5 — mục 8 (bố cục) + mục 11 (chuyển động)
+Mục 8 — nhiều kiểu bố cục hơn, **áp được cho cả trang đang có** (đổi bố cục giữ nguyên nội dung), gồm cả sơ đồ, biểu đồ, hình khối. Nguyên tắc: không
+bắt chước sản phẩm nào; chọn cái hay nhất mà vẫn dễ dùng. Danh mục đề xuất (chốt với chủ dự án trước khi làm):
+- **Đổi kiểu trình bày danh sách giữ nội dung** ("bố cục thông minh"): cùng 1 danh sách mục → cột 2–6, hộp đặc/viền/có biểu tượng/có nhãn/xen kẽ,
+  hộp nối nhau bằng mũi tên, gạch đầu dòng lớn, các bước, cầu thang, mốc thời gian (tối giản/viên thuốc/mũi tên), kim tự tháp, phễu.
+- **Ảnh nhấn**: đổi vị trí ảnh độc lập nội dung — trái / phải / trên / làm nền (kèm lớp phủ đã có ở Đợt 2); điểm lấy nét khi ảnh bị cắt.
+- **Sơ đồ**: ma trận 2×2 (góc phần tư), vòng tròn đồng tâm, bia (bullseye), tảng băng trôi, chu trình, Venn 2–3 vòng, bánh răng, quỹ đạo,
+  đối đầu (A vs B), ghép hình.
+- **Số liệu**: số lớn, vòng tròn %, thanh tiến độ, xếp hạng sao, lưới chấm.
+- **Biểu đồ** (vẽ SVG trong renderer, dữ liệu bảng sửa được): cột, cột chồng, thanh, đường, vùng, tròn, vành khuyên, thác nước; sau này Gantt.
+- **Hộp chú thích** (ghi chú / cảnh báo / thành công), bong bóng lời thoại cho trích dẫn.
+Kỹ thuật: thêm vào `shared/deck` (layout + biến thể `variants.js`), schema AI (`geminiService` LAYOUTS + prompt) để AI chọn được, bảng chọn bố cục
+trong trình soạn thảo có ảnh xem trước; chạy `npm run audit:layout` cho mọi bố cục mới (tràn chân trang, nhãn xuống dòng, chữ cắt, icon đè chữ).
+
+Mục 11 — thêm chuyển động: mở rộng engine sẵn có (`shared/deck/engine.js`, `data-a`) — chuyển trang (đẩy, phóng, lật, mở màn), hiệu ứng xuất hiện
+theo nhóm, chữ chạy từng từ, số đếm, vẽ đường nối sơ đồ, nền động; tôn trọng `prefers-reduced-motion`; chạy được trong bản HTML xuất offline.
+Đã đánh giá: các công cụ dựng video bằng code (Remotion, HyperFrames, lemo-opuscar) sinh **tệp video**, không phải thư viện chạy trong trang
+trình chiếu → không dùng làm thư viện; chỉ học cách tạo nhịp/chuyển cảnh.
+
+Ràng buộc chung: không ghi tên sản phẩm tham khảo vào mã, tài liệu, commit, giao diện.
 
 ## A bổ sung — sửa 6 điểm Codex chỉ ra (A01–A06) — ✅ xong 12/10/2026
 

@@ -601,7 +601,8 @@ const n2 = (v, d = 0) => (Number.isFinite(v) ? v : d);
 function freeEl(e, i, ctx) {
   const P = `elements.${e.id}`;
   const box = `left:${n2(e.x)}%;top:${n2(e.y)}%;width:${n2(e.w, 20)}%;height:${n2(e.h, 10)}%`;
-  const anim = ` data-a="${e.type === 'shape' ? 'fade' : 'up'}" data-d="${6 + i * 4}" data-dist="30"`;
+  // still: phần tử đứng yên (không hiệu ứng xuất hiện) — vd. ảnh chụp nguyên trang của bài nhập từ HTML.
+  const anim = e.still ? '' : ` data-a="${e.type === 'shape' ? 'fade' : 'up'}" data-d="${6 + i * 4}" data-dist="30"`;
   const ph = (ic, label) => (ctx.edit ? `<div class="ph">${icon(ic)}<span>${label}</span></div>` : '');
   let cls = `fe fe-${e.type}`;
   let inner = '';

@@ -1,5 +1,25 @@
 # 10 — Lịch sử phát triển
 
+## 2026-11-08 — Cải tiến 11 mục, Đợt 3: giữ nguyên nội dung + số trang (mục 1), nhập bài trình bày HTML (mục 2)
+
+- Mới: `src/services/pageSource.js` (chia/đếm trang theo nguồn, từ chối > 40 trang), `src/services/htmlDeckService.js` (nhận diện HTML, tách video nhúng,
+  gán video về trang, trang "giữ nguyên thiết kế", chữ từng trang), `src/services/htmlDeckPage.js` (mã chạy trong trang lạ), `browserService.inspectHtmlDeck`
+  (+ `withPage` cho phép `blob:` khi cần, thời gian chờ riêng). Sửa: `presentationService` (`create` nhận `keepOriginal`/`htmlMode`, job `importHtmlDesign`,
+  `ingestWithHtml`, `generateOutline`/`buildDeck` chế độ giữ nguyên), `geminiService` (khối GIỮ NGUYÊN NỘI DUNG cho dàn ý + dựng bài), `outlineService`
+  (`options.keepOriginal`), `specService.cleanElement` (`still`), `render.js` (phần tử `still` không hiệu ứng), `layers.js` + `theme.css` (ẩn chân trang `ft`),
+  `visualService` (dùng lại `doc.pdfPath`; export `officeToPdf`), `mediaService` (export `pdfPageCount`), route `POST /api/presentations` (2 trường mới),
+  `useCreate` + 2 `CreatePage` + 2 `OutlinePage`, `fileKinds`. Không đổi CSDL. Nghiệp vụ → `05` §27; bẫy → `09`.
+- Kiểm chứng: unit **282/282** (mới `test/unit/html-import.test.js` 11 test); Docker 8088 + Gemini thật (`tmp/e2e-dot3.mjs`, tài khoản thử):
+  - HTML mẫu 137 MB "giữ nguyên thiết kế" → 38 trang tự do + 5 video MP4 đúng trang/khung (trang 5, 6, 15, 18, 29), ~75–90 giây; video phát theo đoạn (206);
+    ảnh chụp trình soạn thảo desktop + mobile đúng giao diện gốc (`tmp/dot3-1..3-*.png`).
+  - HTML mẫu "sửa được" + giữ nguyên nội dung → dàn ý đúng 38 trang, chữ nguyên văn, 5 video vào đúng trang (~135 giây).
+  - Văn bản 4 trang (ngăn `---`) → dàn ý + bài đúng 4 trang, nguyên văn, kicker rỗng; PPTX 6 slide → 6 trang; PDF 6 trang → 6 trang, giữ chữ IN HOA của nguồn.
+  - Văn bản 45 trang → 422 ngay khi gửi. Trang Tạo bài có tệp HTML: desktop + mobile (`tmp/dot3-4/5-*.png`), không lỗi trang.
+- Sửa sau khi chạy thật: chữ gợi ý trong khung video của bài gốc lọt vào nội dung → ẩn khung video khi đọc chữ; số đếm chạy bị đọc "0" → chờ chữ ổn định;
+  "- " đầu dòng chép theo nguồn → bỏ ký hiệu (giữ chữ); PPTX bị bỏ sót khi đếm trang → chỉ bỏ qua tệp Office đã đếm ở bước PDF.
+- Bàn giao (chủ dự án chuyển sang tài khoản Claude khác): kế hoạch Đợt 4 (video) + Đợt 5 (bố cục, chuyển động) viết chi tiết ở `docs/ROADMAP.md` mục CT;
+  hướng dẫn tiếp tục ở `memory-bank/README.md` "Bàn giao 08/11/2026". README dự án bổ sung 2 tính năng mới.
+
 ## 2026-11-08 — Cải tiến 11 mục, Đợt 2: ảnh (mục 6 kéo-thả/dán/khung, mục 7 lớp phủ màu)
 
 - Mới `shared/deck/imgstyle.js` (kiểu khung + lớp phủ: làm sạch, CSS, `pickLook`), `frontend/src/shared/ColorSwatches.vue`,

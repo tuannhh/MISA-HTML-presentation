@@ -124,7 +124,7 @@ export function normalizeOutline(input, { strict = false, options } = {}) {
     version: 1,
     title: c.str(o.title, SPEC_LIMITS.deckTitle, 'title') || slides[0]?.title || 'Bài trình bày',
     footer: c.str(o.footer, SPEC_LIMITS.footer, 'footer'),
-    options: { tone: opt.tone === 'light' ? 'light' : 'dark', autoSlides: opt.autoSlides !== false, slideCount: Number.isInteger(opt.slideCount) ? opt.slideCount : null, aiImages: opt.aiImages === true },
+    options: { tone: opt.tone === 'light' ? 'light' : 'dark', autoSlides: opt.autoSlides !== false, slideCount: Number.isInteger(opt.slideCount) ? opt.slideCount : null, aiImages: opt.aiImages === true, ...(opt.keepOriginal === true ? { keepOriginal: true } : {}) },
     design: cleanDesign(c, c.obj(o.design)),
     slides,
   };

@@ -659,3 +659,49 @@ Yêu cầu chủ dự án: người dùng tạo thư mục, kể cả thư mục
     cao tối đa 70%, luôn nằm trọn trang (`lib/dropRect.js`); nhiều ảnh lệch nhau 3%. Tối đa **5 ảnh**/lần; tệp không phải ảnh bị bỏ + báo.
   - **Dán ảnh** (Ctrl/Cmd+V, trong khung hoặc ở ứng dụng khi không gõ trong ô nhập): luôn chèn ảnh mới giữa trang (thay ảnh có sẵn = thả trúng ô / bấm ảnh).
   - Thả tệp ra ngoài khung bị chặn mở ảnh sang tab (tránh mất bài đang sửa). Di chuyển/đổi cỡ ảnh chèn dùng thao tác phần tử tự do sẵn có.
+
+## 27. Giữ nguyên nội dung + số trang; nhập bài trình bày HTML làm ở công cụ khác (2026-11-08, Đợt 3 — mục 1, 2)
+
+### Giữ nguyên nội dung và số trang (`keepOriginal`)
+- Trang Tạo bài → "Cách dùng nội dung": **AI biên tập lại** (mặc định, như cũ) | **Giữ nguyên nội dung và số trang**. Chọn giữ nguyên → ẩn "Số trang mong muốn".
+- Chia trang theo nguồn gốc (`src/services/pageSource.js` `paginateSource`, chạy trong `generateOutline` sau khi đọc tư liệu), đánh dấu "--- Trang N ---":
+  - **PPTX**: bộ đọc đã đánh dấu từng slide (số trang = số slide).
+  - **PDF**: `pdftotext` (ngăn trang `\f`); ≥ 70% số trang có chữ → gửi AI chữ đánh dấu trang và **không đính kèm tệp** (`media.asText`, vẫn dùng để cắt ảnh/sơ đồ);
+    bản scan → vẫn đính kèm tệp cho AI đọc, số trang lấy từ `pdfPageCount`.
+  - **DOCX/ODT/ODP**: LibreOffice → PDF → như PDF; PDF tạm gắn `doc.pdfPath` để `extractVisuals` dùng lại (không chạy LibreOffice 2 lần). Lỗi/tắt Office → không cố định số trang.
+  - **Bài HTML** (chế độ sửa được): mỗi trang của bài = 1 trang.
+  - **Văn bản** (nhập tay, TXT/MD, trang web): ngăn trang bằng **1 dòng chỉ có `---`**; không có → không cố định số trang (AI chia theo đề mục, vẫn chép nguyên văn, ≤ 40 trang).
+  - Bảng tính/CSV/ghi âm: không có khái niệm trang → không cố định số trang.
+- **Vượt 40 trang (`SPEC_LIMITS.outlineSlides`) → từ chối** 422 `TOO_MANY_PAGES` "Tài liệu có N trang — vượt giới hạn 40 trang khi giữ nguyên nội dung…".
+  Báo ngay lúc gửi (trước hàng chờ) với PDF ≤ 100 MB, PPTX (đếm `ppt/slides/slideN.xml`) và văn bản nhập tay (`quickPageCount`, `splitTextPages`); loại khác báo khi xử lý (bài `failed`).
+- AI: `outlinePrompt(tone, keep)` thêm khối GIỮ NGUYÊN NỘI DUNG (ưu tiên hơn mọi quy tắc biên tập): 1 trang nguồn → đúng 1 trang, cùng thứ tự, chép nguyên văn
+  (không viết lại/tóm tắt/sửa chính tả/thêm/bỏ), giữ cách viết hoa, quá 12 dòng ngắn thì nối bằng " · ", bỏ ký hiệu gạch đầu dòng; brief + schema "ĐÚNG N trang";
+  nhiệt độ 0,2. Dựng bài: `DESIGN_KEEP_RULE` (không rút gọn/đổi chữ, kicker rỗng), nhiệt độ 0,2.
+- Hậu xử lý khi giữ nguyên: **không** viết hoa đầu câu lại (`sentenceCaseOutline/Spec`), không vẽ lại sơ đồ (giữ ảnh sơ đồ gốc), không tự thêm trang sơ đồ/ảnh giao diện
+  (room 0), cắt dàn ý ở đúng số trang nguồn, bỏ "- "/"• " đầu dòng. Vẫn bỏ liên kết/thông tin liên hệ không có trong nguồn (chống bịa).
+- Tuỳ chọn lưu ở `outline.options.keepOriginal = true` (`normalizeOutline` chỉ nhận `true`) → bước dựng bài đọc lại.
+
+### Bài trình bày HTML (`htmlMode`)
+- Tệp tư liệu nhận diện là HTML theo **nội dung** (`looksLikeHtml`: bỏ BOM/khoảng trắng/chú thích đầu tệp). Có tệp HTML → hỏi "Bài trình bày HTML":
+  **Giữ nguyên thiết kế** (`design`, mặc định) | **Chuyển thành bài sửa được** (`edit`; chọn thì "Giữ nguyên nội dung" bật sẵn, đổi được).
+- Đọc bài (`htmlDeckService` + `htmlDeckPage` + `browserService.inspectHtmlDeck`):
+  1. **Tách video nhúng** trên Buffer (duyệt tuyến tính, không regex trên chuỗi trăm MB): khối `<script>` không phải JS chứa base64 thuần > 64 KB nhận diện là video
+     (mã = id khối, ruột khối xoá) và URI `data:video/…;base64` (thay bằng `data:,impvid-K`). Trần `MAX_VIDEOS_PER_DECK` video, mỗi video ≤ `MAX_VIDEO_MB` (thừa → bỏ).
+     Phần HTML còn lại > 80 MB → từ chối `HTML_TOO_LARGE`.
+  2. Chromium headless, **chặn mạng** (chỉ `data:`/`blob:`/`about:blank`), khung 1920 theo tỷ lệ bài (`importViewport`). Tìm trang: reveal.js, `section.slide`, `.slide`,
+     `[data-slide]`, `.swiper-slide`, `.page`, `section`; ẩn thanh điều khiển/tiến độ/gợi ý của công cụ cũ.
+  3. **Bấm → như người trình chiếu**: mỗi lần bấm, cùng trang = 1 bước (chụp lại), sang trang kế = trang mới; mỗi trang lấy trạng thái SAU bước cuối
+     (đủ nội dung bấm-mới-hiện), chờ hiệu ứng xong (`getAnimations().finish()`) và chờ chữ ổn định (số đếm chạy, tối đa ~2,5 giây). Bài không điều khiển được
+     bằng phím → **ép hiện** từng trang còn thiếu (bật lớp "đang hiện", hiện phần tử opacity 0).
+  4. Mỗi trang: tiêu đề (`data-title`/tiêu đề đầu, bỏ IN HOA của CSS), chữ (bỏ chữ trong khung video), ghi chú, ảnh nhúng ≥ 2% diện tích (bỏ SVG, gộp trùng),
+     khung video (% của trang), ảnh chụp JPEG. Gán video về trang: tham chiếu trong trang → số cuối mã khối (`dv-5` → trang 5 có khung video) → trang có khung video kế tiếp.
+- **Giữ nguyên thiết kế** — job `importHtmlDesign` (không qua dàn ý/AI; bài tạo ở trạng thái `generating`, xong `ready` → mở thẳng trình soạn thảo):
+  mỗi trang → `layout:'free'` gồm ảnh chụp trang phủ kín (`still:true` — không hiệu ứng xuất hiện, bo góc none, `fit` contain khi bài gốc lệch tỷ lệ) + phần tử video
+  (`provider:'file'`) đúng khung video gốc; `hide: glow, grid, bg, ft` (không quầng sáng, lưới, nền, **chân trang** — `DECORS.ft` mới, `.x-ft > .ft` ẩn).
+  Chữ của trang → ghi chú (nếu bài gốc không có ghi chú). Tên bài: người dùng nhập > `<title>` của tệp > tên tệp. Tối đa **40 trang** (vượt → `TOO_MANY_PAGES`).
+  Chỉ 1 tệp HTML, không kèm ảnh/video (`HTML_REQUIRED`, `MEDIA_NOT_ALLOWED`). Audit `presentation.import`. Sau đó thêm chữ/ảnh/video lên trang bằng phần tử tự do.
+- **Chuyển thành bài sửa được** — trong `generateOutline` (`ingestWithHtml`): chữ từng trang ("--- Trang N ---" + ghi chú) là tư liệu, ảnh nhúng → ảnh tư liệu
+  (gợi ý "ảnh trên trang N…"), video → tệp tạm thêm vào **video gửi kèm** (bắt buộc có trong bài, tên "Video trang N"), tệp khác đọc như thường.
+  Giữ nguyên nội dung → ≤ 40 trang (vượt → từ chối); AI biên tập lại → đọc ≤ 60 trang.
+- Thời gian đo trên Docker với bài mẫu 137 MB (38 trang, 5 video MP4): giữ nguyên thiết kế ~75–90 giây; sửa được + giữ nguyên nội dung ~135 giây (gồm AI).
+  Trình duyệt dùng chung semaphore với ảnh bìa/xuất PDF (`RENDER_CONCURRENCY`) — lượt nhập dài chiếm 1 chỗ trong thời gian đó.

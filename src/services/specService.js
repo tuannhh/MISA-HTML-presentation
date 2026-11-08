@@ -228,6 +228,8 @@ function cleanElement(c, v, path, seen) {
   };
   // Hiện khi bấm (trình chiếu từng phần tử) — chỉ lưu khi bật.
   if (o.step === true) el.step = true;
+  // Đứng yên: không hiệu ứng xuất hiện (ảnh nền nguyên trang của bài nhập từ HTML "giữ nguyên thiết kế").
+  if (o.still === true) el.still = true;
   const size = num(o.size, SIZE_RANGE.min, SIZE_RANGE.max, 2) ?? 1;
   if (o.type === 'text') {
     return Object.assign(el, {

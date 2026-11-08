@@ -1,7 +1,8 @@
 <script setup>
 import { deckPath } from '@/lib/deckPath.js'
-// Tạo bài trình bày (desktop): nguồn nội dung → tuỳ chọn (tỷ lệ, tông màu, số trang) → AI lập dàn ý (chạy nền);
+// Tạo bài trình bày (desktop): nguồn nội dung → tuỳ chọn (tỷ lệ, tông màu, số trang, giữ nguyên nội dung) → AI lập dàn ý (chạy nền);
 // chuyển sang bước duyệt dàn ý để theo dõi tiến trình, sửa nội dung, gắn media, chọn thiết kế.
+// Tệp HTML làm ở công cụ khác + "Giữ nguyên thiết kế": nhập thẳng thành bài (không qua dàn ý), xong mở trình soạn thảo.
 import { nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import DesktopShell from './DesktopShell.vue'
@@ -19,10 +20,10 @@ import MTextarea from '@/components/mds/MTextarea.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import CreateMediaPicker from '@/shared/CreateMediaPicker.vue'
-import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_SOURCE_LINKS, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
+import { useCreate, SOURCE_MODES, SLIDE_MODES, CONTENT_MODES, CONTENT_HINT, HTML_MODES, HTML_HINT, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_SOURCE_LINKS, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
 
 const router = useRouter()
-const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions } = useCreate()
+const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions, hasHtml, importDesign, keepContent } = useCreate()
 
 // Thêm ô link mới → đặt con trỏ vào ô đó.
 async function onAddUrl() {
@@ -74,9 +75,14 @@ async function onSubmit() {
               {{ form.files.length }} tệp · {{ formatMb(totalBytes) }} / {{ MAX_UPLOAD_MB }} MB
             </p>
             <p class="text-[12px] text-[var(--mds-text-secondary)]">
-              PowerPoint (.pptx), Word (.docx), Excel (.xlsx) / CSV, PDF (kể cả bản scan — AI tự nhận dạng chữ), văn bản (.txt, .md), ảnh (AI đọc cả chữ trong ảnh; ảnh HEIC tự đổi sang JPEG) hoặc ghi âm MP3/M4A/WAV/OGG/FLAC/AAC/WebM. Tư liệu thô (ghi chú, bảng số liệu, biên bản) được AI phân tích và thiết kế lại; ảnh chụp thật trong tài liệu được giữ để đặt lên slide.
+              PowerPoint (.pptx), Word (.docx), Excel (.xlsx) / CSV, PDF (kể cả bản scan — AI tự nhận dạng chữ), văn bản (.txt, .md), bài trình bày HTML làm ở công cụ khác, ảnh (AI đọc cả chữ trong ảnh; ảnh HEIC tự đổi sang JPEG) hoặc ghi âm MP3/M4A/WAV/OGG/FLAC/AAC/WebM. Tư liệu thô (ghi chú, bảng số liệu, biên bản) được AI phân tích và thiết kế lại; ảnh chụp thật trong tài liệu được giữ để đặt lên slide.
             </p>
             <p v-if="errors.file" class="text-[12px] text-[var(--mds-danger)]">{{ errors.file }}</p>
+            <div v-if="hasHtml" class="mt-2 flex flex-col gap-2 rounded-lg border border-[var(--mds-border)] bg-[var(--mds-bg-page)] p-4">
+              <p class="text-[14px] font-semibold leading-5 text-[var(--mds-text)]">Bài trình bày HTML</p>
+              <MRadioGroup v-model="form.htmlMode" :options="HTML_MODES" :disabled="submitting" />
+              <p class="text-[12px] text-[var(--mds-text-secondary)]">{{ HTML_HINT[form.htmlMode] }}</p>
+            </div>
           </div>
 
           <FormField v-else-if="form.mode === 'url'" group label="Đường link tư liệu" required :hint="`Tối đa ${MAX_SOURCE_LINKS} link · dán nhiều link cùng lúc (mỗi dòng 1 link) vào 1 ô cũng được`">
@@ -107,7 +113,7 @@ async function onSubmit() {
           </FormField>
 
           <template v-else>
-            <FormField label="Nội dung" required :hint="`${form.text.length.toLocaleString('vi-VN')} ký tự — dán dàn ý, báo cáo, biên bản họp… AI dùng làm cơ sở để viết từng trang.`">
+            <FormField label="Nội dung" required :hint="`${form.text.length.toLocaleString('vi-VN')} ký tự — ${keepContent ? 'giữ nguyên câu chữ; ngăn trang bằng 1 dòng chỉ có ---' : 'dán dàn ý, báo cáo, biên bản họp… AI dùng làm cơ sở để viết từng trang'}.`">
               <MTextarea v-model="form.text" :rows="12" placeholder="Ví dụ: Kế hoạch triển khai AMIS cho công ty… (mục tiêu, hiện trạng, giải pháp, lộ trình, chi phí)" :error="errors.text" />
             </FormField>
             <CreateMediaPicker
@@ -129,18 +135,22 @@ async function onSubmit() {
           <FormField label="Tỷ lệ khung hình" group>
             <RatioPicker v-model="form.ratio" />
           </FormField>
-          <FormField v-if="templates.length" label="Mẫu thiết kế" hint="Mẫu của bạn hoặc mẫu đồng nghiệp chia sẻ cho mọi người trong MISA: màu, nền, phông, logo, ảnh nhận diện. Chọn mẫu thì không cần chọn Tông màu.">
+          <FormField v-if="!importDesign" label="Cách dùng nội dung" group :hint="CONTENT_HINT[form.contentMode]">
+            <MRadioGroup v-model="form.contentMode" :options="CONTENT_MODES" />
+          </FormField>
+          <FormField v-if="templates.length && !importDesign" label="Mẫu thiết kế" hint="Mẫu của bạn hoặc mẫu đồng nghiệp chia sẻ cho mọi người trong MISA: màu, nền, phông, logo, ảnh nhận diện. Chọn mẫu thì không cần chọn Tông màu.">
             <MSelect v-model="form.templateId" :options="templateOptions" aria-label="Mẫu thiết kế" />
           </FormField>
-          <FormField v-if="!form.templateId" label="Tông màu" group hint="Gợi ý bảng màu theo nền tối/sáng; Tuỳ chỉnh tự đảm bảo chữ đủ tương phản. Đổi lại được ở bước duyệt dàn ý.">
+          <FormField v-if="!form.templateId && !importDesign" label="Tông màu" group hint="Gợi ý bảng màu theo nền tối/sáng; Tuỳ chỉnh tự đảm bảo chữ đủ tương phản. Đổi lại được ở bước duyệt dàn ý.">
             <ThemePicker v-model:tone="form.tone" v-model:theme="form.theme" v-model:primary="form.primary" v-model:secondary="form.secondary" allow-auto />
             <p v-if="errors.theme" class="text-[12px] text-[var(--mds-danger)]">{{ errors.theme }}</p>
           </FormField>
-          <FormField label="Ảnh minh hoạ AI" group hint="Chỉ thêm ảnh cho trang cần minh hoạ mà chưa có ảnh/ảnh chụp giao diện của bạn (tối đa 6 ảnh, ~10–30 giây mỗi ảnh). Đổi/chỉnh sửa được ở trình soạn thảo.">
+          <FormField v-if="!importDesign" label="Ảnh minh hoạ AI" group hint="Chỉ thêm ảnh cho trang cần minh hoạ mà chưa có ảnh/ảnh chụp giao diện của bạn (tối đa 6 ảnh, ~10–30 giây mỗi ảnh). Đổi/chỉnh sửa được ở trình soạn thảo.">
             <MCheckbox v-model="form.aiImages" label="AI tạo ảnh minh hoạ phù hợp nội dung (Nano Banana 2 Lite)" input-aria-label="AI tạo ảnh minh hoạ phù hợp nội dung" />
           </FormField>
           <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField
+              v-if="!keepContent && !importDesign"
               label="Số trang mong muốn"
               group
               :hint="form.slideMode === 'auto' ? `AI chọn theo lượng nội dung, tối đa ${AUTO_MAX_SLIDES} trang` : 'Từ 3 đến 40 trang, kể cả trang bìa và trang kết'"
@@ -152,11 +162,11 @@ async function onSubmit() {
                 </div>
               </div>
             </FormField>
-            <FormField label="Tên bài (tuỳ chọn)" hint="Để trống: lấy theo tên tệp hoặc do AI đặt">
+            <FormField label="Tên bài (tuỳ chọn)" :hint="importDesign ? 'Để trống: lấy theo tên bài trong tệp HTML' : 'Để trống: lấy theo tên tệp hoặc do AI đặt'">
               <MInput v-model="form.title" :error="errors.title" />
             </FormField>
           </div>
-          <FormField label="Yêu cầu thêm cho AI (tuỳ chọn)" hint="Đối tượng người nghe, giọng văn, phần cần nhấn mạnh, tông màu…">
+          <FormField v-if="!importDesign" label="Yêu cầu thêm cho AI (tuỳ chọn)" hint="Đối tượng người nghe, giọng văn, phần cần nhấn mạnh, tông màu…">
             <MTextarea v-model="form.instructions" :rows="3" :maxlength="2000" placeholder="Ví dụ: Trình bày cho ban giám đốc, ngắn gọn, nhấn mạnh hiệu quả chi phí." :error="errors.instructions" />
           </FormField>
         </section>
@@ -170,7 +180,7 @@ async function onSubmit() {
           <MButton variant="outline" @click="router.back()">Hủy</MButton>
           <MButton variant="primary" type="submit" :loading="submitting">
             <template #icon><MIcon name="send" :size="16" /></template>
-            Lập dàn ý bằng AI
+            {{ importDesign ? 'Nhập bài trình bày' : 'Lập dàn ý bằng AI' }}
           </MButton>
         </div>
       </div>

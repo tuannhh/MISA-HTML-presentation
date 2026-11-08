@@ -947,6 +947,7 @@ body.edit .slide.dense::after {
 .x-glow > .glow { display: none; }
 .x-glow > .sbg { background: none; }
 .x-grid > .sbg::after { display: none; }
+.x-ft > .ft { display: none; }
 /* Tắt nền động riêng trang này: tấm nền màu chuyển sắc phủ canvas (vẫn giữ quầng sáng nếu chưa tắt). */
 .x-bg > .sbg {
   background:

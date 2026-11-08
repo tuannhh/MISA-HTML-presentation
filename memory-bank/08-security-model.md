@@ -114,3 +114,8 @@ Xem `04-api-reference.md` — API chung, đăng nhập, tạo bài + dựng bài
 - `slide.build`, `elements[].step`, `logo3d.motion` chỉ nhận giá trị trong allowlist (`BUILDS`, `true`, `LOGO_MOTIONS`); `depth` kẹp 0,1–1; renderer chỉ in giá trị đã chuẩn hoá (qua `esc`).
 - Ảnh ký trả `Access-Control-Allow-Origin: *` (không kèm cookie/credentials) để WebGL đọc điểm ảnh logo — quyền vẫn do chữ ký + hạn `exp` quyết định. Ảnh khác nguồn không đọc được (canvas "bẩn") → `createLogo3D` trả null, giữ ảnh phẳng.
 - Gói `deck3d.js` nhúng inline có nonce như engine; chuỗi `</script` (nếu có) được thoát khi đọc gói.
+
+## Nhập bài trình bày HTML lạ (2026-11-08)
+- Script của tệp HTML người dùng tải lên **chỉ chạy trong Chromium headless của máy chủ**, mạng bị chặn hết trừ `data:`/`blob:`/`about:blank` (`withPage` + `allowBlob`) — không gọi ra ngoài, không làm bàn đạp SSRF; trang bị đóng khi quá thời gian (300 giây).
+- HTML lạ **không bao giờ vào bài**: chỉ lấy ra ảnh chụp từng trang (JPEG → `normalizeImage` → WebP), ảnh nhúng `data:image` (kiểm magic bytes), video (magic bytes `sniffVideo`, trần số lượng/dung lượng) và chữ thuần làm tư liệu. Spec sinh ra qua `normalizeSpec` + `dropForeignAssets` như mọi bài.
+- Chữ đọc từ trang lạ là DỮ LIỆU trong thẻ `tai_lieu_nguon` của lời nhắc AI (không phải chỉ thị).

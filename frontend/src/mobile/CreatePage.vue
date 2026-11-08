@@ -2,6 +2,7 @@
 import { deckPath } from '@/lib/deckPath.js'
 // Tạo bài (mobile): form một cột, footer sticky Hủy | Lập dàn ý bằng AI.
 // AI lập dàn ý chạy nền → chuyển sang bước duyệt dàn ý để theo dõi tiến trình, sửa nội dung, gắn media, chọn thiết kế.
+// Tệp HTML + "Giữ nguyên thiết kế": nhập thẳng thành bài (ẩn tuỳ chọn AI), nút chính đổi thành "Nhập bài".
 import { nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import MobileShell from './MobileShell.vue'
@@ -19,10 +20,10 @@ import MTextarea from '@/components/mds/MTextarea.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import CreateMediaPicker from '@/shared/CreateMediaPicker.vue'
-import { useCreate, SOURCE_MODES, SLIDE_MODES, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_SOURCE_LINKS, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
+import { useCreate, SOURCE_MODES, SLIDE_MODES, CONTENT_MODES, CONTENT_HINT, HTML_MODES, HTML_HINT, ACCEPT, MEDIA_ACCEPT, MAX_CREATE_MEDIA, MAX_UPLOAD_MB, MAX_UPLOAD_FILES, MAX_SOURCE_LINKS, AUTO_MAX_SLIDES, formatMb } from '@/composables/useCreate.js'
 
 const router = useRouter()
-const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions } = useCreate()
+const { form, errors, submitting, progress, submitError, totalBytes, submit, fileList, onSelectFiles, onOversized, removeFile, mediaSummary, addingMedia, addMedia, removeMedia, addUrl, removeUrl, pasteUrls, templates, templateOptions, hasHtml, importDesign, keepContent } = useCreate()
 const SLIDE_MODES_M = SLIDE_MODES.map((m) => ({ ...m, label: m.value === 'auto' ? 'Tự động' : m.label }))
 const SHORT = { file: 'Tệp', url: 'Link', text: 'Văn bản' }
 const MODES = SOURCE_MODES.map((m) => ({ ...m, label: SHORT[m.key] }))
@@ -67,8 +68,11 @@ async function onSubmit() {
           @remove="removeFile"
         />
         <p v-if="form.files.length" class="text-[13px] text-[var(--mds-text-secondary)]">{{ form.files.length }} tệp · {{ formatMb(totalBytes) }} / {{ MAX_UPLOAD_MB }} MB</p>
-        <p class="text-[13px] text-[var(--mds-text-secondary)]">.pptx, .docx, .xlsx, .csv, PDF (cả bản scan), .txt, .md, ảnh (cả HEIC) hoặc ghi âm (mp3, m4a, wav…) — tối đa {{ MAX_UPLOAD_FILES }} tệp. Tư liệu thô cũng được — AI tự phân tích và thiết kế lại.</p>
+        <p class="text-[13px] text-[var(--mds-text-secondary)]">.pptx, .docx, .xlsx, .csv, PDF (cả bản scan), .txt, .md, bài trình bày .html, ảnh (cả HEIC) hoặc ghi âm (mp3, m4a, wav…) — tối đa {{ MAX_UPLOAD_FILES }} tệp. Tư liệu thô cũng được — AI tự phân tích và thiết kế lại.</p>
         <p v-if="errors.file" class="text-[13px] text-[var(--mds-danger)]">{{ errors.file }}</p>
+        <FormField v-if="hasHtml" class="mt-2" group label="Bài trình bày HTML" :hint="HTML_HINT[form.htmlMode]">
+          <MRadioGroup v-model="form.htmlMode" :options="HTML_MODES" direction="vertical" :disabled="submitting" />
+        </FormField>
       </div>
       <FormField v-else-if="form.mode === 'url'" group label="Đường link tư liệu" required :hint="`Tối đa ${MAX_SOURCE_LINKS} link`">
         <div class="flex flex-col gap-2">
@@ -95,7 +99,7 @@ async function onSubmit() {
         </div>
       </FormField>
       <template v-else>
-        <FormField label="Nội dung" required :hint="`${form.text.length.toLocaleString('vi-VN')} ký tự · AI dùng làm cơ sở viết bài`">
+        <FormField label="Nội dung" required :hint="`${form.text.length.toLocaleString('vi-VN')} ký tự · ${keepContent ? 'ngăn trang bằng 1 dòng chỉ có ---' : 'AI dùng làm cơ sở viết bài'}`">
           <MTextarea v-model="form.text" :rows="8" placeholder="Dán dàn ý, báo cáo, biên bản họp…" :error="errors.text" />
         </FormField>
         <CreateMediaPicker
@@ -117,17 +121,20 @@ async function onSubmit() {
       <FormField label="Tỷ lệ khung hình" group>
         <RatioPicker v-model="form.ratio" compact name="ratio-m" />
       </FormField>
-      <FormField v-if="templates.length" label="Mẫu thiết kế" hint="Mẫu của bạn hoặc đồng nghiệp chia sẻ cho mọi người trong MISA.">
+      <FormField v-if="!importDesign" label="Cách dùng nội dung" group :hint="CONTENT_HINT[form.contentMode]">
+        <MRadioGroup v-model="form.contentMode" :options="CONTENT_MODES" direction="vertical" />
+      </FormField>
+      <FormField v-if="templates.length && !importDesign" label="Mẫu thiết kế" hint="Mẫu của bạn hoặc đồng nghiệp chia sẻ cho mọi người trong MISA.">
         <MSelect v-model="form.templateId" :options="templateOptions" aria-label="Mẫu thiết kế" />
       </FormField>
-      <FormField v-if="!form.templateId" label="Tông màu" group hint="Đổi lại được ở bước duyệt dàn ý.">
+      <FormField v-if="!form.templateId && !importDesign" label="Tông màu" group hint="Đổi lại được ở bước duyệt dàn ý.">
         <ThemePicker v-model:tone="form.tone" v-model:theme="form.theme" v-model:primary="form.primary" v-model:secondary="form.secondary" name="theme-m" compact allow-auto />
         <p v-if="errors.theme" class="text-[13px] text-[var(--mds-danger)]">{{ errors.theme }}</p>
       </FormField>
-      <FormField label="Ảnh minh hoạ AI" group hint="Chỉ thêm ảnh cho trang chưa có ảnh của bạn, tối đa 6 ảnh.">
+      <FormField v-if="!importDesign" label="Ảnh minh hoạ AI" group hint="Chỉ thêm ảnh cho trang chưa có ảnh của bạn, tối đa 6 ảnh.">
         <MCheckbox v-model="form.aiImages" label="AI tạo ảnh minh hoạ phù hợp nội dung (Nano Banana 2 Lite)" input-aria-label="AI tạo ảnh minh hoạ phù hợp nội dung" />
       </FormField>
-      <FormField label="Số trang mong muốn" group :hint="form.slideMode === 'auto' ? `AI tự chọn, tối đa ${AUTO_MAX_SLIDES} trang` : '3–40 trang'">
+      <FormField v-if="!keepContent && !importDesign" label="Số trang mong muốn" group :hint="form.slideMode === 'auto' ? `AI tự chọn, tối đa ${AUTO_MAX_SLIDES} trang` : '3–40 trang'">
         <div class="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2">
           <MRadioGroup v-model="form.slideMode" :options="SLIDE_MODES_M" />
           <div v-if="form.slideMode === 'custom'" class="w-[96px]">
@@ -138,14 +145,14 @@ async function onSubmit() {
       <FormField label="Tên bài (tuỳ chọn)">
         <MInput v-model="form.title" :error="errors.title" />
       </FormField>
-      <FormField label="Yêu cầu thêm cho AI (tuỳ chọn)">
+      <FormField v-if="!importDesign" label="Yêu cầu thêm cho AI (tuỳ chọn)">
         <MTextarea v-model="form.instructions" :rows="3" :maxlength="2000" placeholder="Đối tượng người nghe, giọng văn…" :error="errors.instructions" />
       </FormField>
     </form>
     <template #footer>
       <div class="flex gap-2">
         <MButton variant="outline" class="flex-1" @click="router.push('/decks')">Hủy</MButton>
-        <MButton variant="primary" type="submit" form="create-form" class="flex-1" :loading="submitting">Lập dàn ý bằng AI</MButton>
+        <MButton variant="primary" type="submit" form="create-form" class="flex-1" :loading="submitting">{{ importDesign ? 'Nhập bài' : 'Lập dàn ý bằng AI' }}</MButton>
       </div>
       <p v-if="progress !== null" class="mt-2 text-center text-[13px] text-[var(--mds-text-secondary)]" role="status">
         {{ progress < 100 ? `Đang tải ${form.mode === 'text' ? 'ảnh, video' : 'tư liệu'} lên… ${progress}%` : 'Đã tải lên, đang khởi tạo…' }}

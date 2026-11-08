@@ -109,13 +109,13 @@ onMounted(ol.load)
 
     <div v-else-if="deck?.status === 'outlining' || deck?.status === 'generating'" class="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center" role="status">
       <MSpinner :size="40" />
-      <h1 class="text-[18px] font-semibold leading-6">{{ deck.status === 'outlining' ? `AI đang lập dàn ý “${deck.title}”` : `AI đang dựng bài “${deck.title}” theo dàn ý` }}</h1>
+      <h1 class="text-[18px] font-semibold leading-6">{{ deck.status === 'outlining' ? `AI đang lập dàn ý “${deck.title}”` : deck.outline ? `AI đang dựng bài “${deck.title}” theo dàn ý` : `Đang nhập bài trình bày “${deck.title}” — giữ nguyên thiết kế từng trang` }}</h1>
       <JobProgress :queue="deck.queue" />
       <MButton variant="outline" @click="router.push('/decks')">Về danh sách</MButton>
     </div>
 
     <div v-else-if="deck?.status === 'failed'" class="flex flex-1 items-center justify-center p-6">
-      <MEmptyState type="no-result" title="AI chưa lập được dàn ý" :description="deck.errorMessage || 'Đã có lỗi xảy ra.'">
+      <MEmptyState type="no-result" :title="deck.outline || deck.sourceKind !== 'file' ? 'AI chưa lập được dàn ý' : 'Chưa tạo được bài trình bày'" :description="deck.errorMessage || 'Đã có lỗi xảy ra.'">
         <template #actions>
           <MButton variant="outline" @click="confirmRemove = true">Xóa bài</MButton>
           <MButton variant="primary" @click="router.push('/create')">Tạo lại</MButton>
