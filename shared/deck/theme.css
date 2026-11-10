@@ -194,6 +194,8 @@ svg * { transform-box: fill-box; transform-origin: center; }
 .label { font: 600 var(--t-xs)/1.35 var(--f-sans); text-wrap: balance; letter-spacing: .16em; text-transform: uppercase; color: var(--c, var(--accent)); }
 .media { position: relative; margin: 0; height: 100%; min-height: 0; border-radius: var(--r); overflow: hidden; border: 1.5px solid var(--line-2); box-shadow: var(--shadow); background: var(--panel-b); }
 .media img { display: block; width: 100%; height: 100%; }
+/* Cỡ ảnh người dùng kéo trên khung (image.size → --mz): thu / phóng quanh tâm, không đổi bố cục. */
+.media[data-mz] { scale: var(--mz, 1); }
 /* Lớp phủ màu trên ảnh (shared/deck/imgstyle.js): trên ảnh, dưới chú thích; theo bo góc của khung. */
 .ovl { position: absolute; inset: 0; z-index: 1; pointer-events: none; border-radius: inherit; }
 .media figcaption, .fe-fig .ph { z-index: 2; }
@@ -912,6 +914,15 @@ body.edit a.rl { cursor: text; }
 #rtb .tb-fz input:focus, #rtb .tb-lh select:focus { outline: 2px solid #60A5FA; outline-offset: 0; }
 #rtb.plain > :not(.tb-box) { display: none !important; }
 #rtb.nobox > .tb-box, #rtb.nobox > .tb-boxsep { display: none !important; }
+/* Khung + 4 tay nắm góc của ảnh / video ô media chính (engine buildMsz) — kéo góc để thu / phóng theo tỷ lệ. */
+#msz { position: fixed; z-index: 998; display: none; box-sizing: border-box; border: 2px solid #2563EB; border-radius: 4px; pointer-events: none; }
+#msz.on { display: block; }
+#msz i { position: absolute; width: 16px; height: 16px; margin: -8px; box-sizing: border-box; background: #FFFFFF; border: 3px solid #2563EB; border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .35); pointer-events: auto; touch-action: none; }
+#msz i::after { content: ""; position: absolute; inset: -12px; }
+#msz i[data-h="nw"] { left: 0; top: 0; cursor: nwse-resize; } #msz i[data-h="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+#msz i[data-h="sw"] { left: 0; top: 100%; cursor: nesw-resize; } #msz i[data-h="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+#msz i:hover, #msz.drag i { background: #2563EB; }
 /* Tay nắm độ rộng khung chữ (engine buildBoxHandle) — mép phải ô chữ, kéo ngang. */
 #mvw { position: fixed; z-index: 999; display: none; width: 14px; height: 32px; padding: 0; border: 0; border-radius: 7px; background: #111827;
   box-shadow: 0 0 0 2px #FFFFFF, 0 4px 12px rgba(0, 0, 0, .35); cursor: ew-resize; touch-action: none; }

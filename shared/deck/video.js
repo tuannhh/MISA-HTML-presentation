@@ -8,6 +8,14 @@
 export const VIDEO_ALIGNS = Object.freeze(['left', 'center', 'right']);
 export const VIDEO_SIZE_MIN = 30;
 export const VIDEO_SIZE_MAX = 100;
+// Ảnh của ô media chính (slide.image.size): % so với cỡ bố cục đặt — người dùng kéo góc ảnh trên khung (engine) để thu / phóng theo tỷ lệ.
+export const IMAGE_SIZE_MIN = 30;
+export const IMAGE_SIZE_MAX = 150;
+/** Cỡ ảnh hợp lệ (số nguyên %, khác 100) hoặc null. */
+export function cleanImageSize(v) {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= IMAGE_SIZE_MIN && n <= IMAGE_SIZE_MAX && n !== 100 ? n : null;
+}
 // Vimeo: mã số video; video "không công khai" cần thêm mã riêng tư (h=…) mới nhúng được.
 export const VIMEO_ID_RE = /^\d{5,12}$/;
 export const VIMEO_HASH_RE = /^[0-9a-f]{6,24}$/i;

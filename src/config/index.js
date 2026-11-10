@@ -96,6 +96,10 @@ export function loadConfig() {
       concurrency: int('AI_IMAGES_CONCURRENCY', 3, { min: 1, max: 8 }),
       // Chỉ đạo thiết kế (DESIGN_DIRECT): bộ hình minh hoạ 3D đồng bộ cả bài — số hình tối đa mỗi bài (bìa, mở đầu phần, hình từng thẻ).
       artPerDeck: int('AI_ART_PER_DECK', 36, { min: 0, max: 80 }),
+      // Hình từng mục + hình cạnh câu chốt: model viết SVG (vector, dựng thành ảnh nền trong suốt — không tách nền nên không lem viền).
+      // false = vẽ ảnh 3D rồi tách nền như hình bìa.
+      vectorArt: bool('AI_ART_VECTOR', true),
+      vectorConcurrency: int('AI_VECTOR_CONCURRENCY', 6, { min: 1, max: 12 }),
     }),
     // Chỉ đạo thiết kế bằng AI khi dựng bài (phần + màu, biến thể theo nghĩa, bộ hình 3D). 0 = cách dựng cũ (bốc biến thể ngẫu nhiên).
     design: Object.freeze({

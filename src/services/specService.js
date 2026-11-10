@@ -15,7 +15,7 @@ import { LOGO_MOTIONS } from '../../shared/deck/bg3d.js';
 import { VARIANTS, STYLES, COLS_RANGE } from '../../shared/deck/variants.js';
 import { CALLOUT_TONES, CALLOUT_STYLES, cleanAccent, cleanTransition } from '../../shared/deck/blocks.js';
 import { cleanImgLook } from '../../shared/deck/imgstyle.js';
-import { cleanVideoOpts, VIMEO_ID_RE, VIMEO_HASH_RE } from '../../shared/deck/video.js';
+import { cleanVideoOpts, VIMEO_ID_RE, VIMEO_HASH_RE, cleanImageSize } from '../../shared/deck/video.js';
 import { cleanMoves, cleanHide } from '../../shared/deck/layers.js';
 import { TITLE_CASES } from '../../shared/deck/textCase.js';
 import { PHONE_CHANNELS, CONTACT_LIMITS as CL, validPhone, validEmail, webHref } from '../../shared/deck/contact.js';
@@ -131,6 +131,9 @@ function cleanImage(c, v, path) {
   if (px !== null && py !== null && (px !== 50 || py !== 50)) img.pos = { x: px, y: py };
   const zoom = num(o.zoom, 1, 4, 2);
   if (zoom && zoom > 1) img.zoom = zoom;
+  // Cỡ ảnh so với cỡ bố cục đặt (kéo góc ảnh trên khung) — chỉ lưu khi khác 100%.
+  const size = cleanImageSize(o.size);
+  if (size) img.size = size;
   // Kiểu khung (bo góc, bóng, viền) + lớp phủ màu — chỉ khoá hợp lệ (shared/deck/imgstyle.js).
   Object.assign(img, cleanImgLook(o));
   return img.asset || img.alt || img.caption ? img : null;

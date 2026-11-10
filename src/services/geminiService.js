@@ -9,6 +9,7 @@ import { HttpError, unavailable } from '../lib/httpError.js';
 import { createServiceAccountTokens, loadServiceAccount } from '../lib/googleAuth.js';
 import { REVIEW_PROMPT, reviewResponseSchema } from './designReview.js';
 import { TYPESET_PROMPT, typesetResponseSchema } from './typeset.js';
+import { VECTOR_PROMPT, vectorUserText } from './vectorArt.js';
 
 const S = (description) => ({ type: 'STRING', ...(description ? { description } : {}) });
 const ITEM = {
@@ -651,7 +652,7 @@ export const IMAGE_ASPECTS = Object.freeze(['1:1', '4:3', '3:4', '16:9', '9:16',
  *  - provider 'developer-api': khoá GEMINI_API_KEY qua header x-goog-api-key, có Files API cho tệp lớn.
  * `agentBaseUrl` / `tokens` chỉ để test thay máy chủ Google.
  */
-export function createGeminiService({ provider = 'developer-api', apiKey, model, baseUrl, timeoutMs, mediaTimeoutMs = timeoutMs, imageModel = 'gemini-3.1-flash-lite-image', imageSize = '1K', imageTimeoutMs = 90000, credentialsFile, project, location = 'global', agentBaseUrl, tokens }) {
+export function createGeminiService({ provider = 'developer-api', apiKey, model, baseUrl, timeoutMs, mediaTimeoutMs = timeoutMs, imageModel = 'gemini-3.1-flash-lite-image', vectorModel = '', imageSize = '1K', imageTimeoutMs = 90000, credentialsFile, project, location = 'global', agentBaseUrl, tokens }) {
   const agent = provider === 'agent-platform';
   const auth = agent ? tokens || createServiceAccountTokens(loadServiceAccount(credentialsFile)) : null;
   const agentRoot = agentBaseUrl || `https://${location === 'global' ? '' : `${location}-`}aiplatform.googleapis.com/v1`;
@@ -852,6 +853,27 @@ export function createGeminiService({ provider = 'developer-api', apiKey, model,
         generationConfig: { responseMimeType: 'application/json', responseSchema: typesetResponseSchema(), temperature: 0, maxOutputTokens: 32768 },
       };
       return callJson(body, timeoutMs, 'gemini_typeset_done');
+    },
+
+    /**
+     * Hình minh hoạ vector: model viết mã SVG cho 1 vật thể (subject, tiếng Anh) theo bảng màu của phần → chuỗi mã thô (vectorArt.sanitizeSvg làm sạch
+     * trước khi dùng). Không dùng responseSchema (mã SVG dài, thoát chuỗi JSON dễ hỏng).
+     */
+    async vectorArt({ subject, color, extra = '', thinking = '' }) {
+      const body = {
+        systemInstruction: { parts: [{ text: VECTOR_PROMPT }] },
+        contents: [{ role: 'user', parts: [{ text: vectorUserText(subject, color) + (extra ? `
+${extra}` : '') }] }],
+        // thinking ('low' | 'medium' | 'high'): mức suy luận của model — hình đơn giản không cần suy luận sâu, 'low' nhanh hơn nhiều.
+        generationConfig: { temperature: 0.7, maxOutputTokens: 16384, ...(thinking ? { thinkingConfig: { thinkingLevel: thinking } } : {}) },
+      };
+      const started = Date.now();
+      const json = await call(body, 0, timeoutMs, vectorModel || model);
+      const cand = json?.candidates?.[0];
+      logger.info('gemini_vector_done', { ms: Date.now() - started, finish: cand?.finishReason, usage: json?.usageMetadata?.totalTokenCount });
+      const text = textOf(cand);
+      if (!text) throw new HttpError(422, 'AI_EMPTY', 'AI không trả về kết quả, vui lòng thử lại');
+      return text;
     },
 
     /** Bước 1: tư liệu → dàn ý (tiêu đề + các dòng nội dung từng trang, ảnh gợi ý). */

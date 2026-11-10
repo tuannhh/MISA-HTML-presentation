@@ -37,6 +37,7 @@ import { lintScore, lintTotals, lintFixes } from './deckLint.js';
 import { prepareOutline, applyDirection, planArt, artPrompt, cutoutArt, cropPage, tidyNumbers, tidyHeads } from './artDirection.js';
 import { applyReview, slideBrief, REVIEW_BATCH, fitTrials, fitProbe, applyFit, FIT_TIGHT } from './designReview.js';
 import { removeBackground } from './cutoutService.js';
+import { sanitizeSvg, renderVectorArt } from './vectorArt.js';
 import { resolveYouTube, parseYouTubeId } from './youtubeService.js';
 import { resolveVimeo, parseVimeo } from './vimeoService.js';
 import { renderDeck, deckSize } from './renderService.js';
@@ -138,6 +139,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
   const cutoutQueue = new Semaphore(1);
   // Tạo ảnh AI: giới hạn số yêu cầu chạy song song (dùng chung cho ảnh tự động khi dựng bài và ảnh theo yêu cầu).
   const aiQueue = new Semaphore(config.aiImages.concurrency);
+  // Hình vector là lượt gọi model chữ (~11 giây/hình, chậm hơn vẽ ảnh nhưng nhẹ) → hàng đợi riêng, song song nhiều hơn để lượt dựng không dài ra.
+  const vectorQueue = new Semaphore(config.aiImages.vectorConcurrency || 6);
   // Xuất HTML (nhúng base64) tốn RAM theo dung lượng media → giới hạn số lượt chạy đồng thời.
   const exportQueue = new Semaphore(config.limits.renderConcurrency);
   const thumbTimers = new Map();
@@ -802,13 +805,50 @@ export function createPresentationService({ config, repos, storage, gemini, brow
 
   // Bộ hình minh hoạ 3D đồng bộ (chỉ đạo thiết kế): bìa, mở đầu phần, hình từng thẻ — cùng một phong cách, màu theo phần của trang.
   // Bộ hình từng mục: thiếu 1 hình → bỏ cả bộ của trang đó (trang lẫn icon và hình trông lệch). Lỗi từng hình không làm hỏng lượt dựng.
-  // Vẽ 1 hình 3D (nền tách trong suốt) → asset id, lỗi → null (trang giữ biểu tượng / ô trống như cũ).
+  // Hình vector (AI_ART_VECTOR): model VIẾT mã SVG → làm sạch → dựng PNG nền trong suốt. Không qua bước tách nền nên cạnh hình luôn sắc
+  // (hình nhỏ trong thẻ / cạnh câu chốt là nơi viền tách nền lem dễ thấy nhất). Mã hỏng / hình rỗng → thử lại 1 lần; vẫn hỏng → null.
+  async function drawVector(subject, color) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      // Lượt đầu suy luận mức thấp (~10 giây/hình, đủ cho hình đơn giản); lượt thử lại để model suy luận mặc định + nhắc lỗi.
+      const raw = await gemini
+        .vectorArt({ subject, color, thinking: attempt ? '' : 'low', extra: attempt ? 'Lần trước mã không dựng được. Viết lại gọn hơn, chỉ dùng các phần tử cho phép, đóng đủ thẻ.' : '' })
+        .catch((err) => {
+          if (attempt) throw err;
+          return '';
+        });
+      const svg = sanitizeSvg(raw);
+      const png = svg ? await renderVectorArt(svg).catch(() => null) : null;
+      if (png) return normalizeImage(png, { maxSide: 1024 });
+    }
+    return null;
+  }
+
+  // Hình nhỏ đi đường vector: từng mục, hoặc hình cạnh câu chốt cỡ lớn (lượt vẽ lại của vòng tự soát không mang cờ quote → nhận theo trang).
+  function vectorJob(spec, w) {
+    const sl = spec.slides[w.slide];
+    const small = w.item !== null || w.quote === true || (sl?.callout?.style === 'quote' && !['cover', 'section', 'closing'].includes(sl.layout));
+    return config.aiImages.vectorArt === true && small && typeof gemini.vectorArt === 'function';
+  }
+  const artQueue = (spec, w) => (vectorJob(spec, w) ? vectorQueue : aiQueue);
+
+  // Vẽ 1 hình minh hoạ nền trong suốt → asset id, lỗi → null (trang giữ biểu tượng / ô trống như cũ).
+  //  - hình từng mục + hình cạnh câu chốt (nhỏ): vector khi AI_ART_VECTOR bật; hình chủ đạo bìa / mở phần / kết (lớn): ảnh 3D tách nền.
   async function drawArt(tenantId, id, spec, w) {
     const color = spec.parts?.[spec.slides[w.slide]?.part]?.color;
+    const vector = vectorJob(spec, w);
     try {
-      const out = await gemini.generateImage({ prompt: artPrompt(w.subject, color), aspectRatio: '1:1' });
-      const img = await normalizeImage(await cutoutArt(out.buffer), { maxSide: 1024 });
-      const a = await storeImage({ tenant_id: tenantId, id }, 'image', img, `ai-hinh-3d-trang-${w.slide + 1}${w.item === null ? '' : `-muc-${w.item + 1}`}`);
+      let img;
+      if (vector) {
+        img = await drawVector(w.subject, color);
+        if (!img) {
+          logger.warn('ai_art_failed', { id, slide: w.slide, item: w.item, code: 'VECTOR_INVALID' });
+          return null;
+        }
+      } else {
+        const out = await gemini.generateImage({ prompt: artPrompt(w.subject, color), aspectRatio: '1:1' });
+        img = await normalizeImage(await cutoutArt(out.buffer), { maxSide: 1024 });
+      }
+      const a = await storeImage({ tenant_id: tenantId, id }, 'image', img, `ai-hinh-${vector ? 'vector' : '3d'}-trang-${w.slide + 1}${w.item === null ? '' : `-muc-${w.item + 1}`}`);
       return a.id;
     } catch (err) {
       logger.warn('ai_art_failed', { id, slide: w.slide, item: w.item, code: err.code || null, err: err instanceof HttpError ? undefined : err.message });
@@ -823,7 +863,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const subjects = new Map(plan.map((w) => [`${w.slide}:${w.item}`, w.subject]));
     await Promise.all(
       plan.map((w) =>
-        aiQueue.run(async () => {
+        artQueue(spec, w).run(async () => {
           const asset = await drawArt(tenantId, id, spec, w);
           if (asset) done.set(`${w.slide}:${w.item}`, asset);
         }),
@@ -926,7 +966,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const got = new Map();
       await Promise.all(
         res.redraw.map((w) =>
-          aiQueue.run(async () => {
+          artQueue(spec, w).run(async () => {
             const subject = subjects?.get(`${w.slide}:${w.item}`);
             const asset = subject ? await drawArt(tenantId, id, spec, { ...w, subject }) : null;
             if (asset) got.set(`${w.slide}:${w.item}`, asset);

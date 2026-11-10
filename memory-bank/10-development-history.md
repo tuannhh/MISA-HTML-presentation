@@ -775,3 +775,17 @@ hình, dãn dòng hẹp, trang kém đẹp.
 - Giới hạn: trang không có nhãn mục phía trên tiêu đề mà tiêu đề dài tới logo vẫn phải lùi gần hết khoảng chừa (tiêu đề phải nằm dưới logo); khi đang
   gõ tiêu đề trong trình soạn thảo, lúc chữ chạm tới logo cả trang sẽ dịch xuống vài chục px (đúng ý nhưng nhìn thấy được). Bản sao chưa dựng lại bằng
   AI sau thay đổi này → `fitPass` chưa tận dụng chỗ trống mới để chọn lại kiểu trình bày.
+
+## 2026-11-10 — Hình thẻ dạng vector (không tách nền) + kéo góc đổi cỡ ảnh / video theo tỷ lệ
+Phản hồi người dùng: (1) hình 3D nhỏ trong thẻ bị lem viền do tách nền — muốn icon dạng vector; (2) ảnh đã đưa vào bài phải đổi cỡ được bằng cách
+kéo góc theo tỷ lệ, tương tự với ảnh / video chèn thêm.
+- **Hình vector** (`src/services/vectorArt.js` mới; `gemini.vectorArt`; `presentationService.drawVector` / `drawArt`; cờ `AI_ART_VECTOR`): hình từng
+  mục + hình cạnh câu chốt do model viết SVG → `sanitizeSvg` → `renderVectorArt` (PNG nền trong suốt, cắt sát). Hình bìa / mở phần / kết giữ ảnh 3D.
+  Thử 18 chủ đề thật (3 bảng màu): 18/18 dựng được ngay lượt đầu; ~11 s/hình với suy luận mức thấp (mặc định ~25 s).
+- **Đổi cỡ ảnh / video**: `image.size` (spec, `cleanImageSize` ở `shared/deck/video.js`), renderer `sizeCss` → `data-mz` + `--mz`, CSS
+  `.media[data-mz] { scale }` + `#msz`; engine `buildMsz` / `showMsz` / `mszDown|Move|Up` / `mszCommit` gửi `deck:msize`; frontend
+  `editPaths.applyMediaSize` + `useLiveDeck` (dùng chung desktop và mobile). Phần tử tự do: ảnh / video kéo góc giữ tỷ lệ mặc định.
+- Kiểm chứng: `npm test` 408/408 (mới `vector-art.test.js` 6 test, `media-size.test.js` 3 test — có test Chromium thật kéo góc), `npm run build` đạt.
+- Giới hạn: hình vector do AI viết — ẩn dụ phức tạp (vd. "thước cặp đo đồng xu") có thể kém rõ hơn ảnh 3D; tay nắm đổi cỡ hiện khi rê chuột / bấm
+  (màn hình cảm ứng: bấm vào ảnh); ảnh trong thư viện ảnh, ảnh của từng thẻ và ảnh nền tràn trang chưa có tay nắm; ảnh phóng > 100% có thể chờm
+  lên chữ bên cạnh (người dùng tự chọn).

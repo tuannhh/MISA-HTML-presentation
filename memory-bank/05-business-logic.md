@@ -357,6 +357,22 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
       (biến `--lgs`, vd. 54px: nhãn mục nằm ngang hàng logo, tiêu đề ngay dưới logo); phần phải đẩy ≥ khoảng chừa mặc định → trả về mặc định.
       Đo SAU `fitTitles` (tiêu đề co về 1 dòng sẽ dài ra phía logo) và đo lại sau khi trang co chữ. Ô chữ người dùng kéo dời đo ở vị trí gốc
       (`.fit-m`). Hoạ tiết nền (vòng quỹ đạo, hình mờ) không tính. Không có JS → CSS vẫn chừa đủ. Logo phía dưới (`.lg-bot`) giữ nguyên.
+  15. **Hình từng thẻ / cạnh câu chốt là VECTOR** (`AI_ART_VECTOR`, mặc định bật; `src/services/vectorArt.js`, `gemini.vectorArt`): hình nhỏ là nơi viền
+      tách nền của ảnh 3D lem dễ thấy nhất → model VIẾT mã SVG (viewBox 128, phong cách "clay 2.5D phẳng-mịn", bảng màu 5 nấc theo màu phần
+      `VECTOR_PALETTES` + màu nhấn ấm) thay vì vẽ ảnh. `sanitizeSvg` làm sạch theo danh sách cho phép (14 phần tử, không text/image/script/style/use;
+      thuộc tính lạ bị bỏ; `url()` chỉ `#id` có định nghĩa; ≤ 90 nét, ≤ 30 KB) → `renderVectorArt` dựng PNG nền trong suốt bằng librsvg (sharp), cắt
+      sát hình + lề 9%, vuông 768px → lưu như ảnh thường (`frame: 'art'`, tên `ai-hinh-vector-…`). KHÔNG có bước tách nền → cạnh luôn sắc. Lượt đầu
+      suy luận mức thấp (`thinkingLevel: 'low'`, ~11 s/hình — nhanh hơn vẽ ảnh); mã hỏng / hình rỗng → thử lại 1 lần (suy luận mặc định + nhắc lỗi);
+      vẫn hỏng → null (bộ hình của trang bị bỏ, thẻ giữ biểu tượng). Hình chủ đạo bìa / mở phần / kết (lớn) vẫn là ảnh 3D tách nền (`cutoutArt`).
+      Không lưu SVG làm asset (máy chủ không phục vụ SVG) — chỉ lưu ảnh đã dựng.
+      Hàng đợi riêng `vectorQueue` (`AI_VECTOR_CONCURRENCY`, mặc định 6) — lượt gọi model chữ, không chiếm chỗ hàng đợi vẽ ảnh.
+  16. **Kéo góc đổi cỡ ảnh / video theo tỷ lệ** (trình soạn thảo, engine):
+      - Ô media chính của bố cục (`data-m="slot"`, không phải ảnh nền tràn trang): rê chuột / bấm → khung `#msz` + 4 tay nắm góc; kéo = thu / phóng
+        quanh tâm, giữ tỷ lệ. Ảnh: `slide.image.size` (30–150 %, 100 = không lưu) → renderer gắn `data-mz` + `--mz` trên `figure.media`, CSS `scale`
+        (bố cục không đổi). Video: `slide.video.size` (30–100 — cùng trường với bảng Video) → `--vz` trên `.vbox`. Thả tay → engine gửi
+        `deck:msize { index, path: 'slot', kind, size }` → `editPaths.applyMediaSize` (kẹp số). Bấm đúp tay nắm = về 100%.
+      - Phần tử ảnh / video chèn tự do (`.fe-image`, `.fe-video`): kéo tay nắm GÓC mặc định giữ tỷ lệ khung (Shift = kéo tự do); phần tử khác như cũ
+        (Shift = giữ tỷ lệ). Giữ tỷ lệ thì không hút mép.
   - Lưới thẻ có hàng cuối lẻ (5 thẻ = 3 + 2) căn giữa: `.cards.ctr` (lưới 2×cột rãnh, thẻ chiếm 2 rãnh, thẻ đầu hàng cuối đặt `grid-column`).
 - **Hộp "Đổi / chỉnh sửa ảnh"** (`ImageStudioPanel`; desktop = dialog, mobile = màn toàn màn hình): Tải lên · Ảnh trong bài · Tìm ảnh (Pixabay, từ khoá Việt/Anh, lọc hướng) · Tạo bằng AI (mô tả + tỷ lệ, gợi ý sẵn từ tiêu đề trang) · Chỉnh sửa. Chọn ảnh mới giữ chú thích/kiểu hiển thị + khung/lớp phủ (§26), bỏ thông số chỉnh sửa của ảnh cũ.
 - **Chỉnh sửa ảnh** (`ImageEditor`, Cropper.js v1, không AI): cắt theo tỷ lệ (tự do/vừa khung/16:9/4:3/1:1/3:4), xoay 90° + xoay tinh ±45°, lật ngang/dọc, sáng/tối – độ rực – tương phản (xem trước bằng CSS filter), **vị trí trong khung** (lấp đầy/hiện trọn, phóng 100–300%, kéo để chọn phần hiển thị).

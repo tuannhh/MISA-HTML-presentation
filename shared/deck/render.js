@@ -14,7 +14,7 @@ import { richHtml, phraseHtml, plainText, linkAttrs } from './rich.js';
 import { moveAttr, hideClasses } from './layers.js';
 import { qrSvg } from './qr.js';
 import { lookCss, overlayHtml } from './imgstyle.js';
-import { videoFlags, videoBoxAttr, VIMEO_ID_RE, VIMEO_HASH_RE } from './video.js';
+import { videoFlags, videoBoxAttr, cleanImageSize, VIMEO_ID_RE, VIMEO_HASH_RE } from './video.js';
 import { PHONE_CHANNELS, CHANNEL_LABELS, CONTACT_LIMITS as CL, channelHref, emailHref, mapsHref, webHref, webLabel } from './contact.js';
 import { brandSvg } from './brands.js';
 
@@ -116,6 +116,13 @@ function gridCols(n, W, cap = 99) {
 
 // Ảnh trọn khung (ảnh giao diện phần mềm, infographic, PNG nền trong suốt): đặt trên tấm nền trắng đúng tỷ lệ ảnh, căn giữa ô —
 // rõ trên cả nền tối, không cắt mất thông tin; ảnh giao diện máy tính có thêm thanh trình duyệt. Tỷ lệ lấy từ kích thước asset.
+// Cỡ ảnh người dùng kéo trên khung (image.size, %): chỉ ô media chính (o.mp = 'slot'), không áp cho ảnh nền tràn trang.
+// CSS `scale` (không phải transform — engine ghi transform cho hiệu ứng) → ảnh thu / phóng quanh tâm, bố cục giữ nguyên.
+function sizeCss(ref, o) {
+  const n = o && o.mp === 'slot' && !/bleed/.test(o.cls || '') ? cleanImageSize(ref && ref.size) : null;
+  return n ? `--mz:${(n / 100).toFixed(2)}` : '';
+}
+
 function plate(ref, url, cap, ctx, o) {
   const m = ctx.assetMeta ? ctx.assetMeta(ref.asset) : null;
   const ar = m && m.width > 0 && m.height > 0 ? Math.min(4, Math.max(0.3, m.width / m.height)) : 1.6;
@@ -124,7 +131,8 @@ function plate(ref, url, cap, ctx, o) {
   const st = imgPos(ref);
   // Hình minh hoạ 3D chủ đạo (bìa, mở đầu phần, trang kết — o.stage): đặt trên "sân khấu" quỹ đạo quay chậm, hình trôi nhẹ khi trình chiếu.
   const stage = ref.frame === 'art' && o.stage === true;
-  return `<div class="vbox${stage ? ' stage' : ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}">${stage ? stageRings() : ''}<figure${stage && !ctx.edit ? ' data-loop="float" data-p="7" data-amp="12"' : ''} class="media plate${web ? ' web' : ''}${ref.frame === 'art' ? ' art' : ''}${cap ? ' cap' : ''}" style="--ar:${ar.toFixed(4)}${lookCss(ref) ? `;${lookCss(ref)}` : ''}"${M(ctx, o.mp)}>${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"${st ? ` style="${st}"` : ''}></div>${overlayHtml(ref)}${
+  const mz = sizeCss(ref, o);
+  return `<div class="vbox${stage ? ' stage' : ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}">${stage ? stageRings() : ''}<figure${stage && !ctx.edit ? ' data-loop="float" data-p="7" data-amp="12"' : ''} class="media plate${web ? ' web' : ''}${ref.frame === 'art' ? ' art' : ''}${cap ? ' cap' : ''}"${mz ? ' data-mz=""' : ''} style="--ar:${ar.toFixed(4)}${lookCss(ref) ? `;${lookCss(ref)}` : ''}${mz ? `;${mz}` : ''}"${M(ctx, o.mp)}>${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"${st ? ` style="${st}"` : ''}></div>${overlayHtml(ref)}${
     cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''
   }</figure></div>`;
 }
@@ -140,8 +148,9 @@ function media(ref, ctx, o = {}) {
   const inner = url
     ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" style="object-fit:${fit};${imgPos(ref)}"${kb ? ' data-loop="kb" data-p="20"' : ''}>`
     : `<div class="ph">${icon('image')}</div>`;
-  const look = url ? lookCss(ref) : '';
-  return `<figure class="media ${o.cls || ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"${look ? ` style="${look}"` : ''}${M(ctx, o.mp)}>${inner}${url ? overlayHtml(ref) : ''}${cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''}</figure>`;
+  const mz = url ? sizeCss(ref, o) : '';
+  const look = [url ? lookCss(ref) : '', mz].filter(Boolean).join(';');
+  return `<figure class="media ${o.cls || ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"${mz ? ' data-mz=""' : ''}${look ? ` style="${look}"` : ''}${M(ctx, o.mp)}>${inner}${url ? overlayHtml(ref) : ''}${cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''}</figure>`;
 }
 
 const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';

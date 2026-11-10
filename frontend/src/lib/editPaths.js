@@ -6,6 +6,7 @@ import { hasRich, canonicalRich, cutRich, plainText, hrefWeight } from '../../..
 import { CONTACT_LIMITS as CL } from '../../../shared/deck/contact.js';
 import { isMovePath, MOVE_LIMIT, MOVE_RANGE, DECORS, cleanHide, cleanSize, cleanLh, cleanBox } from '../../../shared/deck/layers.js';
 import { newElement } from '../../../shared/deck/free.js';
+import { VIDEO_SIZE_MIN, VIDEO_SIZE_MAX, IMAGE_SIZE_MIN, IMAGE_SIZE_MAX } from '../../../shared/deck/video.js';
 
 const clean = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
 const cut = (v, max) => clean(v).slice(0, max);
@@ -137,6 +138,29 @@ export function setMedia(slide, path, { image, video } = {}) {
   if (t.kind === 'element-image' && image !== undefined) t.element.image = image;
   if (t.kind === 'element-video' && video !== undefined) t.element.video = video;
   return true;
+}
+
+/**
+ * Ảnh / video của ô media chính được kéo góc đổi cỡ trên khung (engine gửi 'deck:msize'): size = % so với cỡ bố cục đặt.
+ * Ảnh 30–150 (100 = không lưu), video 30–100 (100 = không lưu — cùng trường với bảng Video). Số bị kẹp; đường dẫn khác 'slot' bị bỏ.
+ */
+export function applyMediaSize(spec, index, path, size) {
+  const slide = at(spec?.slides, index);
+  const n = Math.round(Number(size));
+  if (!slide || path !== 'slot' || !Number.isFinite(n)) return false;
+  if (slide.video) {
+    const v = Math.min(VIDEO_SIZE_MAX, Math.max(VIDEO_SIZE_MIN, n));
+    if (v >= VIDEO_SIZE_MAX) delete slide.video.size;
+    else slide.video.size = v;
+    return true;
+  }
+  if (slide.image?.asset) {
+    const v = Math.min(IMAGE_SIZE_MAX, Math.max(IMAGE_SIZE_MIN, n));
+    if (v === 100) delete slide.image.size;
+    else slide.image.size = v;
+    return true;
+  }
+  return false;
 }
 
 /* ---- tinh chỉnh tay trên trang có bố cục (shared/deck/layers.js) ---- */

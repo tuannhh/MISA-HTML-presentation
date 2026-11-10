@@ -1448,13 +1448,17 @@
       if (hd.indexOf('s') >= 0) r.h = Math.max(2, drag.r0.h + dy);
       if (hd.indexOf('w') >= 0) { r.w = Math.max(2, drag.r0.w - dx); r.x = drag.r0.x + drag.r0.w - r.w; }
       if (hd.indexOf('n') >= 0) { r.h = Math.max(2, drag.r0.h - dy); r.y = drag.r0.y + drag.r0.h - r.h; }
-      // Kéo góc + Shift: giữ tỷ lệ khung (ảnh không méo).
-      if (e.shiftKey && hd.length === 2) {
-        var k = drag.r0.h / drag.r0.w, nh = r.w * k;
-        if (hd.indexOf('n') >= 0) r.y = drag.r0.y + drag.r0.h - nh;
-        r.h = nh;
+      // Kéo góc giữ tỷ lệ khung: ảnh / video luôn giữ (không méo; Shift = kéo tự do), phần tử khác giữ khi nhấn Shift.
+      // Cạnh nào kéo xa hơn thì quyết định hệ số; góc đối diện đứng yên.
+      var media = drag.fe.classList.contains('fe-image') || drag.fe.classList.contains('fe-video');
+      var keep = hd.length === 2 && (media ? !e.shiftKey : e.shiftKey);
+      if (keep) {
+        var f = Math.max(r.w / drag.r0.w, r.h / drag.r0.h, 2 / Math.min(drag.r0.w, drag.r0.h));
+        r.w = drag.r0.w * f; r.h = drag.r0.h * f;
+        r.x = hd.indexOf('w') >= 0 ? drag.r0.x + drag.r0.w - r.w : drag.r0.x;
+        r.y = hd.indexOf('n') >= 0 ? drag.r0.y + drag.r0.h - r.h : drag.r0.y;
       }
-      if (!e.altKey) {
+      if (!e.altKey && !keep) {
         if (hd.indexOf('e') >= 0) { var se = snapAxis([{ v: r.x + r.w }], drag.xs); if (se) { r.w += se.d; guide(drag.slide, 'v', se.at); } }
         if (hd.indexOf('s') >= 0) { var ss = snapAxis([{ v: r.y + r.h }], drag.ys); if (ss) { r.h += ss.d; guide(drag.slide, 'h', ss.at); } }
       }
@@ -1468,6 +1472,76 @@
     clearGuides();
     if (d.moved) sendGeom(d.fe);
   }
+  /* ---- ảnh / video của ô media chính (data-m="slot"): rê chuột / bấm → khung + 4 tay nắm góc; kéo góc = thu / phóng theo tỷ lệ quanh tâm.
+     Ảnh: CSS scale (--mz, 0,3–1,5) — bố cục giữ nguyên; video: cỡ trong ô media (--vz trên .vbox, 0,3–1 — như bảng Video).
+     Thả tay → 'deck:msize' { index, path, kind, size % } để ứng dụng ghi image.size / video.size. Bấm đúp tay nắm = về 100%. */
+  var msz = null, mszEl = null, mszDrag = null, mszHide = 0;
+  function mszVid(m) { return m.classList.contains('vid'); }
+  function sizable(m) {
+    return !!m && m.getAttribute('data-m') === 'slot' && !m.closest('.fe') && !m.classList.contains('bleed') && slideIndex(m) === cur
+      && (mszVid(m) ? !!m.closest('.vbox') : !!m.querySelector('img'));
+  }
+  function mzLim(m) { return mszVid(m) ? [0.3, 1] : [0.3, 1.5]; }
+  function mzOf(m) {
+    var v = mszVid(m) ? parseFloat(m.closest('.vbox').style.getPropertyValue('--vz')) : parseFloat(m.style.getPropertyValue('--mz'));
+    return v > 0 ? v : 1;
+  }
+  function setMz(m, z) {
+    if (mszVid(m)) { var vb = m.closest('.vbox'); if (z >= 1) vb.style.removeProperty('--vz'); else vb.style.setProperty('--vz', z.toFixed(2)); return; }
+    if (z === 1) { m.removeAttribute('data-mz'); m.style.removeProperty('--mz'); } else { m.setAttribute('data-mz', ''); m.style.setProperty('--mz', z.toFixed(2)); }
+  }
+  function buildMsz() {
+    msz = document.createElement('div'); msz.id = 'msz';
+    ['nw', 'ne', 'sw', 'se'].forEach(function (h) {
+      var d = document.createElement('i'); d.setAttribute('data-h', h); d.title = 'Kéo để đổi cỡ theo tỷ lệ · bấm đúp để về cỡ gốc';
+      d.addEventListener('pointerdown', mszDown); d.addEventListener('pointermove', mszMove); d.addEventListener('pointerup', mszUp); d.addEventListener('pointercancel', mszUp);
+      d.addEventListener('dblclick', function (e) { e.preventDefault(); if (mszEl && mzOf(mszEl) !== 1) { setMz(mszEl, 1); mszCommit(mszEl, 1); } });
+      d.addEventListener('pointerenter', function () { clearTimeout(mszHide); });
+      d.addEventListener('pointerleave', function () { if (!mszDrag) hideMszSoon(); });
+      msz.appendChild(d);
+    });
+    document.body.appendChild(msz);
+    buildTip();
+  }
+  function placeMsz() {
+    if (!msz || !mszEl) return;
+    if (!mszEl.isConnected || slideIndex(mszEl) !== cur) { hideMsz(); return; }
+    var r = mszEl.getBoundingClientRect();
+    msz.style.left = r.left + 'px'; msz.style.top = r.top + 'px'; msz.style.width = r.width + 'px'; msz.style.height = r.height + 'px';
+  }
+  function showMsz(m) {
+    if (mszDrag || !sizable(m)) return;
+    if (!msz) buildMsz();
+    clearTimeout(mszHide); mszEl = m; msz.classList.add('on'); placeMsz();
+  }
+  function hideMsz() { clearTimeout(mszHide); if (mszDrag) return; mszEl = null; if (msz) msz.classList.remove('on'); }
+  function hideMszSoon() { clearTimeout(mszHide); mszHide = setTimeout(hideMsz, 900); }
+  function mszDown(e) {
+    if (e.button !== 0 || !mszEl) return;
+    e.preventDefault(); e.stopPropagation();
+    var r = mszEl.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    mszDrag = { el: mszEl, cx: cx, cy: cy, d0: Math.max(8, Math.hypot(e.clientX - cx, e.clientY - cy)), z0: mzOf(mszEl), z: mzOf(mszEl), id: e.pointerId };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* bỏ qua */ }
+    msz.classList.add('drag');
+  }
+  function mszMove(e) {
+    var d = mszDrag; if (!d || e.pointerId !== d.id) return;
+    var lim = mzLim(d.el);
+    d.z = Math.round(clamp(d.z0 * Math.hypot(e.clientX - d.cx, e.clientY - d.cy) / d.d0, lim[0], lim[1]) * 100) / 100;
+    setMz(d.el, d.z); placeMsz();
+    if (mvt) tip(Math.round(d.z * 100) + '%', e.clientX + 14, e.clientY + 14);
+  }
+  function mszCommit(m, z) {
+    post({ type: 'deck:msize', index: slideIndex(m), path: 'slot', kind: mszVid(m) ? 'video' : 'image', size: Math.round(z * 100) });
+    var sl = m.closest('.slide'); if (sl) fitSlide(sl);
+    placeMsz();
+  }
+  function mszUp(e) {
+    var d = mszDrag; if (!d || (e && e.pointerId !== d.id)) return;
+    mszDrag = null; msz.classList.remove('drag'); tipOff(600);
+    if (d.z !== d.z0) mszCommit(d.el, d.z);
+  }
+
   function startEditFree(el, x, y) {
     editable(el);
     el.focus();
@@ -1520,8 +1594,9 @@
     mvg.addEventListener('pointerleave', function () { if (!mvDrag) hideGripSoon(); });
     mvg.addEventListener('focusout', function (e) { if (!mvDrag && !(e.relatedTarget && mvg.contains(e.relatedTarget))) hideGripSoon(); });
     document.body.appendChild(mvg);
-    mvt = document.createElement('div'); mvt.id = 'mvt'; document.body.appendChild(mvt);
+    buildTip();
   }
+  function buildTip() { if (!mvt) { mvt = document.createElement('div'); mvt.id = 'mvt'; document.body.appendChild(mvt); } }
   function placeGrip() {
     if (!mvg || !mvEl) return;
     // Khung thấp (điện thoại): xếp nhóm nút theo hàng ngang dưới ô chữ — cột dọc 3 nút 44px chiếm gần hết chiều cao khung.
@@ -1807,6 +1882,8 @@
     N = slides.length; window.__deck.count = N;
     timelines = buildTimelines();
     changed.forEach(function (sl) { sl.setAttribute('aria-hidden', 'true'); bindEditables(sl); fitSlideAll(sl); });
+    // Trang vừa dựng lại (sau khi ghi cỡ ảnh mới…) → khung đổi cỡ bám sang ô media mới của trang đang xem.
+    if (mszEl && !mszEl.isConnected) { var keepMsz = msz && msz.classList.contains('on'); mszEl = null; hideMsz(); var again = keepMsz && slides[cur] ? slides[cur].querySelector('[data-m="slot"]') : null; if (again) requestAnimationFrame(function () { showMsz(again); }); }
     slides.forEach(function (sl, k) { render(k, FINAL, 0); });
     var idx = Number.isInteger(d.index) ? d.index : cur;
     if (changed.length || idx !== cur) show(clamp(idx, 0, Math.max(0, N - 1)), true);
@@ -1858,6 +1935,15 @@
       showToolbar(el);
       showGrip(el);
     });
+    // Rê chuột / bấm lên ảnh, video của ô media chính → khung + tay nắm góc đổi cỡ theo tỷ lệ.
+    deck.addEventListener('pointerover', function (e) { if (e.pointerType === 'touch') return; var m = e.target.closest ? e.target.closest('[data-m]') : null; if (sizable(m)) showMsz(m); });
+    deck.addEventListener('pointerout', function (e) {
+      var m = e.target.closest ? e.target.closest('[data-m]') : null;
+      if (!m || m !== mszEl || (e.relatedTarget && (m.contains(e.relatedTarget) || (msz && msz.contains(e.relatedTarget))))) return;
+      hideMszSoon();
+    });
+    deck.addEventListener('click', function (e) { var m = e.target.closest ? e.target.closest('[data-m]') : null; if (sizable(m)) showMsz(m); });
+    addEventListener('resize', placeMsz);
     // Rê chuột lên ô chữ của bố cục → hiện tay nắm kéo dời bên trái ô.
     deck.addEventListener('pointerover', function (e) { if (e.pointerType === 'touch') return; var el = edEl(e.target); if (movable(el)) showGrip(el); });
     deck.addEventListener('pointerout', function (e) {
@@ -1992,7 +2078,7 @@
       if (e.source !== window.parent) return;
       var d = e.data;
       if (!d || typeof d !== 'object') return;
-      if (d.type === 'deck:goto') { var idx = Number(d.index); if (Number.isInteger(idx) && idx !== cur) { selectFe(null, false); closeDcm(); hideGrip(); show(idx, true); } }
+      if (d.type === 'deck:goto') { var idx = Number(d.index); if (Number.isInteger(idx) && idx !== cur) { selectFe(null, false); closeDcm(); hideGrip(); hideMsz(); show(idx, true); } }
       else if (d.type === 'deck:render') applyRender(d);
       else if (d.type === 'deck:select') {
         var id = String(d.id || '').replace(/[^a-z0-9-]/gi, '');

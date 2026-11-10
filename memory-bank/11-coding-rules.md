@@ -78,6 +78,11 @@
   định cho `.slide.lg-top` theo bố cục — muốn đổi lề gốc thì sửa cả cặp `.lg-top` / `.lg-top.lg-free` trong `theme.css`. Thêm loại khối nội dung mới
   (khung, nhãn, hình) có thể nằm ở góc trên → thêm selector vào `LOGO_BOX` (engine.js); hoạ tiết nền mới không tính chạm logo → thêm vào danh sách
   loại trừ (`.stage-rings,.cv-ghost`). `logoNeed` chỉ xét con trực tiếp `.hd/.body/.callout/.free` của trang.
+- SVG do model viết là DỮ LIỆU KHÔNG TIN CẬY: luôn qua `vectorArt.sanitizeSvg` (danh sách cho phép) rồi `renderVectorArt` thành PNG; KHÔNG nhúng
+  thẳng SVG của model vào HTML bài, KHÔNG lưu SVG làm asset. Thêm phần tử / thuộc tính vào danh sách cho phép phải cân nhắc khả năng tải tài nguyên
+  ngoài hoặc chạy mã (image, use, foreignObject, style, href… luôn bị cấm).
+- Cỡ ảnh ô media chính (`image.size`) hiển thị bằng thuộc tính CSS `scale` trên `figure.media[data-mz]` — KHÔNG dùng `transform` (engine ghi transform
+  cho hiệu ứng) và không đặt `scale` vô điều kiện lên `.media` (tạo stacking context cho mọi ảnh). Thông điệp `deck:msize` chỉ nhận `path: 'slot'`.
 - `.cl-t` (tiêu đề trang kết) dùng `background-clip: text` → KHÔNG dùng hiệu ứng `words` (span có `will-change` mất màu chuyển); giữ `zoom`.
 - "Giữ nguyên nội dung" không cắt chữ im lặng: AI lập dàn ý ở chế độ lỏng (dòng thừa nối vào dòng cuối bằng `; `, dòng dài giữ + cảnh báo); lưu dàn ý và dựng bài vẫn chặn dòng > 400 ký tự. Chuỗi hiển thị trong ô nhập 1 dòng không được chứa `
 `.
