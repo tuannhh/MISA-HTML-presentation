@@ -10,6 +10,12 @@ export const ACCENT_LAYOUTS = Object.freeze(['agenda', 'bullets', 'cards', 'stat
 
 export const CALLOUT_TONES = Object.freeze(['note', 'warn', 'ok']);
 export const CALLOUT_LAYOUTS = Object.freeze(['agenda', 'bullets', 'cards', 'stats', 'timeline', 'process', 'comparison', 'image', 'chart']);
+// Kiểu khối: box = hộp chú thích (mặc định, giao diện gốc) · band = dải kết luận màu nhấn cuối trang · quote = câu chốt cỡ lớn trong khung,
+// kèm hình minh hoạ của trang (slide.image) khi bố cục không có ô ảnh riêng và không dùng ảnh nhấn.
+export const CALLOUT_STYLES = Object.freeze(['box', 'band', 'quote']);
+export const QUOTE_ART_LAYOUTS = Object.freeze(['agenda', 'cards', 'stats', 'timeline', 'process']);
+/** Hình của trang hiện trong hộp câu chốt (thay vì ảnh nhấn / ô ảnh) → true. */
+export const calloutArt = (s) => !!(s?.callout?.style === 'quote' && QUOTE_ART_LAYOUTS.includes(s.layout) && s.image?.asset && !s.video && !accentPos(s));
 
 // Phần tử đầu = mặc định (mờ dần — giao diện gốc); 'none' = chuyển ngay.
 export const TRANSITIONS = Object.freeze(['fade', 'push', 'zoom', 'flip', 'curtain', 'none']);

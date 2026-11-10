@@ -35,6 +35,35 @@ export function parseNum(v) {
   return neg ? -n : n;
 }
 
+/**
+ * Đọc số người dùng gõ vào MỘT Ô của bảng dữ liệu (khác parseNum — nơi phải đoán định dạng bảng dán): dấu phẩy luôn là thập phân,
+ * dấu chấm là phân cách nghìn khi đúng nhóm 3 chữ số ("1.234,5" = 1234,5; "0.123" = 0,123 vì nhóm nghìn không mở đầu bằng 0);
+ * "1.5" (không đúng nhóm) vẫn là thập phân cho người quen gõ kiểu Anh. Dạng chỉ Anh ("1,234.5", "1,234,567") giao lại cho parseNum.
+ * Bảo đảm parseCell(showCell(n)) === n với mọi số cleanChart giữ (làm tròn 1e-6, |n| ≤ 1e15).
+ */
+export function parseCell(v) {
+  if (typeof v === 'number') return parseNum(v);
+  const raw = String(v ?? '').trim();
+  if (!raw) return null;
+  const neg = /^\(.*\)$/.test(raw) || /^[-−–]/.test(raw);
+  const s = raw.replace(/[()\s %₫$€đ]|VND|USD/gi, '').replace(/^[-−–+]/, '');
+  if (!/^[\d.,]+$/.test(s) || !/\d/.test(s)) return null;
+  const commas = s.split(',').length - 1;
+  if (commas > 1 || (commas === 1 && s.lastIndexOf('.') > s.indexOf(','))) return parseNum(raw);
+  const [head, frac] = commas ? s.split(',') : [s, ''];
+  const heads = /^[1-9]\d{0,2}(\.\d{3})+$/.test(head) ? head.replace(/\./g, '') : /^\d*$/.test(head) ? head : /^\d+\.\d+$/.test(head) && !commas ? head : null;
+  if (heads === null || (commas && !/^\d*$/.test(frac))) return null;
+  const n = Number(commas ? `${heads || '0'}.${frac || '0'}` : heads);
+  if (!Number.isFinite(n) || n > CHART_LIMITS.abs) return null;
+  return neg ? -n : n;
+}
+
+/** Số → chữ trong ô nhập: dấu phẩy thập phân, không nhóm nghìn, không ký hiệu mũ (làm tròn 1e-6 như cleanChart). */
+export function showCell(v) {
+  if (v === null || v === undefined || !Number.isFinite(Number(v))) return '';
+  return String(Math.round(Number(v) * 1e6) / 1e6).replace('.', ',');
+}
+
 const num = (v) => {
   const n = parseNum(v);
   return n === null ? null : Math.round(n * 1e6) / 1e6;

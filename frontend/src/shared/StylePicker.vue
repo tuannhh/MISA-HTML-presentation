@@ -6,7 +6,7 @@ import { computed, ref } from 'vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import { VARIANTS, fits, resolveVariant, LIST_KEY, familyOf } from '@shared/deck/variants.js'
 import { chartFromStats, statsFromChart } from '@shared/deck/chart.js'
-import { VARIANT_LABELS, LAYOUT_LABEL, ratioNum } from '@/lib/slideModel.js'
+import { VARIANT_LABELS, LAYOUT_LABEL, ratioNum, layoutBlockReason } from '@/lib/slideModel.js'
 import { stylePreview } from '@/lib/stylePreviews.js'
 
 const props = defineProps({
@@ -29,9 +29,11 @@ function asLayout(L) {
   if (L === 'stats' && !(s.stats || []).length && s.chart) v.stats = statsFromChart(s.chart)
   return v
 }
+// Đổi sang L sẽ cắt mất mục (vd. 12 ý → Quy trình tối đa 10 bước) → cả bố cục mờ, kèm lý do (CT-006).
 const tiles = (L) => {
   const sv = asLayout(L)
-  return (VARIANTS[L] || []).map((v) => ({ layout: L, value: v, label: VARIANT_LABELS[L]?.[v] || v, ok: fits(L, v, sv, r.value), svg: stylePreview(L, v) }))
+  const why = layoutBlockReason(props.slide, L)
+  return (VARIANTS[L] || []).map((v) => ({ layout: L, value: v, label: VARIANT_LABELS[L]?.[v] || v, ok: !why && fits(L, v, sv, r.value), why, svg: stylePreview(L, v) }))
 }
 const own = computed(() => tiles(props.slide.layout))
 const family = computed(() => (familyOf(props.slide.layout) || []).filter((L) => L !== props.slide.layout).map((L) => ({ layout: L, label: LAYOUT_LABEL[L], tiles: tiles(L) })))
@@ -49,7 +51,7 @@ const pick = (t) => t.ok && emit('pick', { layout: t.layout, variant: t.value })
         role="radio"
         :aria-checked="cur === t.value"
         :disabled="!t.ok"
-        :title="t.ok ? t.label : `${t.label} — chưa hợp nội dung hiện tại`"
+        :title="t.ok ? t.label : t.why || `${t.label} — chưa hợp nội dung hiện tại`"
         class="spv group flex min-w-0 flex-col gap-1 rounded-lg p-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mds-brand-600)] disabled:cursor-not-allowed disabled:opacity-45"
         @click="pick(t)"
       >
@@ -62,19 +64,20 @@ const pick = (t) => t.ok && emit('pick', { layout: t.layout, variant: t.value })
       </button>
     </div>
     <template v-if="family.length">
-      <button type="button" class="flex items-center gap-1 self-start text-[13px] font-medium text-[var(--mds-brand-600)] hover:underline" :aria-expanded="more" @click="more = !more">
+      <button type="button" class="flex items-center gap-1 self-start text-[13px] font-medium text-[var(--mds-brand-600)] hover:underline max-md:min-h-11 pointer-coarse:min-h-11" :aria-expanded="more" @click="more = !more">
         <MIcon :name="more ? 'chevron-up' : 'chevron-down'" :size="16" />{{ more ? 'Ẩn kiểu của bố cục khác' : 'Đổi sang bố cục khác — giữ nguyên nội dung' }}
       </button>
       <div v-if="more" class="flex flex-col gap-3">
         <section v-for="g in family" :key="g.layout" class="flex flex-col gap-1">
           <h4 class="text-[12px] font-semibold uppercase tracking-wide text-[var(--mds-text-secondary)]">{{ g.label }}</h4>
+          <p v-if="g.tiles[0]?.why" class="text-[12px] leading-4 text-[var(--mds-text-secondary)]" role="note">{{ g.tiles[0].why }} — rút bớt mục để đổi sang bố cục này.</p>
           <div class="grid grid-cols-3 gap-2">
             <button
               v-for="t in g.tiles"
               :key="t.value"
               type="button"
               :disabled="!t.ok"
-              :title="t.ok ? `${g.label}: ${t.label}` : `${g.label}: ${t.label} — chưa hợp nội dung hiện tại`"
+              :title="t.ok ? `${g.label}: ${t.label}` : t.why || `${g.label}: ${t.label} — chưa hợp nội dung hiện tại`"
               class="spv group flex min-w-0 flex-col gap-1 rounded-lg p-1 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mds-brand-600)] disabled:cursor-not-allowed disabled:opacity-45"
               @click="pick(t)"
             >

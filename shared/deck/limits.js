@@ -1,11 +1,15 @@
 // Giới hạn độ dài/số lượng trường của spec — dùng chung cho server (specService) và trình soạn thảo (maxlength).
 export const SPEC_LIMITS = Object.freeze({
   slides: 60,
+  parts: 8,
+  partTitle: 40,
   deckTitle: 200,
   footer: 120,
   kicker: 60,
   title: 200,
   highlight: 100,
+  // Số cụm nghĩa tối đa của 1 tiêu đề / câu chốt (slide.wrap, callout.wrap — bước dàn chữ).
+  wrap: 40,
   subtitle: 400,
   caption: 200,
   notes: 4000,
@@ -15,6 +19,12 @@ export const SPEC_LIMITS = Object.freeze({
   itemTitle: 120,
   itemText: 400,
   itemValue: 40,
+  // Nhãn nhỏ phía trên tiêu đề mục (vd. "Kiểu 01") — số/nhãn trang trí tách khỏi tiêu đề.
+  itemLabel: 32,
+  // Huy hiệu nhấn mạnh trên mục/bước then chốt (vd. "Dừng lại ở đây là an toàn").
+  itemBadge: 40,
+  // Dòng giải thích dưới câu chốt của dải kết luận / hộp trích dẫn (slide.callout.sub).
+  calloutSub: 200,
   stats: 8,
   statText: 16,
   statPrefix: 8,

@@ -17,9 +17,9 @@ import ContactFields from './ContactFields.vue'
 import ChartFields from './ChartFields.vue'
 import StylePicker from './StylePicker.vue'
 import { shiftMoves } from '@/lib/editPaths.js'
-import { LAYOUTS, LAYOUT_FIELDS, TONE_OPTIONS, ITEM_IMAGE_LAYOUTS, BUILD_OPTIONS, BUILD_LAYOUTS, ACCENT_OPTIONS, CALLOUT_OPTIONS, TRANSITION_LABELS, COLS_OPTIONS, ratioNum, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
+import { LAYOUTS, LAYOUT_FIELDS, TONE_OPTIONS, ITEM_IMAGE_LAYOUTS, BUILD_OPTIONS, BUILD_LAYOUTS, ACCENT_OPTIONS, CALLOUT_OPTIONS, CALLOUT_STYLE_OPTIONS, TRANSITION_LABELS, COLS_OPTIONS, ratioNum, layoutBlockReason, SPEC_LIMITS as L, emptyItem, emptyStat, emptyColumn } from '@/lib/slideModel.js'
 import { VARIANTS, resolveVariant, COLS_VARIANTS } from '@shared/deck/variants.js'
-import { ACCENT_LAYOUTS, CALLOUT_LAYOUTS, TRANSITIONS, ACCENT_MAX_ITEMS, accentTooDense } from '@shared/deck/blocks.js'
+import { ACCENT_LAYOUTS, CALLOUT_LAYOUTS, QUOTE_ART_LAYOUTS, TRANSITIONS, ACCENT_MAX_ITEMS, accentTooDense } from '@shared/deck/blocks.js'
 import { plainText, repaintRich } from '@shared/deck/rich.js'
 
 const props = defineProps({
@@ -68,7 +68,13 @@ const rx = (obj, key) => ({
     obj[key] = repaintRich(obj[key], v)
   },
 })
-const layoutOptions = LAYOUTS.map((l) => ({ label: l.label, value: l.value }))
+// Bố cục mà đổi sang sẽ cắt mất mục (CT-006) → mờ + lý do trong nhãn.
+const layoutOptions = computed(() =>
+  LAYOUTS.map((l) => {
+    const why = l.value === s.value.layout ? '' : layoutBlockReason(s.value, l.value)
+    return { label: why ? `${l.label} — ${why}` : l.label, value: l.value, disabled: !!why }
+  }),
+)
 const CAPTION_LABEL = { image: 'Chú thích ảnh', offer: 'Thời hạn / điều kiện', contact: 'Ghi chú', chart: 'Nguồn số liệu' }
 const CAPTION_HINT = { cover: 'Ví dụ: người trình bày · ngày', offer: 'Ví dụ: Áp dụng đến hết 31/12/2026', contact: 'Dòng nhỏ dưới lời kêu gọi (tuỳ chọn)', chart: 'Ví dụ: Nguồn: Báo cáo tài chính 2026 — hiện nhỏ dưới biểu đồ' }
 
@@ -127,8 +133,21 @@ const calloutOn = computed(() => CALLOUT_LAYOUTS.includes(s.value.layout))
 const calloutTone = computed({
   get: () => s.value.callout?.tone || '',
   set: (v) => {
-    if (v) s.value.callout = { tone: v, text: s.value.callout?.text || '' }
+    if (v) s.value.callout = { ...(s.value.callout || {}), tone: v, text: s.value.callout?.text || '' }
     else delete s.value.callout
+  },
+})
+// Câu chốt nhận hình của trang khi bố cục không có ô ảnh riêng và không dùng ảnh nhấn (shared/deck/blocks.js calloutArt).
+const quoteArtOn = computed(() => QUOTE_ART_LAYOUTS.includes(s.value.layout) && !accent.value && !s.value.video)
+const calloutStyle = computed({
+  get: () => s.value.callout?.style || 'box',
+  set: (v) => {
+    if (!s.value.callout) return
+    if (v === 'box') {
+      delete s.value.callout.style
+      delete s.value.callout.sub
+      delete s.value.callout.highlight
+    } else s.value.callout.style = v
   },
 })
 // Chuyển trang riêng của trang này ('' = theo cài đặt cả bài ở mục Thiết kế).
@@ -222,7 +241,7 @@ function setGalleryImage(i, v) {
             role="radio"
             :aria-checked="accent === o.value"
             :disabled="!!s.video && !!o.value"
-            class="rounded-full border px-3 py-1 text-[12px] leading-5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mds-brand-600)] disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded-full border px-3 py-1 text-[12px] leading-5 transition-colors max-md:min-h-11 pointer-coarse:min-h-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mds-brand-600)] disabled:cursor-not-allowed disabled:opacity-50"
             :class="accent === o.value ? 'border-[var(--mds-brand-600)] bg-[var(--mds-brand-50)] font-semibold text-[var(--mds-brand-700)]' : 'border-[var(--mds-border)] hover:border-[var(--mds-brand-600)]'"
             @click="accent = o.value"
           >
@@ -249,7 +268,18 @@ function setGalleryImage(i, v) {
     <FormField v-if="calloutOn" label="Hộp chú thích" group hint="Khung nổi bật cuối trang — sửa chữ ngay trên khung xem trước hoặc tại đây">
       <div class="flex min-w-0 flex-col gap-2">
         <MSelect v-model="calloutTone" :options="CALLOUT_OPTIONS" aria-label="Loại hộp chú thích" />
-        <MTextarea v-if="s.callout" v-bind="rx(s.callout, 'text')" :rows="2" :maxlength="L.callout" placeholder="Nội dung chú thích" />
+        <template v-if="s.callout">
+          <MSelect v-model="calloutStyle" :options="CALLOUT_STYLE_OPTIONS" aria-label="Kiểu khối chú thích" />
+          <MTextarea v-bind="rx(s.callout, 'text')" :rows="2" :maxlength="L.callout" :placeholder="calloutStyle === 'box' ? 'Nội dung chú thích' : 'Câu chốt / kết luận'" />
+          <template v-if="calloutStyle !== 'box'">
+            <MTextarea v-bind="rx(s.callout, 'sub')" :rows="2" :maxlength="L.calloutSub" placeholder="Dòng giải thích (tuỳ chọn)" />
+            <MInput v-model="s.callout.highlight" :maxlength="L.highlight" placeholder="Cụm tô màu nhấn (nằm trong câu chốt, tuỳ chọn)" />
+            <template v-if="calloutStyle === 'quote' && quoteArtOn">
+              <span class="text-[12px] leading-4 text-[var(--mds-text-secondary)]">Hình bên phải câu chốt (tuỳ chọn)</span>
+              <ImagePicker :model-value="s.image" :assets="imageAssets" :upload="upload" :studio="studio" @update:model-value="setImage" @studio="emit('media', { path: 'slot', kind: 'image' })" />
+            </template>
+          </template>
+        </template>
       </div>
     </FormField>
 
@@ -339,6 +369,7 @@ function setGalleryImage(i, v) {
             <MButton variant="icon" aria-label="Xoá mục" @click="removeAt('items', i)"><template #icon><MIcon name="trash" :size="16" /></template></MButton>
           </div>
         </div>
+        <MInput v-bind="rx(it, 'label')" placeholder="Nhãn nhỏ trên tiêu đề (vd. Kiểu 01) — tuỳ chọn" :error="tooLong(it.label, L.itemLabel)" />
         <MInput v-bind="rx(it, 'title')" placeholder="Tiêu đề" :error="tooLong(it.title, L.itemTitle)" />
         <MTextarea v-bind="rx(it, 'text')" :rows="2" placeholder="Nội dung" :maxlength="L.itemText" />
         <template v-if="s.layout !== 'agenda'">
@@ -352,6 +383,7 @@ function setGalleryImage(i, v) {
             @clear-image="clearItemImage(it)"
           />
           <MInput v-bind="rx(it, 'value')" placeholder="Nhãn ngắn" :error="tooLong(it.value, L.itemValue)" />
+          <MInput v-bind="rx(it, 'badge')" placeholder="Huy hiệu nhấn mạnh — mục then chốt (tuỳ chọn)" :error="tooLong(it.badge, L.itemBadge)" />
         </template>
       </div>
       <MButton v-if="s.items.length < itemMax" variant="outline" @click="s.items.push(s.layout === 'offer' ? { ...emptyItem(), icon: 'check' } : emptyItem())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm {{ itemLabel.toLowerCase() }}</MButton>
@@ -372,6 +404,7 @@ function setGalleryImage(i, v) {
         <MInput v-bind="rx(st, 'value')" :placeholder="s.layout === 'timeline' ? 'Mốc thời gian (Tuần 1–2, Q3/2026…)' : 'Nhãn (tuỳ chọn)'" :error="tooLong(st.value, L.itemValue)" />
         <MInput v-bind="rx(st, 'title')" placeholder="Tiêu đề" :error="tooLong(st.title, L.itemTitle)" />
         <MTextarea v-bind="rx(st, 'text')" :rows="2" placeholder="Mô tả" :maxlength="L.itemText" />
+        <MInput v-bind="rx(st, 'badge')" placeholder="Huy hiệu nhấn mạnh — bước then chốt (tuỳ chọn)" :error="tooLong(st.badge, L.itemBadge)" />
       </div>
       <MButton v-if="s.steps.length < L.steps" variant="outline" @click="s.steps.push(emptyItem())"><template #icon><MIcon name="plus" :size="16" /></template>Thêm {{ stepLabel.toLowerCase() }}</MButton>
     </section>

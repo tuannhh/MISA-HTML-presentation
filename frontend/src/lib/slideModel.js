@@ -5,6 +5,7 @@ import { ICON_NAMES } from '@shared/deck/icons.js';
 import { elementsFromTemplate } from '@shared/deck/free.js';
 import { emptyContact, CTA_SUGGESTIONS } from '@shared/deck/contact.js';
 import { chartFromStats } from '@shared/deck/chart.js';
+import { listBlock } from '@shared/deck/variants.js';
 
 export { SPEC_LIMITS };
 
@@ -29,6 +30,12 @@ export const LAYOUTS = [
   { value: 'free', label: 'Trang tự do', icon: 'layout-board' },
 ];
 export const LAYOUT_LABEL = Object.fromEntries(LAYOUTS.map((l) => [l.value, l.label]));
+const LIST_NOUN = { items: 'mục', steps: 'bước' };
+/** Lý do KHÔNG đổi được sang bố cục L (đổi sẽ cắt mất mục) — '' nếu đổi được. Dùng chung ô chọn bố cục, bảng kiểu và changeLayout. */
+export function layoutBlockReason(slide, L) {
+  const b = listBlock(slide, L);
+  return b ? `${LAYOUT_LABEL[L]} tối đa ${b.max} ${LIST_NOUN[b.to]} — trang đang có ${b.count} ${LIST_NOUN[b.from]}` : '';
+}
 export const LAYOUT_ICON = Object.fromEntries(LAYOUTS.map((l) => [l.value, l.icon]));
 
 const HEAD = ['kicker', 'title', 'highlight', 'subtitle'];
@@ -91,6 +98,12 @@ export const CALLOUT_OPTIONS = [
   { value: 'note', label: 'Ghi chú' },
   { value: 'warn', label: 'Cảnh báo' },
   { value: 'ok', label: 'Thành công' },
+];
+// Kiểu khối cuối trang (shared/deck/blocks.js CALLOUT_STYLES).
+export const CALLOUT_STYLE_OPTIONS = [
+  { value: 'box', label: 'Hộp chú thích' },
+  { value: 'band', label: 'Dải kết luận (nền màu nhấn)' },
+  { value: 'quote', label: 'Câu chốt cỡ lớn (kèm hình của trang)' },
 ];
 export const TRANSITION_LABELS = { fade: 'Mờ dần', push: 'Đẩy sang', zoom: 'Phóng to', flip: 'Lật trang', curtain: 'Mở màn', none: 'Không hiệu ứng' };
 export const COLS_OPTIONS = [{ value: 0, label: 'Tự động' }, ...[2, 3, 4, 5, 6].map((n) => ({ value: n, label: `${n} cột` }))];

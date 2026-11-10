@@ -146,14 +146,26 @@ test('moovAtEnd: đọc tiêu đề hộp cấp 1 — moov sau mdat → cần đ
 });
 
 // Kho asset + ffmpeg giả lập cho hàng nén.
-function rig({ probe, transcodeBytes = 40, replaceRows = 1, fail = null, pathOf = (k) => `/data/${k}` } = {}) {
+function rig({ probe, transcodeBytes = 40, replaceRows = 1, fail = null, pathOf = (k) => `/data/${k}`, replaceError = null, commitOnError = false, findError = false } = {}) {
   const row = { id: A, kind: 'video', tenant_id: 'T', presentation_id: P, storage_key: `tenants/T/presentations/${P}/${A}.mov`, bytes: 100, width: null, height: null, process_state: 'pending' };
   const log = { states: [], replaced: null, removed: [], put: [] };
+  let finds = 0;
   const assets = {
-    findById: async () => row,
+    findById: async () => {
+      finds += 1;
+      if (findError && finds > 1) throw new Error('ECONNRESET');
+      return row;
+    },
     setProcessState: async (_id, st) => log.states.push(st),
     setVideoSize: async (_id, w, h) => Object.assign(row, { width: w, height: h }),
-    replaceVideoFile: async (_id, from, f) => ((log.replaced = { from, ...f }), replaceRows),
+    replaceVideoFile: async (_id, from, f) => {
+      if (replaceError) {
+        if (commitOnError) Object.assign(row, { storage_key: f.storageKey }); // DB đã ghi nhưng phản hồi mất
+        throw replaceError;
+      }
+      log.replaced = { from, ...f };
+      return replaceRows;
+    },
     listVideoJobs: async () => [row],
   };
   const storage = { pathOf, putFile: async (k) => log.put.push(k), remove: async (k) => log.removed.push(k) };
@@ -225,11 +237,42 @@ test('hàng nén: khởi động lại → nén tiếp video còn dở; inspect 
   assert.deepEqual(log.states, ['running', 'done']);
   const broken = createVideoOptimizer({ assets: {}, storage: {}, logger: { warn() {} }, tmpDir: '/x', video: { available: async () => true, probe: async () => { throw new Error('Invalid data'); } } });
   assert.equal((await broken.inspect('/x.mp4')).broken, true);
-  const none = createVideoOptimizer({ assets: {}, storage: {}, logger: {}, tmpDir: '/x', video: { available: async () => false } });
+  const none = createVideoOptimizer({ assets: {}, storage: {}, logger: { warn() {} }, tmpDir: '/x', video: { available: async () => false } });
   assert.deepEqual(await none.inspect('/x.mp4', { wantPoster: true }), { info: null, poster: null });
 });
 
 test('CSP: khung chiếu cho phát video tải lên trong khung; trang xuất bản nhúng được Vimeo', () => {
   assert.match(deckCsp('n', 'https://app.example'), /media-src 'self' https:\/\/app\.example blob:/);
   assert.match(publishedCsp('n'), /frame-src https:\/\/www\.youtube-nocookie\.com https:\/\/player\.vimeo\.com/);
+});
+
+// CT-004: lỗi ở bước đổi bản ghi sau khi bản nén đã vào kho không được để lại tệp mồ côi; cũng không xoá mù tệp DB đã trỏ tới.
+test('hàng nén: DB lỗi sau khi ghi bản nén → xoá bản nén mồ côi, giữ gốc, trạng thái failed', async () => {
+  const r = rig({ replaceError: Object.assign(new Error('reset'), { code: 'ECONNRESET' }) });
+  const original = r.row.storage_key;
+  r.opt.enqueue(A);
+  await settle(r.opt);
+  assert.equal(r.log.put.length, 1);
+  assert.deepEqual(r.log.removed, r.log.put, 'xoá đúng bản nén vừa ghi');
+  assert.ok(!r.log.removed.includes(original), 'không đụng tệp gốc');
+  assert.deepEqual(r.log.states, ['running', 'failed']);
+});
+
+test('hàng nén: DB thực ra đã ghi (mất phản hồi) → giữ bản nén, xoá bản gốc, trạng thái done', async () => {
+  const r = rig({ replaceError: new Error('timeout'), commitOnError: true });
+  const original = r.row.storage_key;
+  r.opt.enqueue(A);
+  await settle(r.opt);
+  assert.equal(r.log.put.length, 1);
+  assert.equal(r.row.storage_key, r.log.put[0]);
+  assert.deepEqual(r.log.removed, [original], 'chỉ xoá bản gốc đã được thay');
+  assert.deepEqual(r.log.states, ['running', 'done']);
+});
+
+test('hàng nén: DB lỗi và không đọc lại được → không xoá mù, ghi log để dọn sau', async () => {
+  const r = rig({ replaceError: new Error('down'), findError: true });
+  r.opt.enqueue(A);
+  await settle(r.opt);
+  assert.equal(r.log.put.length, 1);
+  assert.deepEqual(r.log.removed, [], 'chưa chắc bản nén có đang được dùng → giữ');
 });

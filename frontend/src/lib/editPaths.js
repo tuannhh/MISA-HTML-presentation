@@ -21,7 +21,7 @@ const cutR = (v, max) => {
 };
 const at = (list, i) => (Array.isArray(list) && Number.isInteger(i) && i >= 0 && i < list.length ? list[i] : null);
 // Map không có prototype → khoá như '__proto__'/'constructor' từ khung xem trước không bao giờ khớp.
-const ITEM_MAX = Object.assign(Object.create(null), { title: L.itemTitle, text: L.itemText, value: L.itemValue });
+const ITEM_MAX = Object.assign(Object.create(null), { title: L.itemTitle, text: L.itemText, value: L.itemValue, label: L.itemLabel, badge: L.itemBadge });
 const STAT_MAX = Object.assign(Object.create(null), { label: L.statLabel, prefix: L.statPrefix, suffix: L.statSuffix, value: L.statText });
 
 /** @returns {boolean} true nếu bản nháp thay đổi */
@@ -50,6 +50,7 @@ export function applyFrameEdit(spec, index, path, value) {
     return set(s.quote, p[1], p[1] === 'text' ? L.quoteText : L.quoteAuthor);
   }
   if (p.length === 2 && p[0] === 'callout' && p[1] === 'text') return s.callout ? set(s.callout, 'text', L.callout) : false;
+  if (p.length === 2 && p[0] === 'callout' && p[1] === 'sub') return s.callout ? set(s.callout, 'sub', L.calloutSub) : false;
   if ((p[0] === 'items' || p[0] === 'steps') && ITEM_MAX[p[2]]) return set(at(s[p[0]], n(1)), p[2], ITEM_MAX[p[2]]);
   if (p[0] === 'stats' && STAT_MAX[p[2]]) return set(at(s.stats, n(1)), p[2], STAT_MAX[p[2]], p[2] !== 'label');
   if (p[0] === 'columns' && (p[2] === 'title' || p[2] === 'subtitle')) return set(at(s.columns, n(1)), p[2], p[2] === 'title' ? L.colTitle : L.colSubtitle);

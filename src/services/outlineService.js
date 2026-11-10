@@ -13,10 +13,16 @@ import { stripLinks, linksIn, cleanLinks, hasLinks } from '../../shared/deck/mdL
 export const OUTLINE_LAYOUTS = Object.freeze(['auto', ...LAYOUTS]);
 const ID_RE = /^[a-z0-9-]{1,40}$/i;
 
-function makeCtx(strict) {
+// Giữ nguyên nội dung (CT-002): AI lập dàn ý KHÔNG bị cắt chữ ở mức 400 ký tự/dòng — trần mềm này chỉ để chặn dữ liệu quá khổ; dòng dài hơn
+// SPEC_LIMITS.outlinePoint được báo bằng cảnh báo PAGE_TOO_LONG để người dùng tách dòng ở bước duyệt (lưu dàn ý vẫn kiểm chặt như mọi bài).
+export const KEEP_POINT_MAX = 4000;
+
+function makeCtx(strict, keepLong = false) {
   const errors = [];
   return {
     strict,
+    keepLong,
+    merged: new Set(), // chỉ số trang có dòng thừa bị dồn vào dòng cuối (giữ nguyên nội dung)
     errors,
     str(v, max, path) {
       if (v === undefined || v === null) return '';
@@ -74,6 +80,16 @@ function cleanOutlineSlide(c, v, i, seen) {
   seen.add(id);
   let layout = OUTLINE_LAYOUTS.includes(o.layout) ? o.layout : 'auto';
   if (o.layout !== undefined && !OUTLINE_LAYOUTS.includes(o.layout) && c.strict) c.errors.push(`${p}.layout: bố cục không hợp lệ`);
+  // Giữ nguyên nội dung: từ dòng thứ 13 trở đi dồn vào dòng cuối (nối bằng "; ") thay vì bỏ — không mất chữ nào.
+  // Không nối bằng xuống dòng: ô nhập 1 dòng ở bước duyệt xoá ký tự xuống dòng → chữ dính liền nhau.
+  let rawPoints = o.points;
+  if (c.keepLong && Array.isArray(rawPoints) && rawPoints.length > SPEC_LIMITS.outlinePoints) {
+    const text = (x) => (typeof x === 'string' || typeof x === 'number' ? String(x).trim() : '');
+    const head = rawPoints.slice(0, SPEC_LIMITS.outlinePoints - 1);
+    const tail = rawPoints.slice(SPEC_LIMITS.outlinePoints - 1).map(text).filter(Boolean);
+    rawPoints = [...head, tail.join('\n')];
+    c.merged.add(i);
+  }
   const video = cleanVideo(c, o.video, `${p}.video`);
   // 1 trang chỉ phát 1 video; có video thì không kèm ảnh (ô media chỉ chứa 1 thứ).
   const images = video
@@ -98,8 +114,8 @@ function cleanOutlineSlide(c, v, i, seen) {
     title: linkedStr(c, o.title, SPEC_LIMITS.title, `${p}.title`),
     subtitle: linkedStr(c, o.subtitle, SPEC_LIMITS.subtitle, `${p}.subtitle`),
     points: c
-      .arr(o.points, SPEC_LIMITS.outlinePoints, `${p}.points`)
-      .map((pt, k) => linkedStr(c, pt, SPEC_LIMITS.outlinePoint, `${p}.points[${k}]`))
+      .arr(rawPoints, SPEC_LIMITS.outlinePoints, `${p}.points`)
+      .map((pt, k) => linkedStr(c, pt, c.keepLong ? KEEP_POINT_MAX : SPEC_LIMITS.outlinePoint, `${p}.points[${k}]`))
       .filter(Boolean),
     notes: c.str(o.notes, SPEC_LIMITS.notes, `${p}.notes`),
     images,
@@ -114,7 +130,9 @@ function cleanOutlineSlide(c, v, i, seen) {
  * @param {{ strict?: boolean, options?: object }} o options = tuỳ chọn tạo bài do server giữ (người dùng không sửa được)
  */
 export function normalizeOutline(input, { strict = false, options } = {}) {
-  const c = makeCtx(strict);
+  const o0 = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const keepOpt = (options ?? o0.options)?.keepOriginal === true;
+  const c = makeCtx(strict, !strict && keepOpt);
   const o = c.obj(input);
   const seen = new Set();
   const slides = c.arr(o.slides, SPEC_LIMITS.outlineSlides, 'slides').map((s, i) => cleanOutlineSlide(c, s, i, seen));
@@ -128,7 +146,50 @@ export function normalizeOutline(input, { strict = false, options } = {}) {
     design: cleanDesign(c, c.obj(o.design)),
     slides,
   };
-  return { outline, errors: c.errors.slice(0, 20) };
+  const mergedSlides = new Set([...c.merged].map((i) => slides[i]));
+  const warnings = outlineWarnings(outline, mergedSlides);
+  if (warnings.length) outline.warnings = warnings;
+  return { outline, errors: c.errors.slice(0, 20), mergedSlides };
+}
+
+/**
+ * Cảnh báo cho dàn ý "giữ nguyên nội dung" (CT-002) — tính lại từ chính dàn ý nên luôn khớp bản hiện tại (lưu/sửa xong không còn cảnh báo cũ):
+ *  - PAGE_COUNT { expected, actual }: số trang dàn ý khác số trang nguồn (options.slideCount do server giữ);
+ *  - PAGE_TOO_LONG { page }: trang có dòng dài hơn mức dựng bài hiển thị trọn (SPEC_LIMITS.outlinePoint);
+ *  - PAGE_LINES_MERGED { page, slide }: trang nguồn có hơn 12 dòng — dòng thừa đã được nối vào dòng cuối (mergedSlides = tập đối tượng trang bị dồn dòng, chỉ biết lúc chuẩn hoá lời AI).
+ * Dàn ý không ở chế độ giữ nguyên → không có cảnh báo.
+ */
+export function outlineWarnings(outline, mergedSlides = new Set()) {
+  if (outline?.options?.keepOriginal !== true) return [];
+  const out = [];
+  const expected = Number.isInteger(outline.options.slideCount) ? outline.options.slideCount : null;
+  if (expected && outline.slides.length !== expected) out.push({ code: 'PAGE_COUNT', expected, actual: outline.slides.length });
+  outline.slides.forEach((s, i) => {
+    if (s.points.some((pt) => stripLinks(pt).length > SPEC_LIMITS.outlinePoint)) out.push({ code: 'PAGE_TOO_LONG', page: i + 1 });
+    if (mergedSlides.has(s)) out.push({ code: 'PAGE_LINES_MERGED', page: i + 1, slide: s.id });
+  });
+  return out;
+}
+
+/**
+ * Hỏi AI lập dàn ý "giữ nguyên nội dung": số trang trả về phải bằng số trang nguồn. Lệch → hỏi lại ĐÚNG 1 lần, nêu rõ số trang cần có
+ * (tổng cộng tối đa 2 lời gọi AI); chọn bản gần số trang nguồn hơn. Vẫn lệch thì trả bản đó — người gọi gắn cảnh báo, không chèn trang trống.
+ * @param {(correction: string|null) => Promise<{slides?: any[]}>} ask
+ */
+export async function askOutlineKeepingPages(ask, expected, { onMismatch } = {}) {
+  const first = await ask(null);
+  const got = Array.isArray(first?.slides) ? first.slides.length : 0;
+  if (!expected || got === expected) return first;
+  onMismatch?.({ expected, actual: got });
+  const note = `LẦN TRƯỚC CHƯA ĐÚNG: nguồn có ${expected} trang (đánh dấu "--- Trang N ---") nhưng bạn trả ${got} trang. Hãy trả ĐÚNG ${expected} trang: trang k của dàn ý = trang nguồn k, cùng thứ tự; không bỏ, gộp, tách hay thêm trang; không thêm trang trống.`;
+  let second = null;
+  try {
+    second = await ask(note);
+  } catch {
+    return first; // lần hỏi lại lỗi → giữ bản đầu (đã có), không làm hỏng cả lượt tạo
+  }
+  const n2 = Array.isArray(second?.slides) ? second.slides.length : 0;
+  return n2 > 0 && Math.abs(n2 - expected) <= Math.abs(got - expected) ? second : first;
 }
 
 /**
@@ -748,7 +809,7 @@ export function verifyOutlineFacts(outline, facts) {
 function* textSlots(s) {
   const at = (obj, key) => ({ get: () => obj[key], set: (v) => (obj[key] = v) });
   for (const k of ['title', 'subtitle', 'kicker', 'caption', 'root']) if (typeof s[k] === 'string') yield at(s, k);
-  for (const key of ['items', 'steps']) for (const it of s[key] || []) for (const k of ['title', 'text', 'value']) if (typeof it[k] === 'string') yield at(it, k);
+  for (const key of ['items', 'steps']) for (const it of s[key] || []) for (const k of ['title', 'text', 'value', 'label', 'badge']) if (typeof it[k] === 'string') yield at(it, k);
   for (const st of s.stats || []) if (typeof st.label === 'string') yield at(st, 'label');
   for (const col of s.columns || []) {
     if (typeof col.title === 'string') yield at(col, 'title');

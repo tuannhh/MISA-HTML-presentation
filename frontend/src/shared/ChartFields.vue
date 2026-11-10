@@ -1,14 +1,14 @@
 <script setup>
 // Bảng dữ liệu biểu đồ (bố cục "Biểu đồ" — slide.chart, shared/deck/chart.js): hạng mục (hàng) × chuỗi số liệu (cột).
 // Gõ trực tiếp, hoặc dán bảng từ Excel / Google Sheets vào ô bất kỳ → thay toàn bộ dữ liệu (hoàn tác được bằng Ctrl/⌘+Z).
-// Ô số nhận cả "1.234,5" lẫn "1,234.5"; đang gõ thì giữ nguyên chuỗi người dùng nhập tới khi rời ô.
+// Ô số: dấu phẩy = thập phân, "1.234,5" = 1234,5 (parseCell — hiển thị và đọc lại luôn khớp); dán bảng thì đoán định dạng (parseTable). Đang gõ thì giữ nguyên chuỗi người dùng nhập tới khi rời ô.
 import { computed, reactive, ref } from 'vue'
 import MInput from '@/components/mds/MInput.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import MSwitch from '@/components/mds/MSwitch.vue'
 import FormField from './FormField.vue'
-import { CHART_LIMITS as CL, parseNum, parseTable } from '@shared/deck/chart.js'
+import { CHART_LIMITS as CL, parseCell, showCell, parseTable } from '@shared/deck/chart.js'
 
 const props = defineProps({
   slide: { type: Object, required: true },
@@ -22,16 +22,15 @@ const note = ref('')
 
 const draft = reactive({})
 const key = (k, i) => `${k}:${i}`
-const show = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','))
-const cellText = (k, i) => draft[key(k, i)] ?? show(ch.value.series[k].values[i])
+const cellText = (k, i) => draft[key(k, i)] ?? showCell(ch.value.series[k].values[i])
 const bad = (k, i) => {
   const t = draft[key(k, i)]
-  return t !== undefined && t.trim() !== '' && parseNum(t) === null
+  return t !== undefined && t.trim() !== '' && parseCell(t) === null
 }
 function onCell(k, i, e) {
   const t = e.target.value
   draft[key(k, i)] = t
-  ch.value.series[k].values[i] = parseNum(t)
+  ch.value.series[k].values[i] = parseCell(t)
 }
 function onBlur(k, i) {
   delete draft[key(k, i)]
@@ -88,7 +87,9 @@ const showValues = computed({
 // Màn hình cảm ứng (điện thoại, máy tính bảng) → vùng chạm 44px; cột chuỗi rộng hơn để tên chuỗi không bị nút xoá 44px chiếm chỗ (bảng cuộn ngang trong khung).
 const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
 const wide = computed(() => props.touch || coarse)
-const h = computed(() => (wide.value ? 'h-11' : 'h-8'))
+// max-md: cũng áp khi cửa sổ hẹp nhưng con trỏ không phải cảm ứng (xem trên máy tính, thu nhỏ cửa sổ).
+const h = computed(() => (wide.value ? 'h-11' : 'h-8 max-md:h-11'))
+const tap = 'max-md:min-h-11 max-md:min-w-11 pointer-coarse:min-h-11 pointer-coarse:min-w-11'
 const cellCls = 'w-full min-w-0 rounded border bg-[var(--mds-bg)] px-2 text-[13px] text-[var(--mds-text)] focus:border-[var(--mds-brand-600)] focus:outline-none'
 </script>
 
@@ -106,14 +107,14 @@ const cellCls = 'w-full min-w-0 rounded border bg-[var(--mds-bg)] px-2 text-[13p
         <thead>
           <tr class="bg-[var(--mds-bg-page)]">
             <th scope="col" class="min-w-[120px] px-2 py-1.5 text-left font-semibold text-[var(--mds-text-secondary)]">Hạng mục</th>
-            <th v-for="(se, k) in ch.series" :key="`s${k}`" :class="[wide ? 'min-w-[156px]' : 'min-w-[104px]', 'px-1 py-1']" scope="col">
+            <th v-for="(se, k) in ch.series" :key="`s${k}`" :class="[wide ? 'min-w-[156px]' : 'min-w-[104px] max-md:min-w-[156px]', 'px-1 py-1']" scope="col">
               <div class="flex items-center gap-1">
                 <input v-model="se.name" :class="[cellCls, h, 'border-[var(--mds-border)] font-semibold']" :maxlength="CL.label" :aria-label="`Tên chuỗi ${k + 1}`" placeholder="Tên chuỗi" />
-                <MButton v-if="m > 1" variant="icon" :aria-label="`Xoá chuỗi ${se.name || k + 1}`" @click="removeSeries(k)"><template #icon><MIcon name="x" :size="14" /></template></MButton>
+                <MButton v-if="m > 1" variant="icon" :class="tap" :aria-label="`Xoá chuỗi ${se.name || k + 1}`" @click="removeSeries(k)"><template #icon><MIcon name="x" :size="14" /></template></MButton>
               </div>
             </th>
             <th v-if="m < CL.series" scope="col" class="w-px px-1 py-1">
-              <MButton variant="ghost" aria-label="Thêm chuỗi số liệu" title="Thêm chuỗi số liệu" @click="addSeries"><template #icon><MIcon name="plus" :size="14" /></template>Chuỗi</MButton>
+              <MButton variant="ghost" :class="tap" aria-label="Thêm chuỗi số liệu" title="Thêm chuỗi số liệu" @click="addSeries"><template #icon><MIcon name="plus" :size="14" /></template>Chuỗi</MButton>
             </th>
           </tr>
         </thead>
@@ -134,14 +135,14 @@ const cellCls = 'w-full min-w-0 rounded border bg-[var(--mds-bg)] px-2 text-[13p
               />
             </td>
             <td class="w-px px-1 py-1">
-              <MButton variant="icon" :aria-label="`Xoá hạng mục ${c || i + 1}`" :disabled="n <= 1" @click="removeRow(i)"><template #icon><MIcon name="trash" :size="14" /></template></MButton>
+              <MButton variant="icon" :class="tap" :aria-label="`Xoá hạng mục ${c || i + 1}`" :disabled="n <= 1" @click="removeRow(i)"><template #icon><MIcon name="trash" :size="14" /></template></MButton>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
     <p v-if="note" class="text-[12px] text-[var(--mds-success)]" role="status">{{ note }}</p>
-    <MButton v-if="n < CL.categories" variant="outline" class="self-start" @click="addRow"><template #icon><MIcon name="plus" :size="16" /></template>Thêm hạng mục</MButton>
+    <MButton v-if="n < CL.categories" variant="outline" :class="['self-start', tap]" @click="addRow"><template #icon><MIcon name="plus" :size="16" /></template>Thêm hạng mục</MButton>
     <FormField label="Đơn vị" hint="Ví dụ: tỷ đồng, %, khách hàng — ghi một lần ở góc biểu đồ; riêng % gắn vào từng số">
       <MInput v-model="unit" :error="unit.length > CL.unit ? `Tối đa ${CL.unit} ký tự` : ''" placeholder="Không có" />
     </FormField>

@@ -6,7 +6,7 @@ import { newSlide, duplicateSlide, ensureLayoutContent, prepareSpecForSave, clon
 import { useMedia, videoKey } from '@/composables/useMedia.js';
 import { withDesignDefaults } from '@/lib/design.js';
 import { decorsFor } from '@shared/deck/layers.js';
-import { VARIANTS, LIST_KEY } from '@shared/deck/variants.js';
+import { VARIANTS, LIST_KEY, listBlock } from '@shared/deck/variants.js';
 import { chartFromStats, statsFromChart } from '@shared/deck/chart.js';
 import { createEditHistory, historyKey, isTextField } from '@/lib/editHistory.js';
 
@@ -266,15 +266,19 @@ export function useEditor(id, { onOutline } = {}) {
     return n;
   }
 
+  // Trả false (không đổi gì) khi đổi sẽ làm mất mục — danh sách đích nhỏ hơn số mục đang có (CT-006); giao diện đã làm mờ lựa chọn đó,
+  // đây là chốt chặn cuối. Lý do hiển thị: layoutBlockReason(slide, layout).
   function changeLayout(layout) {
-    if (!slide.value) return;
+    if (!slide.value) return false;
     const s = slide.value;
+    if (listBlock(s, layout)) return false;
     // Họ bố cục danh sách (Ý chính, Thẻ, Mục lục ↔ Quy trình, Dòng thời gian): chuyển các mục đang hiển thị sang danh sách của
     // bố cục mới (items ↔ steps) → đổi kiểu không mất nội dung, đổi ngược lại vẫn đúng bản đã sửa gần nhất.
+    // Danh sách đích đã có mục thì giữ nguyên cả hai (không ghi đè) — khớp StylePicker.asLayout.
     const from = LIST_KEY[s.layout];
     const to = LIST_KEY[layout];
-    if (from && to && from !== to && (s[from] || []).length) {
-      s[to] = s[from].slice(0, SPEC_LIMITS[to]);
+    if (from && to && from !== to && (s[from] || []).length && !(s[to] || []).length) {
+      s[to] = s[from];
       s[from] = [];
     }
     // Con số nổi bật ↔ Biểu đồ: dựng dữ liệu bên kia từ số liệu đang có (chỉ khi bên kia còn trống — đổi qua lại giữ bản đã sửa).
@@ -288,6 +292,7 @@ export function useEditor(id, { onOutline } = {}) {
     if (keep.length) slide.value.hide = keep;
     else delete slide.value.hide;
     ensureLayoutContent(slide.value);
+    return true;
   }
   // "Áp cho mọi trang" ở mục Hoạ tiết: tắt đúng các hoạ tiết này trên mọi trang có chúng (hoạ tiết khác hiện lại).
   function setDecorAll(hide) {

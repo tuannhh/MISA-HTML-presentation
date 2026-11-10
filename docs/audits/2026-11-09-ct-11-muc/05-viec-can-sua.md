@@ -16,15 +16,15 @@ Ngày 09/11/2026. Tổng hợp từ [01-audit.md](01-audit.md) (Codex) và [04-p
 
 | # | ID | Mức | Việc | Tệp chính | Công | Trạng thái |
 |---|---|---|---|---|---|---|
-| 1 | CT-001 | P0 | Chặn mạng cấp tiến trình Chromium cho HTML lạ | `src/services/browserService.js` | 0,5–1 ngày | ⏳ |
-| 2 | CT-008 | P1 | Ô số biểu đồ đọc sai số có 3 chữ số thập phân | `frontend/src/shared/ChartFields.vue`, `shared/deck/chart.js` | 0,25 ngày | ⏳ |
-| 3 | CT-006 | P1 | Đổi bố cục không được cắt mất mục | `frontend/src/composables/useEditor.js`, `frontend/src/shared/StylePicker.vue` | 0,25 ngày | ⏳ |
-| 4 | CT-002 | P1 | Giữ nguyên nội dung: kiểm số trang, không cắt chữ im lặng | `src/services/presentationService.js`, `outlineService.js`, 2 `OutlinePage.vue` | 1 ngày | ⏳ |
-| 5 | CT-003 | P2 | 3 đường lưu video dùng chung kiểm tệp hỏng | `src/services/presentationService.js`, `videoOptimizer.js` | 0,25 ngày | ⏳ |
-| 6 | CT-004 | P2 | Không để tệp nén mồ côi khi DB lỗi | `src/services/videoOptimizer.js` | 0,1 ngày | ⏳ |
-| 7 | CT-005 | P2 | Trần tải video cùng lúc + semaphore kiểm video | `src/routes/presentationRoutes.js`, `videoOptimizer.js`, `src/config/index.js` | 0,5 ngày | ⏳ |
-| 8 | CT-007 | P2 | Ảnh đang tải không chèn nhầm trang | `frontend/src/composables/useImageDrop.js` | 0,25 ngày | ⏳ |
-| 9 | CT-009 | P2 | Vùng chạm 44px cho nút chữ trên mobile | `frontend/src/shared/StylePicker.vue` (+ rà khối mới) | 0,1 ngày | ⏳ |
+| 1 | CT-001 | P0 | Chặn mạng cấp tiến trình Chromium cho HTML lạ | `src/services/browserService.js` | 0,5–1 ngày | ✅ |
+| 2 | CT-008 | P1 | Ô số biểu đồ đọc sai số có 3 chữ số thập phân | `frontend/src/shared/ChartFields.vue`, `shared/deck/chart.js` | 0,25 ngày | ✅ |
+| 3 | CT-006 | P1 | Đổi bố cục không được cắt mất mục | `frontend/src/composables/useEditor.js`, `frontend/src/shared/StylePicker.vue` | 0,25 ngày | ✅ |
+| 4 | CT-002 | P1 | Giữ nguyên nội dung: kiểm số trang, không cắt chữ im lặng | `src/services/presentationService.js`, `outlineService.js`, 2 `OutlinePage.vue` | 1 ngày | ✅ |
+| 5 | CT-003 | P2 | 3 đường lưu video dùng chung kiểm tệp hỏng | `src/services/presentationService.js`, `videoOptimizer.js` | 0,25 ngày | ✅ |
+| 6 | CT-004 | P2 | Không để tệp nén mồ côi khi DB lỗi | `src/services/videoOptimizer.js` | 0,1 ngày | ✅ |
+| 7 | CT-005 | P2 | Trần tải video cùng lúc + semaphore kiểm video | `src/routes/presentationRoutes.js`, `videoOptimizer.js`, `src/config/index.js` | 0,5 ngày | ✅ |
+| 8 | CT-007 | P2 | Ảnh đang tải không chèn nhầm trang | `frontend/src/composables/useImageDrop.js` | 0,25 ngày | ✅ |
+| 9 | CT-009 | P2 | Vùng chạm 44px cho nút chữ trên mobile | `frontend/src/shared/StylePicker.vue` (+ rà khối mới) | 0,1 ngày | ✅ |
 | 10 | — | — | Audit xác nhận (Codex chạy lại probe trên bản sửa) | `docs/audits/2026-11-09-ct-11-muc/` | — | ⏳ |
 
 Tổng khoảng **3–4 ngày công**. Sau khi xong 1–9 và có xác nhận ở dòng 10 → mới merge `main`.

@@ -8,6 +8,7 @@ import DesktopShell from './DesktopShell.vue'
 import OutlineSlideCard from '@/shared/OutlineSlideCard.vue'
 import DesignPanel from '@/shared/DesignPanel.vue'
 import FormAlert from '@/shared/FormAlert.vue'
+import OutlineWarnings from '@/shared/OutlineWarnings.vue'
 import JobProgress from '@/shared/JobProgress.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
@@ -148,6 +149,7 @@ onMounted(ol.load)
         <section class="relative min-w-0 flex-1 overflow-y-auto bg-[var(--mds-bg-page)]" aria-label="Dàn ý">
           <div class="mx-auto flex w-full max-w-[860px] flex-col gap-3 p-4">
             <FormAlert v-if="deck.errorMessage" tone="danger">{{ deck.errorMessage }}</FormAlert>
+            <OutlineWarnings :outline="draft" />
             <FormAlert tone="info">
               Đây là nội dung sẽ hiển thị trên từng trang. Sửa chữ, thêm/bớt dòng, đổi thứ tự, gắn ảnh hoặc video (tải lên / link YouTube) rồi bấm <strong>Dựng bài</strong> — AI chỉ trình bày lại đúng nội dung này.
             </FormAlert>

@@ -12,6 +12,7 @@ import JobProgress from '@/shared/JobProgress.vue'
 import DesignPanel from '@/shared/DesignPanel.vue'
 import FormField from '@/shared/FormField.vue'
 import FormAlert from '@/shared/FormAlert.vue'
+import OutlineWarnings from '@/shared/OutlineWarnings.vue'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
 import MInput from '@/components/mds/MInput.vue'
@@ -227,6 +228,7 @@ onMounted(ol.load)
             </FormField>
             <p class="text-[13px] leading-[18px] text-[var(--mds-text-secondary)]">{{ slides.length }} trang · {{ pointCount }} dòng nội dung · {{ mediaCount }} media</p>
           </div>
+          <OutlineWarnings :outline="draft" />
           <FormAlert tone="info">
             Sửa chữ, thêm/bớt dòng, đổi thứ tự, gắn ảnh hoặc video rồi bấm <strong>Dựng bài</strong> — AI chỉ trình bày lại đúng nội dung này.
           </FormAlert>

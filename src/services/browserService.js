@@ -1,12 +1,18 @@
-// Trình duyệt headless (puppeteer-core + Chromium hệ thống) để chụp thumbnail và xuất PDF.
-// An toàn: trang chỉ được nạp HTML do renderer sinh; MỌI request mạng bị chặn trừ data:/about:blank
-// (ảnh/font đã nhúng base64) → không thể dùng Chromium làm bàn đạp SSRF.
+// Trình duyệt headless (puppeteer-core + Chromium hệ thống) để chụp thumbnail, xuất PDF và đọc bài HTML nhập vào.
+// An toàn (CT-001): trang chỉ cần nội dung tự chứa (data:/blob:) nên mạng bị chặn ở 3 lớp.
+//  1. CẤP TIẾN TRÌNH — Chromium chạy với proxy chết (127.0.0.1:9, KHÔNG miễn trừ loopback) + tắt UDP của WebRTC: mọi kết nối
+//     HTTP/WebSocket/EventSource của MỌI tab (kể cả tab con do window.open mở) đều thất bại; data:/blob: không đi qua proxy.
+//  2. CHÍNH SÁCH TRANG — bài HTML lạ được chèn CSP <meta> ở đầu <head> (trang lạ không gỡ được), chạy trong BrowserContext riêng;
+//     tab nào trang tự mở ra bị đóng ngay, hết việc thì đóng cả context.
+//  3. CHẶN REQUEST của tab chính (puppeteer) — giữ như cũ.
+// Lớp 1 không thay được chặn egress ở hạ tầng (docs/DEVOPS-NETWORK.md) — worker nhập HTML không mạng là việc của cổng production.
 import { existsSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 import { Semaphore } from '../lib/semaphore.js';
 import { HttpError } from '../lib/httpError.js';
 import { logger } from '../lib/logger.js';
 import { PAGE_SETUP, PAGE_VISIBLE, PAGE_SETTLE, PAGE_FORCE, PAGE_READ, PAGE_SIG } from './htmlDeckPage.js';
+import { lintInPage } from './deckLint.js';
 
 const CANDIDATES = [
   '/usr/bin/chromium',
@@ -16,6 +22,25 @@ const CANDIDATES = [
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
 ];
+
+// Chính sách cho HTML lạ: chỉ nội dung tự chứa. Gửi đi (connect/frame/form/navigate) đều bị cấm vì default-src 'none'.
+export const IMPORT_CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' data: blob:; style-src 'unsafe-inline' data: blob:; img-src data: blob:; media-src data: blob:; font-src data: blob:";
+
+/** Chèn <meta CSP> ngay sau thẻ mở <head> (không có thì sau <html>, rồi sau doctype, rồi đầu tệp — không đặt trước doctype để khỏi vào quirks mode). */
+export function withImportCsp(html) {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${IMPORT_CSP}">`;
+  const at = (re) => {
+    const m = re.exec(html);
+    return m ? m.index + m[0].length : -1;
+  };
+  const head = at(/<head(?:\s[^>]*)?>/i);
+  if (head >= 0) return html.slice(0, head) + meta + html.slice(head);
+  const root = at(/<html(?:\s[^>]*)?>/i);
+  if (root >= 0) return `${html.slice(0, root)}<head>${meta}</head>${html.slice(root)}`;
+  const doc = at(/<!doctype[^>]*>/i);
+  if (doc >= 0) return `${html.slice(0, doc)}<head>${meta}</head>${html.slice(doc)}`;
+  return `<head>${meta}</head>${html}`;
+}
 
 export function createBrowserService({ chromePath, concurrency = 2, noSandbox = false, timeoutMs = 120000 }) {
   const sem = new Semaphore(concurrency);
@@ -34,7 +59,11 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
   async function getBrowser() {
     if (closed) throw new Error('browser service đã đóng');
     if (!browserPromise) {
-      const args = ['--disable-dev-shm-usage', '--disable-gpu', '--font-render-hinting=none', '--hide-scrollbars', '--mute-audio'];
+      const args = [
+        '--disable-dev-shm-usage', '--disable-gpu', '--font-render-hinting=none', '--hide-scrollbars', '--mute-audio',
+        // CT-001 lớp 1: proxy không tồn tại + không miễn trừ loopback → không tab nào ra được mạng; WebRTC không gửi UDP trực tiếp.
+        '--proxy-server=http://127.0.0.1:9', '--proxy-bypass-list=<-loopback>', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+      ];
       if (noSandbox) args.push('--no-sandbox', '--disable-setuid-sandbox');
       browserPromise = puppeteer.launch({ executablePath: resolvePath(), headless: true, args }).then((b) => {
         b.on('disconnected', () => {
@@ -52,7 +81,7 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
 
   // Lỗi trình duyệt (không khởi động được, hết thời gian, tab bị đóng) → 503 có mã riêng thay vì 500 chung (EXPORT-08):
   // người dùng biết thử lại sau, giám sát đếm được theo mã; chi tiết chỉ ghi log.
-  async function withPage(html, viewport, fn, { allowBlob = false, timeout = timeoutMs } = {}) {
+  async function withPage(html, viewport, fn, { allowBlob = false, timeout = timeoutMs, isolated = false } = {}) {
     return sem.run(async () => {
       let browser;
       try {
@@ -61,8 +90,25 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
         logger.error('chromium_launch_failed', { err: err.message });
         throw new HttpError(503, 'RENDER_UNAVAILABLE', 'Máy chủ chưa xuất được bài lúc này, vui lòng thử lại sau ít phút');
       }
-      const page = await browser.newPage();
-      const timer = setTimeout(() => page.close().catch(() => {}), timeout);
+      // isolated (HTML lạ): context riêng — tab con do trang mở ra bị đóng ngay; hết việc/hết giờ đóng cả context (kéo theo mọi tab).
+      const context = isolated ? await browser.createBrowserContext() : null;
+      const onTarget = (t) => {
+        if (t.type() === 'page' && t.opener()) t.page().then((p) => p?.close()).catch(() => {});
+      };
+      if (context) context.on('targetcreated', onTarget);
+      const closeAll = () => (context ? context.close() : Promise.resolve()).catch(() => {});
+      let page;
+      try {
+        page = await (context || browser).newPage();
+      } catch (err) {
+        await closeAll();
+        logger.error('chromium_launch_failed', { err: err.message });
+        throw new HttpError(503, 'RENDER_UNAVAILABLE', 'Máy chủ chưa xuất được bài lúc này, vui lòng thử lại sau ít phút');
+      }
+      const timer = setTimeout(() => {
+        page.close().catch(() => {});
+        closeAll();
+      }, timeout);
       try {
         page.setDefaultTimeout(timeout);
         await page.setRequestInterception(true);
@@ -72,7 +118,7 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
           else req.abort('blockedbyclient');
         });
         await page.setViewport(viewport);
-        await page.setContent(html, { waitUntil: 'load' });
+        await page.setContent(isolated ? withImportCsp(html) : html, { waitUntil: 'load' });
         await page.evaluate(() => (window.__deck ? window.__deck.ready : null));
         return await fn(page);
       } catch (err) {
@@ -82,6 +128,7 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
       } finally {
         clearTimeout(timer);
         await page.close().catch(() => {});
+        await closeAll();
       }
     });
   }
@@ -107,9 +154,21 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
       });
     },
 
+    // Hệ số co chữ (--k) engine đã chọn cho từng trang: 1 = vừa nguyên cỡ, càng nhỏ trang càng dày so với kiểu trình bày đang dùng.
+    async measureFit(html, { width, height }) {
+      return withPage(html, { width, height, deviceScaleFactor: 1 }, (page) =>
+        page.evaluate(() => Array.from(document.querySelectorAll('#deck .slide'), (s) => Number(s.style.getPropertyValue('--k')) || 1)),
+      );
+    },
+
+    // Bàn soát chữ (deckLint.lintInPage): lỗi dàn chữ nhìn thấy được của từng trang ở trạng thái đã hiện hết — [{ k, issues: [{ kind, at, text, with? }] }].
+    async lintDeck(html, { width, height }) {
+      return withPage(html, { width, height, deviceScaleFactor: 1 }, (page) => page.evaluate(lintInPage));
+    },
+
     /**
-     * Phân tích bài trình bày HTML thiết kế ở công cụ khác (đã tách video — htmlDeckService.stripHeavyMedia). Mạng vẫn bị chặn hết
-     * (chỉ data:/blob:) — script của trang chạy cô lập. Cách 1: bấm phím → như người trình chiếu, mỗi trang lấy trạng thái SAU
+     * Phân tích bài trình bày HTML thiết kế ở công cụ khác (đã tách video — htmlDeckService.stripHeavyMedia). Mạng bị chặn hết
+     * (chỉ data:/blob:; 3 lớp ở đầu tệp) — script của trang chạy trong context riêng. Cách 1: bấm phím → như người trình chiếu, mỗi trang lấy trạng thái SAU
      * bước cuối (đã hiện hết nội dung bấm-mới-hiện); bài không điều khiển được bằng phím (hoặc dừng giữa chừng) → cách 2: ép hiện
      * từng trang còn lại. Mỗi trang: tiêu đề, chữ, ghi chú, ảnh nhúng, khung video, (shots) ảnh chụp.
      * tooMany: tổng số trang > maxSlides → không phân tích, trả { slides: [], total } để báo vượt giới hạn.
@@ -170,7 +229,7 @@ export function createBrowserService({ chromePath, concurrency = 2, noSandbox = 
         }
         const images = await page.evaluate(() => window.__imp.images);
         return { slides: out, images, title: info.title, total: info.total, mode };
-      }, { allowBlob: true, timeout });
+      }, { allowBlob: true, timeout, isolated: true });
     },
 
     // HTML phải render ở mode 'print' (mỗi slide 1 trang).

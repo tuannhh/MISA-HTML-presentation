@@ -132,7 +132,10 @@ test('renderer: ảnh nhấn trái/phải/trên/nền; bố cục không hỗ tr
   const bg = html([{ ...base, accent: 'bg' }]);
   assert.ok(bg.includes(' A-bg') && bg.includes('class="bleed"'));
   // Ảnh nhấn trái → vùng nội dung hẹp → 3 thẻ chia 2 cột (khung đủ rộng là 3 cột).
-  assert.ok(html([{ ...base, accent: 'left' }]).includes('class="cards" style="--cols:2"'));
+  // 3 thẻ / 2 cột → hàng cuối lẻ 1 thẻ → căn giữa (lớp ctr, thẻ cuối bắt đầu ở rãnh 2 của lưới 4 rãnh).
+  const left = html([{ ...base, accent: 'left' }]);
+  assert.ok(left.includes('class="cards ctr" style="--cols:2"'));
+  assert.ok(left.includes('grid-column:2 / span 2'));
   assert.ok(html([base]).includes('class="cards" style="--cols:3"'));
   assert.equal(accentPos({ ...base, layout: 'gallery', accent: 'left' }), '');
   assert.equal(accentPos({ ...base, accent: 'left', image: null }), '');

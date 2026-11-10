@@ -5,15 +5,15 @@
 import { randomUUID } from 'node:crypto';
 import { cleanChart } from '../../shared/deck/chart.js';
 import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE, BRAND_SLOTS, BUILDS } from '../../shared/deck/render.js';
-import { hasRich, canonicalRich, plainText, cutRich, hrefWeight, safeHref } from '../../shared/deck/rich.js';
-import { CUSTOM_THEME, normHex } from '../../shared/deck/palette.js';
+import { hasRich, canonicalRich, plainText, cutRich, hrefWeight, safeHref, validPhrases } from '../../shared/deck/rich.js';
+import { CUSTOM_THEME, normHex, PART_COLORS } from '../../shared/deck/palette.js';
 import { FONT_IDS, DEFAULT_FONT } from '../../shared/deck/fonts.js';
 import { ICON_NAMES } from '../../shared/deck/icons.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { SPEC_LIMITS } from '../../shared/deck/limits.js';
 import { LOGO_MOTIONS } from '../../shared/deck/bg3d.js';
 import { VARIANTS, STYLES, COLS_RANGE } from '../../shared/deck/variants.js';
-import { CALLOUT_TONES, cleanAccent, cleanTransition } from '../../shared/deck/blocks.js';
+import { CALLOUT_TONES, CALLOUT_STYLES, cleanAccent, cleanTransition } from '../../shared/deck/blocks.js';
 import { cleanImgLook } from '../../shared/deck/imgstyle.js';
 import { cleanVideoOpts, VIMEO_ID_RE, VIMEO_HASH_RE } from '../../shared/deck/video.js';
 import { cleanMoves, cleanHide } from '../../shared/deck/layers.js';
@@ -118,7 +118,8 @@ function cleanImage(c, v, path) {
   if (o.asset && !asset && c.strict) c.errors.push(`${path}.asset: mã ảnh không hợp lệ`);
   const img = { asset, alt: c.str(o.alt, SPEC_LIMITS.alt, `${path}.alt`), caption: c.str(o.caption, SPEC_LIMITS.caption, `${path}.caption`), fit: o.fit === 'contain' ? 'contain' : 'cover' };
   // Khung trình duyệt cho ảnh giao diện phần mềm (chỉ với ảnh trọn khung).
-  if (o.frame === 'browser' && img.fit === 'contain') img.frame = 'browser';
+  // Hình minh hoạ 3D nền trong suốt (chỉ đạo thiết kế): không tấm nền trắng — hình nổi trên nền trang, bóng do CSS tạo.
+  if ((o.frame === 'browser' || o.frame === 'art') && img.fit === 'contain') img.frame = o.frame;
   // Ảnh đã chỉnh sửa: src = ảnh gốc, edit = thông số đã áp (để chỉnh tiếp không giảm chất lượng qua nhiều lần nén).
   const src = uuidOrNull(o.src);
   const edit = src && src !== asset ? cleanImageEdit(o.edit) : null;
@@ -282,6 +283,13 @@ function cleanItem(c, v, path, withImage = false) {
     text: c.str(o.text, SPEC_LIMITS.itemText, `${path}.text`),
     value: c.str(o.value, SPEC_LIMITS.itemValue, `${path}.value`),
   };
+  // Nhãn nhỏ trên tiêu đề (tuỳ chọn) — chỉ lưu khi có chữ để spec cũ không đổi.
+  const label = c.str(o.label, SPEC_LIMITS.itemLabel, `${path}.label`);
+  if (label) it.label = label;
+  const badge = c.str(o.badge, SPEC_LIMITS.itemBadge, `${path}.badge`);
+  if (badge) it.badge = badge;
+  // Cụm nghĩa của tiêu đề mục (bước dàn chữ): chỉ giữ khi còn khớp nguyên văn.
+  if (validPhrases(it.title, o.wrap) && o.wrap.length <= SPEC_LIMITS.wrap) it.wrap = o.wrap.slice();
   // Ảnh/logo thay biểu tượng của thẻ/ý (vd. logo OpenAI, Gemini…) — chỉ ở danh sách items (không ở bước quy trình).
   if (withImage) {
     const img = cleanImage(c, o.image, `${path}.image`);
@@ -423,6 +431,7 @@ function cleanSlide(c, v, i, seen) {
           points: c.arr(co.points, SPEC_LIMITS.points, `${p}.columns[${k}].points`).map((pt, m) => c.str(pt, SPEC_LIMITS.point, `${p}.columns[${k}].points[${m}]`)).filter(Boolean),
         };
         if (ICON_SET.has(co.icon)) out.icon = co.icon;
+        if (validPhrases(out.title, co.wrap) && co.wrap.length <= SPEC_LIMITS.wrap) out.wrap = co.wrap.slice();
         return out;
       })
       .filter((col) => col.title || col.points.length),
@@ -444,6 +453,8 @@ function cleanSlide(c, v, i, seen) {
     if (layout !== 'free' && !slide.elements.length) delete slide.elements;
   }
   if (slide.highlight && !plainText(slide.title).includes(slide.highlight)) slide.highlight = '';
+  // Cụm nghĩa của tiêu đề (bước dàn chữ, không có trên giao diện): chỉ giữ khi còn khớp nguyên văn tiêu đề — sửa chữ là tự mất hiệu lực.
+  if (validPhrases(slide.title, o.wrap) && o.wrap.length <= SPEC_LIMITS.wrap) slide.wrap = o.wrap.slice();
   if (!c.strict) slide.layout = fallbackLayout(slide);
   // Biến thể trình bày do hệ thống chọn ngầm (không có trên giao diện) → giá trị lạ/không thuộc bố cục: bỏ, không báo lỗi.
   slide.variant = VARIANTS[slide.layout]?.includes(o.variant) ? o.variant : '';
@@ -455,7 +466,18 @@ function cleanSlide(c, v, i, seen) {
   if (Number.isInteger(cols) && cols >= COLS_RANGE.min && cols <= COLS_RANGE.max) slide.cols = cols;
   const accent = cleanAccent(o.accent);
   if (accent) slide.accent = accent;
-  if (o.callout && CALLOUT_TONES.includes(o.callout.tone)) slide.callout = { tone: o.callout.tone, text: c.str(o.callout.text, SPEC_LIMITS.callout, `${p}.callout.text`) };
+  if (o.callout && CALLOUT_TONES.includes(o.callout.tone)) {
+    slide.callout = { tone: o.callout.tone, text: c.str(o.callout.text, SPEC_LIMITS.callout, `${p}.callout.text`) };
+    // Dải kết luận / câu chốt (chỉ lưu khi khác hộp mặc định): dòng giải thích + cụm tô nhấn (phải nằm nguyên văn trong câu chốt).
+    if (CALLOUT_STYLES.includes(o.callout.style) && o.callout.style !== CALLOUT_STYLES[0]) {
+      slide.callout.style = o.callout.style;
+      const sub = c.str(o.callout.sub, SPEC_LIMITS.calloutSub, `${p}.callout.sub`);
+      if (sub) slide.callout.sub = sub;
+      const hl = c.str(o.callout.highlight, SPEC_LIMITS.highlight, `${p}.callout.highlight`);
+      if (hl && plainText(slide.callout.text).includes(hl)) slide.callout.highlight = hl;
+      if (validPhrases(slide.callout.text, o.callout.wrap) && o.callout.wrap.length <= SPEC_LIMITS.wrap) slide.callout.wrap = o.callout.wrap.slice();
+    }
+  }
   const tr = cleanTransition(o.transition);
   if (tr) slide.transition = tr;
   // Tinh chỉnh tay (không qua AI, shared/deck/layers.js): ô chữ đã dời (trang có bố cục) + hoạ tiết đã tắt. Mục sai bị bỏ, không báo lỗi.
@@ -464,6 +486,24 @@ function cleanSlide(c, v, i, seen) {
   const hide = cleanHide(o.hide);
   if (hide) slide.hide = hide;
   return slide;
+}
+
+// Các phần của bài (chỉ đạo thiết kế): mỗi phần một màu nhấn + thanh tiến độ ở chân trang; slide.part = chỉ số phần của trang.
+// Ít hơn 2 phần hợp lệ → bỏ cả (bài một mạch, không cần chia). Màu lạ → bỏ phần đó cùng chỉ số trang trỏ tới nó (không báo lỗi).
+function cleanParts(c, o, spec) {
+  const raw = Array.isArray(o.parts) ? o.parts.slice(0, SPEC_LIMITS.parts) : [];
+  const parts = raw
+    .map((p, i) => ({ i, title: c.str(p?.title, SPEC_LIMITS.partTitle, `parts[${i}].title`), color: PART_COLORS[p?.color] ? p.color : null }))
+    .filter((p) => p.title && p.color);
+  const inSlides = Array.isArray(o.slides) ? o.slides : [];
+  const remap = new Map(parts.map((p, k) => [p.i, k]));
+  if (parts.length >= 2) {
+    spec.parts = parts.map(({ title, color }) => ({ title, color }));
+    spec.slides.forEach((sl, i) => {
+      const k = remap.get(inSlides[i]?.part);
+      if (k !== undefined) sl.part = k;
+    });
+  }
 }
 
 /** @returns {{ spec: object, errors: string[] }} */
@@ -481,6 +521,7 @@ export function normalizeSpec(input, { strict = false } = {}) {
     footer: c.str(o.footer, SPEC_LIMITS.footer, 'footer'),
     slides,
   };
+  cleanParts(c, o, spec);
   return { spec, errors: c.errors.slice(0, 20) };
 }
 

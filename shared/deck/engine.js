@@ -97,10 +97,130 @@
     }
     return false;
   }
+  /* ---------- tiêu đề tự chọn cỡ chữ để xuống dòng đẹp ---------- */
+  // Tiêu đề nhiều dòng: thử cỡ chữ nhỏ dần (mỗi nấc 4%) để gom về ít dòng hơn — "XU HƯỚNG LỪA ĐẢO / VÀ CÁCH PHÒNG TRÁNH" thay cho 4 dòng vụn.
+  // Dòng chỉ ngắt giữa các cụm nghĩa (span.nbp) nên ít dòng hơn = mỗi dòng trọn ý hơn. Tiêu đề lớn (bìa, mở phần, kết, câu chốt) co tới 68%
+  // và dừng ở 2 dòng; tiêu đề trang co tới 80% (3 dòng → 2) hoặc 88% (2 dòng → 1). Cỡ chữ ghi inline theo --k nên vẫn co cùng trang khi trang dày.
+  var TITLE_SEL = '.cv-title,.sec-t,.cl-t,.title,.callout.cq .co-t';
+  function titleLines(el) {
+    var cs = getComputedStyle(el);
+    var lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.1 || 1;
+    return Math.max(1, Math.round((el.offsetHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0)) / lh));
+  }
+  function fitTitle(el) {
+    el.style.fontSize = '';
+    if (!el.offsetHeight) return;
+    var n = titleLines(el);
+    var hero = !el.classList.contains('title');
+    if (n <= (hero ? 2 : 1)) return;
+    var base = parseFloat(getComputedStyle(el).fontSize);
+    if (!base) return;
+    var min = hero ? 0.68 : n >= 3 ? 0.8 : 0.88;
+    var best = 1, bestN = n, set = function (f) { el.style.fontSize = 'calc(' + (base * f).toFixed(2) + 'px * var(--k))'; };
+    for (var f = 0.96; f >= min - 0.001; f -= 0.04) {
+      set(f);
+      var m = titleLines(el);
+      if (m < bestN) { best = f; bestN = m; if (m <= (hero ? 2 : 1)) break; }
+    }
+    if (best === 1) el.style.fontSize = ''; else set(best);
+  }
+  function fitTitles(s) { Array.prototype.forEach.call(s.querySelectorAll(TITLE_SEL), function (el) { if (!el.closest('.fe')) fitTitle(el); }); }
+
+  // Tiêu đề mục (thẻ, bước, cột): cụm nghĩa dài hơn bề rộng thẻ buộc phải gãy giữa cụm ("bị điều / khiển từ xa") → co ĐỀU cỡ chữ mọi tiêu đề mục
+  // của trang (nấc 6%, tới 82%) cho tới khi cụm nào cũng nằm trọn một dòng; không đạt thì giữ nguyên cỡ.
+  function brokenGroup(list) {
+    for (var i = 0; i < list.length; i++) {
+      var g = list[i].getElementsByClassName('nbp');
+      for (var j = 0; j < g.length; j++) {
+        var lh = parseFloat(getComputedStyle(g[j]).lineHeight) || 0;
+        if (lh && g[j].offsetHeight > lh * 1.5) return true;
+      }
+    }
+    return false;
+  }
+  function fitItemTitles(s) {
+    var list = Array.prototype.filter.call(s.querySelectorAll('.body h4, .body h3'), function (el) { return !el.closest('.fe'); });
+    list.forEach(function (el) { el.style.fontSize = ''; });
+    if (!list.length || !brokenGroup(list)) return;
+    var bases = list.map(function (el) { return parseFloat(getComputedStyle(el).fontSize) || 0; });
+    var set = function (f) { list.forEach(function (el, i) { el.style.fontSize = bases[i] ? 'calc(' + (bases[i] * f).toFixed(2) + 'px * var(--k))' : ''; }); };
+    for (var f = 0.94; f >= 0.82 - 0.001; f -= 0.06) { set(f); if (!brokenGroup(list)) return; }
+    list.forEach(function (el) { el.style.fontSize = ''; });
+  }
+
+  /* ---------- logo phía trên: chỉ chừa khoảng trên VỪA ĐỦ để nội dung không chạm logo ---------- */
+  // Mặc định (CSS .lg-top) cả trang lùi xuống dưới logo → tiêu đề ngắn vẫn mất ~100–140px chiều cao. fitSlide bỏ khoảng chừa (.lg-free) rồi đo
+  // MỰC CHỮ từng dòng + khung hình/thẻ/nhãn của nội dung so với vùng logo (có lề an toàn):
+  //   - không cái nào chạm → nội dung dâng lên như trang không logo;
+  //   - có chạm (tiêu đề dài tới logo) → đẩy xuống đúng phần còn thiếu (--lgs, px khung): nhãn mục nằm ngang hàng logo, tiêu đề ngay dưới logo;
+  //   - phần phải đẩy ≥ khoảng chừa mặc định → trả về mặc định.
+  // Hoạ tiết nền (vòng quỹ đạo, hình mờ) không tính. Không có engine (JS tắt) → CSS vẫn chừa đủ.
+  var LOGO_BOX = 'img,svg,video,iframe,figure,.panel,.card,.media,.chip,.tag,.ib,.num,.sec-no,.callout,.fe,.vs,.hub';
+  // Phần nội dung còn lấn vào vùng logo, tính bằng px khung (0 = không chạm).
+  function logoNeed(s, lg) {
+    var L = lg.getBoundingClientRect();
+    if (!L.width || !L.height) return 0;
+    var u = (s.getBoundingClientRect().width / W) || 1, mx = 56 * u, my = 28 * u;
+    var zl = L.left - mx, zr = L.right + mx, zt = L.top - my, zb = L.bottom + my;
+    var need = 0;
+    var cut = function (r) { if (r.width > 0 && r.height > 0 && r.right > zl && r.left < zr && r.bottom > zt && r.top < zb) need = Math.max(need, zb - r.top); };
+    var range = document.createRange();
+    for (var c = s.firstElementChild; c; c = c.nextElementSibling) {
+      var cl = c.classList;
+      if (!(cl.contains('hd') || cl.contains('body') || cl.contains('callout') || cl.contains('free'))) continue;
+      var R = c.getBoundingClientRect();
+      if (!(R.right > zl && R.left < zr && R.bottom > zt && R.top < zb)) continue;
+      var bx = c.querySelectorAll(LOGO_BOX);
+      for (var j = 0; j < bx.length; j++) if (!bx[j].closest('.stage-rings,.cv-ghost')) cut(bx[j].getBoundingClientRect());
+      var walk = document.createTreeWalker(c, NodeFilter.SHOW_TEXT, null), n;
+      while ((n = walk.nextNode())) {
+        if (!n.nodeValue.trim()) continue;
+        range.selectNodeContents(n);
+        var rs = range.getClientRects();
+        for (var q = 0; q < rs.length; q++) cut(rs[q]);
+      }
+    }
+    return need > 0 ? Math.ceil(need / u) + 1 : 0;
+  }
+  // Bắt đầu thử: trả { lg, base, full, shift } hoặc null (trang không có logo phía trên / bỏ khoảng chừa không lợi gì).
+  function logoRoom(s) {
+    s.classList.remove('lg-free');
+    s.style.removeProperty('--lgs');
+    if (!s.classList.contains('lg-top')) return null;
+    var lg = null;
+    for (var c = s.firstElementChild; c && !lg; c = c.nextElementSibling) if (c.classList.contains('logo')) lg = c;
+    if (!lg) return null;
+    var full = parseFloat(getComputedStyle(s).paddingTop) || 0;
+    s.classList.add('lg-free');
+    var base = parseFloat(getComputedStyle(s).paddingTop) || 0;
+    if (full - base < 8) { s.classList.remove('lg-free'); return null; }
+    return { lg: lg, base: base, full: full, shift: 0 };
+  }
+  // Đẩy nội dung xuống phần còn chạm logo. Trả true nếu bố cục vừa đổi (cần đo lại), false nếu đã yên.
+  function logoPush(s, room) {
+    if (!room || room.done) return false;
+    var need = logoNeed(s, room.lg);
+    if (!need) return false;
+    room.shift += need;
+    if (room.base + room.shift >= room.full - 4) {
+      room.done = true;
+      s.classList.remove('lg-free');
+      s.style.removeProperty('--lgs');
+    } else s.style.setProperty('--lgs', room.shift + 'px');
+    return true;
+  }
+
   function fitSlide(s) {
     var boxes = s.querySelectorAll('.body');
     var k = 1;
     s.style.setProperty('--k', '1');
+    // Bỏ khoảng chừa logo TRƯỚC, đo chạm logo SAU khi tiêu đề đã chốt số dòng (tiêu đề 2 dòng co về 1 dòng sẽ dài ra phía logo).
+    // Ô chữ người dùng kéo dời đo ở vị trí gốc (.fit-m) — kéo ô không làm cả trang nhảy. Nội dung căn giữa chỉ dịch nửa phần đẩy → lặp vài lượt.
+    var room = logoRoom(s);
+    fitTitles(s);
+    fitItemTitles(s);
+    s.classList.add('fit-m');
+    for (var lp = 0; lp < 4 && logoPush(s, room); lp++);
     // Chỉ đo vùng .body (mọi layout đều bọc nội dung trong .body); đồ hoạ trang trí tràn mép không tính.
     var targets = fitTargets(boxes);
     var tol = Math.max(1, 3 * (s.getBoundingClientRect().width / W || 1)); // 3 px khung, tối thiểu 1 px màn hình
@@ -108,10 +228,12 @@
       for (var i = 0; i < boxes.length; i++) if (overflowing(boxes[i])) return true;
       return clipped(targets, tol);
     };
-    // Ô chữ người dùng đã kéo dời (data-mv) đo ở vị trí gốc — kéo ra mép không làm cả trang co chữ.
-    s.classList.add('fit-m');
+    // Ô chữ người dùng đã kéo dời (data-mv) đo ở vị trí gốc (.fit-m, gắn ở trên) — kéo ra mép không làm cả trang co chữ.
     // Mức thường tới 0,5; trang quá dày co tiếp tới 0,42 (chữ nhỏ nhưng không bị cắt mất khi trình chiếu/xuất — rà bố cục 11/2026).
-    while (k > 0.42 && check()) { k = Math.round((k - 0.04) * 100) / 100; s.style.setProperty('--k', String(k)); }
+    var shrink = function () { while (k > 0.42 && check()) { k = Math.round((k - 0.04) * 100) / 100; s.style.setProperty('--k', String(k)); } };
+    shrink();
+    // Trang phải co chữ: chữ nhỏ lại làm tiêu đề nhích lên phía logo → đẩy thêm phần còn chạm rồi co tiếp nếu cần (tối đa 3 lượt).
+    for (var lq = 0; lq < 3 && k < 1 && logoPush(s, room); lq++) shrink();
     // Chế độ sửa (trình chiếu, HTML xuất, PDF không hiện dấu): co hết mức vẫn tràn → đỏ (.ovf); phải co dưới 0,5 mới vừa → vàng (.dense)
     // nhắc bớt chữ / tách trang.
     if (MODE === 'edit') {

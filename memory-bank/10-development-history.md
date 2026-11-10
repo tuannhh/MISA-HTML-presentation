@@ -665,3 +665,113 @@ Người dùng muốn **xem trước nội dung từng trang** thay vì để AI
 - Adapter storage S3/MinIO; hàng đợi ngoài nếu cần scale nhiều instance.
 - Sao lưu tự động DB + volume.
 - Test integration (`npm run test:integration`) — nay đã có `test/integration/concurrency.test.js` (xem mục 2026-10-11 — Chặng A).
+
+## 2026-11-09 — Sửa 9 việc sau audit Codex (CT-001…CT-009)
+Làm theo `docs/audits/2026-11-09-ct-11-muc/05-viec-can-sua.md`, giữ hạ mức CT-003/004/005 xuống P2 và các bản sửa nhẹ của Claude (worker/manifest để cổng G).
+- **CT-001** `browserService`: proxy chết `127.0.0.1:9` (không bypass loopback) + tắt WebRTC UDP + CSP `<meta>` + BrowserContext riêng + đóng tab opener. Test `browser-isolation.test.js` (10 kênh → 0 request).
+- **CT-008** `shared/deck/chart.js` `parseCell`/`showCell`; `ChartFields.vue` dùng chúng (không còn đoán "0,123" → 123).
+- **CT-006** `listBlock`/`layoutBlockReason`; `changeLayout` từ chối đổi làm mất mục, `StylePicker`/`SlideFields` hiện lý do.
+- **CT-002** `outlineService`: `askOutlineKeepingPages` (≤ 2 lời gọi AI), chế độ lỏng (dòng thừa nối dòng cuối, dòng dài không cắt, trần mềm 4000), `outlineWarnings` (PAGE_COUNT / PAGE_TOO_LONG / PAGE_LINES_MERGED) lưu ở `outline.warnings`; `shared/OutlineWarnings.vue` hiện ở 2 `OutlinePage.vue` — số trang lệch + dòng quá dài tính trực tiếp từ bản nháp (sửa là hết, không cần lưu); "dồn dòng" lấy từ server theo id trang. Dòng thừa nối bằng `; ` (ô nhập 1 dòng xoá ký tự xuống dòng → không dùng `
+`). "Dựng bài" không kèm dàn ý mà bản lưu còn dòng > 400 ký tự → 422 INVALID_OUTLINE (không để `normalizeSpec` rút gọn âm thầm). Test `outline-keep.test.js` (10).
+- **CT-003/004** `ingestVideo` dùng chung (editor, tạo bài kèm video, nhập HTML); `settleOrphan` đọc lại DB trước khi xoá tệp nén.
+- **CT-005** `src/lib/uploadSlots.js` (503 `UPLOAD_BUSY`, `VIDEO_MAX_CONCURRENT_UPLOADS`, mặc định 4) + semaphore `inspect` = 3; `stats().tools` báo thiếu ffmpeg.
+- **CT-007** `useImageDrop` tìm lại trang theo `slide.id` sau `await`.
+- **CT-009** vùng chạm 44px (`max-md:`/`pointer-coarse:`) ở StylePicker, SlideFields, ChartFields.
+- Kiểm chứng: `npm test` 351/351, `npm run build` đạt. **Chưa kiểm**: Chromium trong Docker/Linux, mẫu 137 MB, giao diện 390px trên trình duyệt thật, integration MySQL.
+
+## 2026-11-09 — Bản mẫu "chỉ đạo thiết kế" (DESIGN_DIRECT) — để bài AI dựng lần đầu đạt mức bản Claude Code
+Bối cảnh: so bài "Xu hướng lừa đảo" do app dựng với bản làm bằng Claude Code + Gemini Agent Platform → app đổ chữ vào khuôn, biến thể bốc ngẫu
+nhiên, ảnh minh hoạ kiểu ảnh chụp, ảnh cắt sơ đồ gắn sai trang, chữ rác ở trang video, số thứ tự lặp, không có màu theo phần.
+- Mới: `src/services/artDirection.js` (`prepareOutline`, `applyDirection`, `tidySlide`, `planArt`, `artPrompt`, `cutoutArt`), `illustrateArt` trong
+  `presentationService`, luật 10 trong `geminiService.designDeck`, `spec.parts`/`slide.part` (`cleanParts`, `limits.parts`), `partVarsCss`
+  (`palette.js`), `frame:'art'` (`specService.cleanImage`, `render.plate`), thanh tiến độ phần + `.has-art` + `.sec.no-num` (`theme.css`),
+  số lớn trang thống kê co theo độ dài (`.st-hero` container query — sửa "Gần 5.000 tỷ VNĐ" tràn sang cột bên).
+- Cấu hình: `DESIGN_DIRECT` (mặc định true), `AI_ART_PER_DECK` (36).
+- Kiểm chứng: `npm test` 361/361; dựng thử trên bản sao bài `71320bdd…` (bài gốc không đổi) → `c9dee269…` "Xu hướng lừa đảo (bản mẫu thiết kế mới)":
+  37 trang, 4 phần, 35 hình 3D, ~100–170 s; ảnh so sánh `docs/so-sanh-ban-mau-thiet-ke.jpg`.
+- Giới hạn còn lại: ~2–3/35 hình còn vệt nền xám khi model vẽ phông có hoạ tiết; AI đôi khi đặt số vào tiêu đề mục; bố cục bento không hình để trống
+  ô lớn; trang video chưa có video chỉ hiện tiêu đề. Bước tiếp theo đề xuất: vòng tự soát bằng Gemini vision (chụp từng trang → checklist → sửa/vẽ lại).
+- Theme/logo vẫn lấy theo lựa chọn ở dàn ý (bản sao được đặt tay theme `paper` + logo MISA như bài gốc để so sánh).
+
+
+## 2026-11-10 — Chỉ đạo thiết kế v2: số thứ tự trang trí, chữ thoáng, hình nhỏ lại, vòng AI tự soát (DESIGN_REVIEW)
+Phản hồi người dùng trên bản mẫu: icon/hình minh hoạ quá to lấn chữ; số thứ tự vừa là hoạ tiết vừa nằm trong chữ ("KIỂU 01 …", "01 Giục gấp") →
+người dùng phải sửa tay; dòng/chữ chật hơn bản Claude.
+- Nhãn nhỏ trên tiêu đề mục `items[i].label` (≤ `limits.itemLabel` 32, chỉ lưu khi có chữ): `cleanItem`, `render.itemText` (`.ilab`, cả kiểu `rows` qua
+  `.crow-t`), đường dẫn sửa trực tiếp (`layers.MOVE_PATH_RE`, `editPaths.ITEM_MAX`), ô "Nhãn nhỏ trên tiêu đề" ở `SlideFields`, liên kết dàn ý (`textSlots`).
+- `artDirection.tidyNumbers` (chạy sau `artDirect`, mọi lượt dựng): tiền tố đánh số chung của cả danh sách (`numberPrefix`: chữ dẫn + số Ả Rập/La Mã
+  liên tiếp, ≥ 2 mục; "2 triệu người" không tính) → bố cục đã tự vẽ số (`drawsItemNumber`: agenda; bullets/cards kiểu đánh số khi mục không có hình;
+  bước quy trình) và dãy từ 1 → bỏ; còn lại → `label` (mục) / `value` (mốc thời gian); dãy tiếp nối (06…) trên kiểu đánh số → bỏ kiểu. `tidySlide`: nhãn
+  "Kiểu 01…" liên tục chuyển sang `label` thay vì xoá.
+- `artDirection.tidyHeads`: phụ đề/tiêu đề mở đầu bằng kicker → bỏ phần lặp (dừng ở ranh giới từ), phụ đề trùng tiêu đề → bỏ, thẻ chủ đề trùng → bỏ.
+- Hình nhỏ lại (`theme.css`): hình từng mục 250→168px (hàng 124, ý/mục lục 116), hình cỡ trang `.plate.art` 78% ô + cột chữ rộng hơn (`.split:has(.plate.art)`
+  1.45fr/.85fr); ô lớn bento có hình 260px căn giữa. `planArt` không cho hình cỡ trang ở trang ý chính nhiều chữ (`denseBullets`).
+- Chữ thoáng: tiêu đề `letter-spacing` −.025→−.012em (bìa/mở đầu phần −.018), dòng tiêu đề mục 1.26, đoạn văn 1.6, khoảng cách ý/thẻ rộng hơn.
+- Vòng AI tự soát `src/services/designReview.js` + `selfReview` (`presentationService`) + `gemini.reviewSlides`: dựng HTML → chụp mọi trang (½ cỡ,
+  JPEG 72) → mỗi lượt 8 trang + mô tả (bố cục, kiểu, kiểu được đổi = `altVariants`) → checklist 10 lỗi → `applyReview`: đổi kiểu chỉ khi có lỗi bố cục và
+  kiểu nằm trong danh sách hợp lệ; hình lỗi → vẽ lại (≤ `REVIEW_REDRAW_MAX` 6, bộ hình từng mục vẽ lại cả bộ hoặc bỏ cả bộ) / bỏ; chữ nhỏ/dày/tràn trên
+  trang có hình cỡ trang (trừ bìa, mở đầu phần) → bỏ hình. Hình bị thay/bỏ xoá khỏi kho. Lỗi soát → giữ bản chưa soát. Cấu hình `DESIGN_REVIEW` (mặc định true).
+- Kiểm chứng: `npm test` 368/368, `npm run build` đạt; dựng lại bản sao `c9dee269…` trên Docker: soát 37 trang ~40–56 s (lần 1: 6 trang lỗi, đổi 5 kiểu,
+  vẽ lại 4 hình), tổng lượt dựng ~215–230 s. Ảnh so sánh `docs/so-sanh-ban-mau-thiet-ke-v2.jpg`.
+- Sửa kèm: `tidySlide` bỏ nhãn "lặp tiêu đề" so theo nguyên từ (trước đây "A" bị xoá vì nằm trong "amazon.com"); `tidyHeads` lấy cụm đầu phụ đề làm
+  kicker khi cùng đoạn đầu ("CÂU HỎI 2 · …").
+- Giới hạn: vòng soát chấm trên theme AI chọn lúc dựng (bản sao đặt tay theme paper sau đó); model ít khi bắt được chữ nhỏ; bố cục lưới 5 thẻ 3+2 còn lỗ.
+
+## 2026-11-10 — Chỉ đạo thiết kế v3: mục then chốt, dải kết luận / câu chốt cỡ lớn kèm hình 3D, đo độ vừa chữ
+Yêu cầu người dùng ("làm bản thật wow"): bố cục ghép danh sách + khối chốt như trang 19/20/23 của bản Claude ("KHÔNG CÓ GÌ LÀ MIỄN PHÍ"), AI chọn ý cần
+nhấn (huy hiệu "DỪNG LẠI Ở ĐÂY LÀ AN TOÀN" trang 14), sửa lỗ lưới 5 thẻ.
+- Dữ liệu: `items/steps[i].badge` (≤ `limits.itemBadge` 40), `callout.style` (`CALLOUT_STYLES` box/band/quote), `callout.sub` (≤ `calloutSub` 200),
+  `callout.highlight`; `cleanItem` + làm sạch callout ở `specService`; `editPaths` (`badge`, `callout.sub`); `outlineService.textSlots` có `label`/`badge`.
+- Render (`render.js` + `theme.css`): `.fbadge` + `.is-focus` (thẻ, bước timeline/chevron/bậc/quy trình, ý); thẻ nổi bật `hot` dời sang thẻ then chốt;
+  `.callout.cb` dải gradient màu phần chữ trắng cỡ lớn; `.callout.cq` ngoặc kép 190px + chữ cỡ h2 + hình `.cq-art` 300px nổi khỏi khung; `.cards.ctr`.
+- Trình soạn thảo (`SlideFields`, dùng chung desktop/mobile): chọn kiểu khối (`CALLOUT_STYLE_OPTIONS`), ô câu phụ, cụm tô nhấn, chọn hình câu chốt
+  (khi `QUOTE_ART_LAYOUTS`), ô "Huy hiệu nhấn mạnh" cho mục/bước.
+- AI: luật 10i/10j + lược đồ `focus`/`takeaway` (chế độ chỉ đạo); `applyEmphasis` + hạn mức trong `applyDirection`; `planArt` vẽ hình câu chốt.
+- `tidyHeads.labelFromSource` + bỏ tiền tố tiêu đề trùng kicker (xem 05 §Ảnh, mục 8). `designReview.fitTrials/fitProbe/applyFit` + `fitPass`
+  (`presentationService`) + `browser.measureFit`; `pruneArt` tách dùng chung cho soát + đo. `build_ready` ghi thêm `emphasis`, `refit`.
+- Kiểm chứng: `npm test` 384/384 (mới `test/unit/emphasis.test.js` 14 test; sửa `layouts-dot5` theo markup `.ctr`), `npm run build` đạt. Dựng lại bản sao
+  `c9dee269…` 4 lượt (v11→v14, ~210–245 s/lượt): v14 có 10 trang huy hiệu, 11 khối chốt (4 câu chốt cỡ lớn kèm hình: trang 14, 20 bẫy chuột + phô mai,
+  23, 24), đo độ vừa ~1 s đổi 1–2 trang; trang co chữ nhiều nhất 0,72 (v11: 0,56). Ảnh so sánh `docs/so-sanh-ban-mau-thiet-ke-v3.jpg`.
+- Giới hạn: kết quả AI dao động giữa các lượt (trang 14 lượt v14 thành danh sách dọc chữ nhỏ, lượt v13 giữ thẻ ngang + huy hiệu + câu chốt); hình câu
+  chốt không có ở bố cục bullets (đã có ô ảnh riêng); trang 19 (5 cảm xúc + dải kết luận) vẫn co 0,72.
+
+
+## 2026-11-10 — Chỉ đạo thiết kế v4: dàn chữ theo cụm nghĩa, tiêu đề tự chọn cỡ chữ, bàn soát chữ, sân khấu hình bìa → kết
+Yêu cầu người dùng: bản web phải "wow" hơn bản Claude từ bìa đến trang kết; rà lỗi sắp chữ cho MỌI bài về sau — rơi 1 chữ xuống dòng, ngắt dòng khi
+chưa đủ ý ("LỪA / ĐẢO" ở bìa), tô nhấn nửa cụm, hình/biểu tượng đè chữ, chữ tràn khỏi khung; được phép chỉnh cỡ chữ; khai thác Gemini hiệu quả hơn.
+- **Dàn chữ bằng Gemini** (`src/services/typeset.js`, `gemini.typeset`, cờ `DESIGN_TYPESET`): model chèn `|` giữa các cụm nghĩa của tiêu đề trang / câu
+  chốt / tiêu đề mục, bước, cột + chọn cụm nhấn trọn ý; `applyTypeset` kiểm nguyên văn rồi ghi `wrap` (trang, callout, items/steps/columns) và nới
+  `highlight` cho trọn cụm. Renderer `rich.phraseHtml` + `render.titleHtml/phrased` bọc mỗi cụm `span.nbp`. Spec: `validPhrases` ở `specService`
+  (`cleanItem`, cột, callout, trang), `limits.wrap`. Gọi song song vòng tự soát (29–56 s, không kéo dài lượt dựng), áp trước bước đo.
+- **Engine** (`shared/deck/engine.js`): `fitTitles` (tiêu đề thử cỡ nhỏ dần để gom ít dòng: bìa/mở phần/kết/câu chốt tới 68%, tiêu đề trang tới 80–88%)
+  và `fitItemTitles` (cụm dài hơn bề rộng thẻ → co đều mọi tiêu đề mục của trang tới 82%) chạy đầu `fitSlide`. CSS: tiêu đề, phụ đề, h3/h4 `balance`.
+- **Bàn soát chữ** (`src/services/deckLint.js`, `browser.lintDeck`, cờ `DESIGN_LINT`): đo dòng chữ thật trên trang đã dựng (orphan/clip/spill/overlap/
+  tiny) → `fitPass` chọn kiểu theo điểm `lintScore`, `lintFixes` gỡ phần tử trang trí gây lỗi; `build_ready` ghi `typeset` + `refit.lint`.
+- **Thị giác**: `stageRings` + `.vbox.stage` (bìa, mở phần, kết; hình trôi nhẹ), bìa có hình chia cột 1,45 : 1; `.sec.has-core` (trang chuyển đoạn không
+  số/không hình dùng `coreArt` + biểu tượng); trang kết: `HERO_LAYOUTS` có `closing`, bố cục `.cl-hero`, quỹ đạo mờ khi không hình, tiêu đề kết tô cụm
+  nhấn. `tidyNumbers.stepMarks`: mốc thời gian lặp ở đầu tiêu đề bước timeline về nhãn mốc.
+- Kiểm chứng: `npm test` 398/398 (mới `test/unit/typeset.test.js` 14 test, có 1 test Chromium thật cho `lintDeck` và 1 test luồng `buildDeck`),
+  `npm run build` đạt. Dựng lại bản sao `c9dee269…` (217 s): dàn chữ 157 câu → 154 nhận, 3 bỏ; sau khi thêm cột + lời nhắc cụm ngắn chạy lại riêng
+  bước dàn chữ: 164/164. Bàn soát: 5 trang điểm thấp → 19 phép thử → đổi 4 trang; lỗi còn lại `{}` (0). Ảnh `docs/so-sanh-ban-mau-thiet-ke-v4.jpg`.
+- Giới hạn: người dùng sửa chữ tiêu đề → `wrap` của câu đó mất (trình duyệt tự cân dòng, chưa gọi lại AI khi lưu); trang 19 (5 thẻ + dải kết luận)
+  vẫn co 0,68; bìa/kết chưa có khối "mục đích" 3 thẻ như bản Claude; trang dẫn video vẫn chỉ là trang chờ (chưa có video thật); giao diện soạn thảo
+  chưa kiểm bằng trình duyệt sau thay đổi engine (`fitTitles` ghi `font-size` inline lên tiêu đề đang sửa).
+
+## 2026-11-10 — Khoảng chừa logo phía trên: chỉ chừa vừa đủ (bổ sung v4)
+Phản hồi người dùng: khoảng trống phía trên trang quá rộng — trang nào cũng lùi xuống dưới logo dù tiêu đề không dài tới logo → mất chỗ cho chữ và
+hình, dãn dòng hẹp, trang kém đẹp.
+- **Engine** (`shared/deck/engine.js`): `logoRoom` (bỏ khoảng chừa `.lg-free`, đọc lề gốc/khoảng chừa mặc định từ CSS), `logoNeed` (đo mực chữ từng
+  dòng + khung `LOGO_BOX` của `.hd/.body/.callout/.free` so với vùng logo, trả phần còn lấn — px khung), `logoPush` (cộng dồn vào `--lgs`; ≥ mặc định
+  → trả `.lg-top` gốc). `fitSlide`: `logoRoom` → `fitTitles` → `fitItemTitles` → `.fit-m` → tối đa 4 lượt `logoPush` → vòng co chữ → nếu k < 1 đo lại
+  (tối đa 3 lượt đẩy + co). Bản đầu chỉ "bỏ hết / giữ hết" và đo TRƯỚC `fitTitles` → tiêu đề co về 1 dòng đè logo ở 4 trang (bàn soát báo `overlap`)
+  → đổi sang đo sau + đẩy vừa đủ.
+- **CSS** (`theme.css`): `.slide.lg-top.lg-free { padding-top: calc(100px + var(--lgs, 0px) + var(--bt)) }`, bìa 120px; `.slide li` thêm vào nhóm
+  `text-wrap: pretty` (gạch đầu dòng cột so sánh hết rơi 1 chữ xuống dòng — lỗi `orphan@pts` lộ ra khi trang rộng chỗ hơn).
+- Kiểm chứng: `npm test` 399/399 (thêm 1 test Chromium thật trong `typeset.test.js` — nay 15 test: tiêu đề ngắn lề 100px, tiêu đề dài chỉ lùi một
+  phần và không dòng chữ nào đè logo), `npm run build` đạt; chế độ sửa / in / trình chiếu: 0 lỗi trang, chữ tiêu đề nguyên vẹn. Xuất lại bản sao
+  `c9dee269…` (không dựng lại bằng AI): 21/37 trang bỏ hẳn khoảng chừa, 15 trang chỉ đẩy 35–60px (thay vì 136px), 1 trang giữ gần mặc định (mở phần
+  có số lớn ở góc); hệ số co chữ tăng ở 15 trang (19: 0,68 → 0,76; 28: 0,72 → 0,84; 25/27/32: 0,80 → 0,88; 29: 0,88 → 1); bàn soát `{}` (0 lỗi).
+  Ảnh `docs/so-sanh-khoang-trong-logo.jpg` (trước / sau), cập nhật `docs/so-sanh-ban-mau-thiet-ke-v4.jpg`.
+- Giới hạn: trang không có nhãn mục phía trên tiêu đề mà tiêu đề dài tới logo vẫn phải lùi gần hết khoảng chừa (tiêu đề phải nằm dưới logo); khi đang
+  gõ tiêu đề trong trình soạn thảo, lúc chữ chạm tới logo cả trang sẽ dịch xuống vài chục px (đúng ý nhưng nhìn thấy được). Bản sao chưa dựng lại bằng
+  AI sau thay đổi này → `fitPass` chưa tận dụng chỗ trống mới để chọn lại kiểu trình bày.

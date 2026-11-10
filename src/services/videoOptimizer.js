@@ -1,4 +1,4 @@
-// Hàng nén video chạy nền: mỗi lúc 1 video (Semaphore 1 — không tranh CPU với tạo bài), trạng thái lưu ở assets.process_state
+// Hàng nén video chạy nền: mỗi lúc 1 video (Semaphore 1 — không tranh CPU với tạo bài); kiểm tệp lúc tải lên (inspect) tối đa vài lượt cùng lúc, trạng thái lưu ở assets.process_state
 // để giao diện hiện "Đang tối ưu" và để khởi động lại vẫn nén tiếp. Tệp gốc được giữ nguyên cho tới khi bản nén ghi xong;
 // đổi tệp bằng 1 câu UPDATE có điều kiện (storage_key cũ) → video bị xoá/thay giữa chừng thì bỏ bản nén, không ghi đè.
 // Lưu ý: chỉ đúng khi chạy 1 bản sao ứng dụng (như Semaphore) — xem memory-bank/09-technical-traps.md.
@@ -11,16 +11,31 @@ import { decide, moovAtEnd } from './videoService.js';
 
 const extOf = (key) => (/\.([a-z0-9]+)$/i.exec(key)?.[1] || '').toLowerCase();
 
-export function createVideoOptimizer({ assets, storage, video, logger, tmpDir }) {
+export function createVideoOptimizer({ assets, storage, video, logger, tmpDir, inspectConcurrency = 3 }) {
   const queue = new Semaphore(1);
+  // ffprobe + chụp ảnh bìa lúc tải lên cũng là tiến trình con → có trần riêng (CT-005); nén vẫn 1 lúc.
+  const inspectQueue = new Semaphore(inspectConcurrency);
   const queued = new Set();
+  // Có ffmpeg/ffprobe không (null = chưa kiểm lần nào): thiếu thì video vẫn lưu nhưng không đọc được thông số/không nén — cảnh báo 1 lần + hiện ở /api/health.
+  let tools = null;
 
   /**
    * Ngay khi tải lên (đồng bộ, vài trăm ms): đọc thông số + chụp ảnh bìa nếu trình duyệt không gửi.
    * Tệp không đọc được bằng ffprobe = hỏng → ném lỗi để route trả 422. Thiếu ffmpeg → { info: null } (giữ hành vi cũ).
    */
-  async function inspect(file, { wantPoster = false } = {}) {
-    if (!(await video.available())) return { info: null, poster: null };
+  async function checkTools() {
+    const ok = await video.available();
+    if (tools !== ok && !ok) logger.warn('video_tools_missing', { note: 'Thiếu ffmpeg/ffprobe: video tải lên không được kiểm tra hay nén' });
+    tools = ok;
+    return ok;
+  }
+
+  async function inspect(file, opts) {
+    return inspectQueue.run(() => inspectNow(file, opts));
+  }
+
+  async function inspectNow(file, { wantPoster = false } = {}) {
+    if (!(await checkTools())) return { info: null, poster: null };
     let info;
     try {
       info = await video.probe(file);
@@ -52,10 +67,12 @@ export function createVideoOptimizer({ assets, storage, video, logger, tmpDir })
     }
     await assets.setProcessState(assetId, 'running');
     const started = Date.now();
-    const src = storage.pathOf(row.storage_key);
+    const origKey = row.storage_key;
+    const src = storage.pathOf(origKey);
     const type = extOf(row.storage_key);
     const out = path.join(tmpDir, `video-opt-${randomUUID()}.mp4`);
     let state = 'failed';
+    let newKey = null; // khoá bản nén đã (hoặc đang) ghi vào kho — để dọn nếu bước đổi bản ghi lỗi (CT-004)
     try {
       const info = await video.probe(src);
       if (info.width && info.height && (info.width !== row.width || info.height !== row.height)) await assets.setVideoSize(assetId, info.width, info.height);
@@ -76,12 +93,15 @@ export function createVideoOptimizer({ assets, storage, video, logger, tmpDir })
         const after = await video.probe(out);
         // Khoá mới (không ghi đè tệp đang được phát theo Range): <asset>-<ngẫu nhiên>.mp4.
         const key = assetKey(row.tenant_id, row.presentation_id, `${assetId}-${randomUUID().slice(0, 8)}`, 'mp4');
+        newKey = key;
         await storage.putFile(key, out);
         const changed = await assets.replaceVideoFile(assetId, row.storage_key, { storageKey: key, mime: 'video/mp4', bytes, width: after.width, height: after.height });
         if (changed) {
+          newKey = null;
           await storage.remove(row.storage_key).catch(() => {});
           state = 'done';
         } else {
+          newKey = null;
           await storage.remove(key).catch(() => {});
           state = null; // video đã bị xoá / thay bằng tệp khác giữa chừng
         }
@@ -92,10 +112,34 @@ export function createVideoOptimizer({ assets, storage, video, logger, tmpDir })
       }
     } catch (err) {
       logger.warn('video_optimize_failed', { assetId, err: err.killed ? 'timeout' : err.code || err.message, ms: Date.now() - started });
+      if (newKey) state = await settleOrphan(assetId, origKey, newKey, state);
     } finally {
       await rm(out, { force: true }).catch(() => {});
       if (state) await assets.setProcessState(assetId, state).catch(() => {});
     }
+  }
+
+  /**
+   * Bản nén đã vào kho nhưng bước đổi bản ghi lỗi (DB đứt, mất phản hồi…) — chưa biết DB đã ghi hay chưa → ĐỌC LẠI rồi mới quyết (không xoá mù):
+   *  - bản ghi đã trỏ tới bản nén (lệnh đã commit, chỉ mất phản hồi) → coi là thành công, xoá bản gốc như nhánh thường;
+   *  - chưa trỏ / bản ghi không còn → bản nén mồ côi → xoá;
+   *  - không đọc lại được (DB vẫn hỏng) → giữ nguyên, ghi log để dọn sau (bộ dọn định kỳ thuộc cổng production).
+   */
+  async function settleOrphan(assetId, origKey, key, state) {
+    let cur;
+    try {
+      cur = await assets.findById(assetId);
+    } catch (err) {
+      logger.error('video_orphan_unverified', { assetId, key, err: err.code || err.message });
+      return state;
+    }
+    if (cur && cur.storage_key === key) {
+      await storage.remove(origKey).catch(() => {});
+      logger.warn('video_optimize_committed_after_error', { assetId });
+      return 'done';
+    }
+    await storage.remove(key).catch((err) => logger.error('video_orphan_remove_failed', { assetId, key, err: err.code || err.message }));
+    return state;
   }
 
   /** Khởi động: video còn dở (pending/running) → đưa lại vào hàng. */
@@ -105,5 +149,5 @@ export function createVideoOptimizer({ assets, storage, video, logger, tmpDir })
     return rows.length;
   }
 
-  return { inspect, enqueue, resume, stats: () => ({ active: queue.active, pending: queue.pending }) };
+  return { inspect, enqueue, resume, stats: () => ({ active: queue.active, pending: queue.pending, inspecting: inspectQueue.active, inspectPending: inspectQueue.pending, tools }) };
 }

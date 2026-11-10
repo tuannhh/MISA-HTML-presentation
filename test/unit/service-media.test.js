@@ -18,10 +18,11 @@ async function pngFile(dir, name) {
   return { path, originalname: name, size: buffer.length, buffer };
 }
 
-function world(extra = {}) {
+function world(extra = {}, { direct = false } = {}) {
   const prev = process.env.NODE_ENV;
   process.env.NODE_ENV = 'test';
-  const config = loadConfig();
+  // Mặc định cách dựng cũ (ảnh minh hoạ theo imagePrompt); chỉ đạo thiết kế có test riêng (test/unit/art-direction.test.js).
+  const config = { ...loadConfig(), design: { direct } };
   process.env.NODE_ENV = prev;
   const created = [];
   const stored = [];

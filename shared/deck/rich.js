@@ -263,6 +263,46 @@ export function richHtml(s, highlight) {
   return html;
 }
 
+// ----- Cụm nghĩa của tiêu đề (bước "dàn chữ" — artDirection.applyTypeset): dòng chỉ được ngắt GIỮA các cụm, không ngắt trong cụm. -----
+const oneLine = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
+/**
+ * Danh sách cụm nghĩa có khớp chuỗi không: chuỗi là chữ thuần 1 dòng (không định dạng, không xuống dòng tay) và
+ * các cụm nối bằng 1 dấu cách ra ĐÚNG chuỗi. Người dùng sửa chữ → hết khớp → danh sách cụm tự mất hiệu lực (specService bỏ khi lưu).
+ */
+export function validPhrases(text, phrases) {
+  if (typeof text !== 'string' || hasRich(text) || /[\r\n]/.test(text)) return false;
+  if (!Array.isArray(phrases) || !phrases.length) return false;
+  if (!phrases.every((g) => typeof g === 'string' && g && g === oneLine(g))) return false;
+  return phrases.join(' ') === oneLine(text);
+}
+/**
+ * Tiêu đề chia cụm nghĩa → HTML: mỗi cụm 1 khối span.nbp (inline-block — không ngắt dòng bên trong, cụm dài hơn dòng vẫn tự xuống dòng);
+ * cụm nhấn mạnh (highlight) bọc <em class="hl"> theo từng cụm. Danh sách cụm không khớp chuỗi → null (nơi gọi dùng richHtml).
+ */
+export function phraseHtml(text, highlight, phrases) {
+  if (!validPhrases(text, phrases)) return null;
+  const plain = oneLine(text);
+  const h = oneLine(highlight);
+  const hs = h ? plain.indexOf(h) : -1;
+  const he = hs >= 0 ? hs + h.length : -1;
+  let pos = 0;
+  return phrases
+    .map((g) => {
+      const a = pos;
+      const b = a + g.length;
+      pos = b + 1;
+      let inner;
+      if (hs < 0 || he <= a || hs >= b) inner = lines(g);
+      else {
+        const x = Math.max(hs, a) - a;
+        const y = Math.min(he, b) - a;
+        inner = `${x ? lines(g.slice(0, x)) : ''}<em class="hl">${lines(g.slice(x, y))}</em>${y < g.length ? lines(g.slice(y)) : ''}`;
+      }
+      return `<span class="nbp">${inner}</span>`;
+    })
+    .join(' ');
+}
+
 /** Các URL liên kết trong chuỗi (theo thứ tự, có thể trùng). */
 export function richLinks(s) {
   if (!hasRich(s)) return [];

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { VARIANTS, MANUAL_VARIANTS, fits, artDirect, familyOf } from '../../shared/deck/variants.js';
-import { parseNum, parseTable, cleanChart, niceScale, fmtNum, withUnit, chartFromStats, statsFromChart, CHART_LIMITS } from '../../shared/deck/chart.js';
+import { parseNum, parseCell, showCell, parseTable, cleanChart, niceScale, fmtNum, withUnit, chartFromStats, statsFromChart, CHART_LIMITS } from '../../shared/deck/chart.js';
 import { CALLOUT_LAYOUTS } from '../../shared/deck/blocks.js';
 import { LAYOUTS, AI_LAYOUTS } from '../../shared/deck/render.js';
 import { renderDeck } from '../../src/services/renderService.js';
@@ -196,4 +196,35 @@ test('renderer: sơ đồ (2×2, Venn, chu trình, đồng tâm, bia, A vs B)', 
 
 test('hình thu nhỏ: mọi kiểu của mọi bố cục đều có hình xem trước', () => {
   for (const [l, vs] of Object.entries(VARIANTS)) for (const v of vs) assert.ok(stylePreview(l, v).startsWith('<svg'), `${l}:${v}`);
+});
+
+// CT-008: ô nhập hiển thị "0,123" rồi đọc lại phải ra 0,123 (trước: parseNum coi ",123" là nhóm nghìn → 123).
+test('parseCell/showCell: hiển thị rồi đọc lại luôn ra đúng số (kể cả đúng 3 chữ số thập phân)', () => {
+  for (const n of [0, 0.001, 0.123, 1.234, -0.125, 12.5, 1234.5678, 1e12, 999999999999999, -1234.5, 0.000001]) {
+    assert.equal(parseCell(showCell(n)), n, `vòng tròn ${n} qua "${showCell(n)}"`);
+  }
+  assert.equal(showCell(null), '');
+  assert.equal(showCell(1e-7), '0', 'nhỏ hơn 1e-6 làm tròn về 0, không hiện ký hiệu mũ');
+  assert.ok(!/e/i.test(showCell(1e15)));
+  // Sửa ô: 0,123 → 0,124 giữ 0,124 (lỗi gốc ra 124).
+  assert.equal(parseCell('0,124'), 0.124);
+  // Quy ước ô: phẩy = thập phân; chấm nhóm nghìn khi đúng nhóm 3; "1.5" thập phân; nhóm nghìn không mở đầu bằng 0.
+  assert.equal(parseCell('1.234,5'), 1234.5);
+  assert.equal(parseCell('1,5'), 1.5);
+  assert.equal(parseCell('1.5'), 1.5);
+  assert.equal(parseCell('0.123'), 0.123);
+  assert.equal(parseCell('1.234'), 1234);
+  assert.equal(parseCell('12.345.678'), 12345678);
+  assert.equal(parseCell('-0,5'), -0.5);
+  assert.equal(parseCell('(1.200)'), -1200);
+  assert.equal(parseCell('45%'), 45);
+  // Dạng chỉ có ở Anh/Mỹ → giao parseNum đoán.
+  assert.equal(parseCell('1,234.5'), 1234.5);
+  assert.equal(parseCell('1,234,567'), 1234567);
+  // Không đọc được / vô hạn / quá trần → null.
+  for (const bad of ['', 'abc', '1,2,x', '1..2', '1.2.3', 'Infinity', '1e999', '9'.repeat(30)]) assert.equal(parseCell(bad), null, bad);
+  assert.equal(parseCell(Infinity), null);
+  assert.equal(parseCell(0.5), 0.5);
+  // Dán bảng vẫn dùng đoán định dạng (không đổi hành vi).
+  assert.equal(parseNum('1,234'), 1234);
 });

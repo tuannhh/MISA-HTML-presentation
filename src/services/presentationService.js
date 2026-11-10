@@ -18,7 +18,7 @@ import { Semaphore } from '../lib/semaphore.js';
 import { badRequest, conflict, forbidden, notFound, tooLarge, unavailable, unprocessable, HttpError } from '../lib/httpError.js';
 import { sniffVideo, VIDEO_MIME } from '../lib/fileType.js';
 import { normalizeSpec, collectAssetIds, dropForeignAssets, remapAssetIds, themeForTone, cleanImageEdit, SPEC_LIMITS } from './specService.js';
-import { normalizeOutline, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia, placeDiagrams, applyRedraws, redrawPoints, verifyOutlineFacts, applyOutlineLinks } from './outlineService.js';
+import { normalizeOutline, outlineWarnings, askOutlineKeepingPages, capOutline, composeDeckFromOutline, keepPhotoImages, placeUserMedia, placeDiagrams, applyRedraws, redrawPoints, verifyOutlineFacts, applyOutlineLinks } from './outlineService.js';
 import { collectSourceFacts } from './sourceFacts.js';
 import { buildCaseIndex, deckTexts, sentenceCaseOutline, sentenceCaseSpec } from '../../shared/deck/textCase.js';
 import { precheckSource, precheckMedia, ingestSource, fitPieces } from './ingestService.js';
@@ -32,6 +32,10 @@ import { DEFAULT_FONT } from '../../shared/deck/fonts.js';
 import { normalizeImage, normalizeExtractedImages, previewForModel, imageTraits, looksLikePhoto, looksLikeGraphic, applyImageEdit } from './imageService.js';
 import { mapModelDeck, IMAGE_ASPECTS } from './geminiService.js';
 import { artDirect } from '../../shared/deck/variants.js';
+import { typesetBrief, applyTypeset } from './typeset.js';
+import { lintScore, lintTotals, lintFixes } from './deckLint.js';
+import { prepareOutline, applyDirection, planArt, artPrompt, cutoutArt, cropPage, tidyNumbers, tidyHeads } from './artDirection.js';
+import { applyReview, slideBrief, REVIEW_BATCH, fitTrials, fitProbe, applyFit, FIT_TIGHT } from './designReview.js';
 import { removeBackground } from './cutoutService.js';
 import { resolveYouTube, parseYouTubeId } from './youtubeService.js';
 import { resolveVimeo, parseVimeo } from './vimeoService.js';
@@ -191,6 +195,10 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       }
       src = await precheckSource({ files: input.files, url: input.url, urls: input.urls, text: input.text }, config.limits, { driveFolders: Boolean(config.google.apiKey) });
       userMedia = await precheckMedia(input.media, input.posters, config.limits);
+      // Video kèm theo bị hỏng → báo ngay (422), không vào hàng chờ rồi mới thất bại (CT-003; đường editor đã làm vậy).
+      for (const f of userMedia.videos) {
+        if ((await videos.inspect(f.path)).broken) throw unprocessable(`Video "${f.name}" bị hỏng hoặc không đọc được hình`, 'INVALID_VIDEO');
+      }
       // Tệp HTML (nhận diện theo nội dung, không theo đuôi tệp).
       for (const f of src.files || []) if (f.kind === 'text' && looksLikeHtml(await readHead(f.path, 16384))) f.html = true;
       if (htmlMode === 'design' && !(src.files?.length === 1 && src.files[0].html)) throw badRequest('Giữ nguyên thiết kế: chọn đúng 1 tệp bài trình bày HTML', 'HTML_REQUIRED');
@@ -256,14 +264,58 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     return { ...res, videos, skipped };
   }
 
-  async function storeVideoBuffer(tenantId, id, v, name) {
+  /**
+   * Lưu 1 video thành asset của bài — MỌI đường tạo asset video (editor, tạo bài kèm video, nhập HTML) đi qua đây để cùng một luật (CT-003):
+   * kiểm tệp (hỏng → 422 INVALID_VIDEO, không để lại gì), ảnh bìa (trình duyệt gửi hoặc chụp bằng ffmpeg), ghi kho + DB, xếp hàng nén.
+   * src: { path } (tệp trên đĩa) hoặc { buffer } (video tách từ HTML — ghi vào kho trước rồi mới đọc được bằng ffprobe).
+   * Lỗi giữa chừng thì xoá tệp vừa ghi. Thiếu ffmpeg (inspect trả info null) → vẫn lưu, không nén — xem videos.stats().tools.
+   */
+  async function ingestVideo(deck, { path: file = null, buffer = null, type, name, size, posterFile = null }) {
     const assetId = randomUUID();
-    const key = assetKey(tenantId, id, assetId, v.type);
-    await storage.put(key, v.buffer);
-    const { info } = await videos.inspect(storage.pathOf(key));
-    await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[v.type], bytes: v.buffer.length, width: info?.width || null, height: info?.height || null, storageKey: key, originalName: name, processState: info ? 'pending' : null });
-    if (info) videos.enqueue(assetId);
-    return assetId;
+    const key = assetKey(deck.tenant_id, deck.id, assetId, type);
+    let stored = false;
+    try {
+      let probed;
+      if (buffer) {
+        await storage.put(key, buffer);
+        stored = true;
+        probed = await videos.inspect(storage.pathOf(key), { wantPoster: !posterFile });
+      } else {
+        probed = await videos.inspect(file, { wantPoster: !posterFile });
+      }
+      if (probed.broken) throw unprocessable('Tệp video bị hỏng hoặc không đọc được hình', 'INVALID_VIDEO');
+      const { info } = probed;
+      let poster = null;
+      let posterImg = null;
+      const posterBuf = posterFile ? await readFile(posterFile) : probed.poster;
+      if (posterBuf) {
+        posterImg = await normalizeImage(posterBuf, { maxSide: 1280 }).catch(() => null);
+        if (posterImg) poster = await storeImage(deck, 'poster', posterImg, null);
+      }
+      if (!buffer) {
+        await storage.putFile(key, file);
+        stored = true;
+      }
+      const dims = { width: info?.width || null, height: info?.height || null };
+      const processState = info ? 'pending' : null;
+      const bytes = buffer ? buffer.length : size;
+      await assets.create(deck.tenant_id, { id: assetId, presentationId: deck.id, kind: 'video', mime: VIDEO_MIME[type], bytes, ...dims, storageKey: key, originalName: name, processState });
+      if (processState) videos.enqueue(assetId);
+      return { assetId, bytes, dims, processState, poster, posterImg };
+    } catch (err) {
+      if (stored) await storage.remove(key).catch(() => {});
+      throw err;
+    }
+  }
+
+  // Nhập HTML (giữ nguyên thiết kế): video hỏng bị bỏ (null) — bài vẫn nhập được, số bị bỏ ghi vào log.
+  async function storeVideoBuffer(tenantId, id, v, name) {
+    try {
+      return (await ingestVideo({ tenant_id: tenantId, id }, { buffer: v.buffer, type: v.type, name })).assetId;
+    } catch (err) {
+      if (err instanceof HttpError && err.code === 'INVALID_VIDEO') return null;
+      throw err;
+    }
   }
 
   // "Giữ nguyên thiết kế": mỗi trang → trang tự do gồm ảnh chụp trang (sau bước hiện nội dung cuối cùng) + video đặt đúng khung
@@ -276,13 +328,16 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const deck = { tenant_id: tenantId, id };
       const byVideo = assignVideos(res.slides, res.videos);
       const slides = [];
+      let brokenVideos = 0;
       for (const [i, sl] of res.slides.entries()) {
         const img = await normalizeImage(sl.shot, { maxSide: 1920, quality: 88 });
         const shot = await storeImage(deck, 'image', img, `Trang ${i + 1}${sl.title ? ` - ${sl.title}` : ''}`.slice(0, 200));
         const vids = [];
         for (const [k, v] of (byVideo.get(i) || []).entries()) {
           const title = `${sl.title || `Trang ${i + 1}`}${k ? ` (${k + 1})` : ''}`.slice(0, 200);
-          vids.push({ asset: await storeVideoBuffer(tenantId, id, v, `${title}.${v.type}`), title, box: sl.vbox });
+          const asset = await storeVideoBuffer(tenantId, id, v, `${title}.${v.type}`);
+          if (asset) vids.push({ asset, title, box: sl.vbox });
+          else brokenVideos += 1;
         }
         const notes = sl.notes || String(sl.text || '').replace(/\s+/g, ' ').trim().slice(0, 1500);
         slides.push(designSlide({ title: sl.title, notes, shotAsset: shot.id, fit: sl.fit, videos: vids }, randomUUID));
@@ -294,7 +349,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       if (!spec.slides.length) throw unprocessable('Không nhập được trang nào từ tệp HTML', 'SOURCE_EMPTY');
       dropForeignAssets(spec, new Set((await assets.listMediaForPresentation(id)).map((a) => a.id)));
       await presentations.setGenerationResult(tenantId, id, { status: 'ready', spec, title: input.title ? null : spec.title });
-      logger.info('html_import_ready', { id, slides: spec.slides.length, videos: res.videos.length, videosSkipped: res.skipped, mode: res.mode, ms: Date.now() - started });
+      logger.info('html_import_ready', { id, slides: spec.slides.length, videos: res.videos.length - brokenVideos, videosSkipped: res.skipped, videosBroken: brokenVideos, mode: res.mode, ms: Date.now() - started });
       scheduleThumbnail(tenantId, id, 0);
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi nhập bài trình bày. Vui lòng thử lại.';
@@ -312,7 +367,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     const source = others.length ? await ingestSource({ ...input, files: others }, { limits: config.limits, googleApiKey: config.google.apiKey }) : { pieces: [], media: [], images: [], docs: [] };
     source.docs ||= [];
     const tmpDir = path.join(config.storage.tempDir, `html-${randomUUID()}`);
-    const videos = [];
+    const found = [];
+    let broken = 0;
     let room = Math.max(0, config.limits.maxVideosPerDeck - (input.userMedia?.videos?.length || 0));
     try {
       for (const f of htmlFiles) {
@@ -330,7 +386,13 @@ export function createPresentationService({ config, repos, storage, gemini, brow
             await mkdir(tmpDir, { recursive: true });
             const p = path.join(tmpDir, `${randomUUID()}.${v.type}`);
             await writeFile(p, v.buffer);
-            videos.push({ path: p, name: `Video trang ${i + 1}.${v.type}`, size: v.buffer.length, type: v.type, poster: null });
+            // Video hỏng thì bỏ riêng video đó, bài vẫn nhập được (CT-003) — cùng phép kiểm với các đường lưu video khác.
+            if ((await videos.inspect(p)).broken) {
+              await rm(p, { force: true }).catch(() => {});
+              broken += 1;
+              continue;
+            }
+            found.push({ path: p, name: `Video trang ${i + 1}.${v.type}`, size: v.buffer.length, type: v.type, poster: null });
           }
         }
         room = Math.max(0, room - res.videos.length);
@@ -339,7 +401,8 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       await rm(tmpDir, { recursive: true, force: true }).catch(() => {});
       throw err;
     }
-    return { source, videos, cleanup: () => rm(tmpDir, { recursive: true, force: true }).catch(() => {}) };
+    if (broken) logger.warn('html_import_videos_broken', { count: broken });
+    return { source, videos: found, cleanup: () => rm(tmpDir, { recursive: true, force: true }).catch(() => {}) };
   }
 
   // Lưu media gửi kèm thành asset của bài (ảnh → WebP ≤1920px; video giữ nguyên tệp + ảnh bìa trình duyệt chụp) và chuẩn bị
@@ -359,21 +422,9 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       out.images.push({ asset: a.id, name: f.name, width: img.width, height: img.height, preview: await preview(img.buffer), traits: await imageTraits(img.buffer).catch(() => null) });
     }
     for (const f of userMedia?.videos || []) {
-      let poster = null;
-      let posterImg = null;
-      const { info, poster: frame } = await videos.inspect(f.path, { wantPoster: !f.poster });
-      const posterBuf = f.poster ? await readFile(f.poster) : frame;
-      if (posterBuf) {
-        posterImg = await normalizeImage(posterBuf, { maxSide: 1280 }).catch(() => null);
-        if (posterImg) poster = await storeImage(deck, 'poster', posterImg, null);
-      }
-      const assetId = randomUUID();
-      const key = assetKey(tenantId, id, assetId, f.type);
-      await storage.putFile(key, f.path);
-      await assets.create(tenantId, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[f.type], bytes: f.size, width: info?.width || null, height: info?.height || null, storageKey: key, originalName: f.name, processState: info ? 'pending' : null });
-      if (info) videos.enqueue(assetId);
+      const v = await ingestVideo(deck, { path: f.path, type: f.type, name: f.name, size: f.size, posterFile: f.poster || null });
       const title = f.name.replace(/\.[a-z0-9]+$/i, '').slice(0, 200);
-      out.videos.push({ name: f.name, preview: posterImg ? await preview(posterImg.buffer) : null, video: { provider: 'file', asset: assetId, poster: poster?.id || null, title, caption: '' } });
+      out.videos.push({ name: f.name, preview: v.posterImg ? await preview(v.posterImg.buffer) : null, video: { provider: 'file', asset: v.assetId, poster: v.poster?.id || null, title, caption: '' } });
     }
     return out;
   }
@@ -462,11 +513,14 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       try {
         facts = await collectSourceFacts(source, { pdftotext: V.pdftotext, tempDir: config.storage.tempDir, extraTexts: media.pieces.map((p) => p.text) });
         const text = fitPieces([...source.pieces, ...media.pieces], config.limits.maxSourceChars);
-        raw = await gemini.generateOutline({
-          text, media: media.direct, images: modelImages, userImages: user.images, userVideos: user.videos, redraws, links: facts.links,
-          slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: keep ? KEEP_MAX_PAGES : AUTO_MAX_SLIDES, keepOriginal: keep, pages: pageCount,
-          tone: input.tone, instructions: input.instructions, ratio: input.ratio, sourceLabel: input.sourceLabel,
-        });
+        const ask = (correction) =>
+          gemini.generateOutline({
+            text, media: media.direct, images: modelImages, userImages: user.images, userVideos: user.videos, redraws, links: facts.links,
+            slideCount: input.slideCount, autoSlides: input.autoSlides, maxSlides: keep ? KEEP_MAX_PAGES : AUTO_MAX_SLIDES, keepOriginal: keep, pages: pageCount,
+            tone: input.tone, instructions: input.instructions, ratio: input.ratio, sourceLabel: input.sourceLabel, correction,
+          });
+        // Giữ nguyên nội dung + biết số trang nguồn: số trang AI trả phải khớp (lệch → hỏi lại 1 lần; vẫn lệch → cảnh báo ở bước duyệt, CT-002).
+        raw = keep && pageCount ? await askOutlineKeepingPages(ask, pageCount, { onMismatch: (m) => logger.warn('outline_page_count_mismatch', { id, ...m }) }) : await ask(null);
       } finally {
         await media.cleanup();
       }
@@ -545,7 +599,7 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       for (const sl of draft.slides) {
         if (CONTACT_LAYOUTS.includes(sl.layout) && !sl.images.length && !sl.video && qrLeft.length) sl.images = [{ asset: qrLeft.shift(), caption: '', fit: 'contain' }];
       }
-      const { outline } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: keep ? !pageCount : input.autoSlides, slideCount: keep ? pageCount : input.slideCount, aiImages: !!input.aiImages, keepOriginal: keep } });
+      const { outline, mergedSlides } = normalizeOutline(draft, { options: { tone: input.tone, autoSlides: keep ? !pageCount : input.autoSlides, slideCount: keep ? pageCount : input.slideCount, aiImages: !!input.aiImages, keepOriginal: keep } });
       if (!outline.slides.length) throw unprocessable('AI không lập được dàn ý từ tài liệu này', 'AI_EMPTY');
       // Chống bịa: liên kết có URL không có trong tư liệu → bỏ (giữ nhãn); số điện thoại/email/website không có trong tư liệu → bỏ dòng.
       const verified = verifyOutlineFacts(outline, facts);
@@ -573,6 +627,10 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const uiLeft = [...ui].filter((aid) => !outline.slides.some((sl) => (sl.images || []).some((im) => im.asset === aid))).map((aid) => ({ asset: aid, ...look.get(aid) }));
       const uiPlaced = placeUserMedia(outline.slides, { images: uiLeft, videos: [] }, { room: room(), force: false, chunk: 4, title: 'Giao diện sản phẩm' });
       if (input.templateId) outline.design = await designFromTemplate(tenantId, id, input.templateId, outline.design);
+      // Cảnh báo giữ nguyên nội dung tính SAU mọi bước thêm/bớt trang (cap, media, sơ đồ); dòng dồn lấy từ lúc chuẩn hoá.
+      const warnings = outlineWarnings(outline, mergedSlides);
+      if (warnings.length) outline.warnings = warnings;
+      else delete outline.warnings;
       await presentations.setOutlineResult(tenantId, id, { outline, title: input.title ? null : outline.title });
       const kinds = {};
       for (const k of kindOf.values()) if (k) kinds[k] = (kinds[k] || 0) + 1;
@@ -628,6 +686,10 @@ export function createPresentationService({ config, repos, storage, gemini, brow
         const row = await owned(user, id);
         if (row.status !== 'outline') throw conflict('Bài trình bày không ở bước duyệt dàn ý', 'NOT_OUTLINE');
         if (!Number.isInteger(expected)) throw badRequest('Thiếu outlineVersion', 'VERSION_REQUIRED');
+        // Giữ nguyên nội dung: dàn ý AI lập có thể còn dòng dài hơn mức hiển thị trọn (chưa qua lần lưu kiểm chặt). Dựng luôn thì normalizeSpec
+        // rút gọn âm thầm → chặn như khi lưu (CT-002), người dùng tách dòng theo cảnh báo ở bước duyệt.
+        const long = outlineWarnings(row.outline || {}).filter((w) => w.code === 'PAGE_TOO_LONG').map((w) => `Trang ${w.page}: có dòng dài hơn ${SPEC_LIMITS.outlinePoint} ký tự`);
+        if (long.length) throw unprocessable('Dàn ý còn dòng quá dài — tách thành nhiều dòng rồi dựng bài', 'INVALID_OUTLINE', long);
       }
       const affected = await presentations.startBuildOwned(user.id, id, expected);
       if (!affected) throw conflict('Dàn ý đã thay đổi hoặc bài đang được dựng. Tải lại để xem trạng thái mới nhất.', 'VERSION_CONFLICT');
@@ -647,8 +709,21 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       if (!row?.outline) throw unprocessable('Không tìm thấy dàn ý', 'NOT_OUTLINE');
       const aiImages = row.outline.options?.aiImages === true && config.aiImages.enabled && config.aiImages.perDeck > 0;
       const keep = row.outline.options?.keepOriginal === true;
-      const raw = await gemini.designDeck({ outline: row.outline, ratio: row.ratio, instructions: row.instructions, imagePrompts: aiImages, keepOriginal: keep });
-      const composed = composeDeckFromOutline(row.outline, mapModelDeck(raw, []).slides);
+      const direct = config.design?.direct === true;
+      // Chỉ đạo thiết kế: dựng từ bản dàn ý đã dọn (ảnh cắt sơ đồ trùng chữ, chữ rác trang video, số thứ tự gõ tay) — dàn ý đã lưu giữ nguyên.
+      let outline = row.outline;
+      let fixes = null;
+      if (direct) {
+        const crops = new Map();
+        for (const a of await assets.listMediaForPresentation(id)) {
+          const pg = cropPage(a.original_name);
+          if (pg) crops.set(a.id, pg);
+        }
+        ({ outline, fixes } = prepareOutline(row.outline, crops));
+      }
+      const raw = await gemini.designDeck({ outline, ratio: row.ratio, instructions: row.instructions, imagePrompts: aiImages, keepOriginal: keep, direct });
+      const composed = composeDeckFromOutline(outline, mapModelDeck(raw, []).slides);
+      const direction = direct ? applyDirection(composed, raw) : null;
       // Câu lệnh ảnh minh hoạ theo thứ tự trang (normalizeSpec bỏ trường lạ nên lấy trước).
       const prompts = composed.slides.map((sl) => (typeof sl.imagePrompt === 'string' ? sl.imagePrompt : ''));
       const { spec } = normalizeSpec(composed);
@@ -657,13 +732,32 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const linked = applyOutlineLinks(spec, row.outline);
       // Chữ AI dựng bài viết thêm (nhãn chủ đề, tiêu đề mục…) cũng về viết hoa đầu câu; bằng chứng tên riêng = nội dung dàn ý.
       const recased = keep ? 0 : sentenceCaseSpec(spec, buildCaseIndex(deckTexts(row.outline)));
-      const illustrated = aiImages ? await illustrate(tenantId, id, spec, prompts, row.outline.options?.tone) : 0;
-      // Phong cách + biến thể từng trang chọn ngầm theo nội dung; hạt giống ngẫu nhiên → mỗi lần dựng một diện mạo khác.
+      let illustrated = 0;
+      let subjects = null;
+      if (direction) {
+        // Biến thể AI chọn theo nghĩa (normalizeSpec đưa biến thể mặc định về '' → gán lại để artDirect giữ đúng lựa chọn).
+        direction.variants.forEach((v, i) => {
+          if (v && spec.slides[i]) spec.slides[i].variant = v;
+        });
+        if (aiImages) ({ added: illustrated, subjects } = await illustrateArt(tenantId, id, spec, direction.arts));
+      } else if (aiImages) illustrated = await illustrate(tenantId, id, spec, prompts, row.outline.options?.tone);
+      // Phong cách + biến thể từng trang: chỉ đạo thiết kế giữ lựa chọn của AI; trang AI không chọn (hoặc cách cũ) chọn ngầm theo nội dung.
       const [rw, rh] = String(row.ratio || '16:9').split(':').map(Number);
-      artDirect(spec, { seed: randomUUID(), ratio: rw / rh || 16 / 9 });
+      artDirect(spec, { seed: randomUUID(), ratio: rw / rh || 16 / 9, honor: !!direction });
+      // Số thứ tự gõ trong tiêu đề mục ("Kiểu 01: …", "01. …") → nhãn nhỏ trên tiêu đề, hoặc bỏ khi bố cục đã tự vẽ số (sau khi biến thể đã chốt).
+      let numbered = tidyNumbers(spec) + tidyHeads(spec);
+      // Dàn chữ (cụm nghĩa + cụm nhấn trọn ý): gọi song song với vòng tự soát (chỉ gửi chữ), áp TRƯỚC bước đo để bàn soát chữ đo đúng bản cuối.
+      const typesetting = config.design?.typeset ? typesetLines(id, spec) : null;
+      const review = direction && config.design.review ? await selfReview(tenantId, id, spec, row.ratio, subjects) : null;
+      // Kiểu trình bày vừa đổi có thể tự vẽ số → bỏ nhãn số thứ tự trùng lần nữa.
+      if (review?.variants) numbered += tidyNumbers(spec);
+      // Trang phải co chữ nhiều với kiểu đang dùng → đo các kiểu khác, lấy kiểu vừa nhất (chữ to, dễ đọc).
+      const typeset = typesetting ? applyTypeset(spec, await typesetting) : null;
+      const refit = direction && (config.design.review || config.design.lint) ? await fitPass(tenantId, id, spec, row.ratio) : null;
+      if (refit?.changed) numbered += tidyNumbers(spec);
       dropForeignAssets(spec, new Set((await assets.listMediaForPresentation(id)).map((a) => a.id)));
       await presentations.setGenerationResult(tenantId, id, { status: 'ready', spec, title: null });
-      logger.info('build_ready', { id, slides: spec.slides.length, style: spec.style, aiImages: illustrated, links: linked, recased, ms: Date.now() - started });
+      logger.info('build_ready', { id, slides: spec.slides.length, style: spec.style, parts: spec.parts?.length || 0, direct: !!direction, emphasis: direction?.emphasis || null, fixes, numbered, review, typeset, refit, aiImages: illustrated, links: linked, recased, ms: Date.now() - started });
       scheduleThumbnail(tenantId, id, 0);
     } catch (err) {
       const msg = err instanceof HttpError ? err.message : 'Đã xảy ra lỗi khi dựng bài trình bày. Vui lòng bấm "Dựng bài" để thử lại.';
@@ -705,6 +799,183 @@ export function createPresentationService({ config, repos, storage, gemini, brow
     );
     return added;
   }
+
+  // Bộ hình minh hoạ 3D đồng bộ (chỉ đạo thiết kế): bìa, mở đầu phần, hình từng thẻ — cùng một phong cách, màu theo phần của trang.
+  // Bộ hình từng mục: thiếu 1 hình → bỏ cả bộ của trang đó (trang lẫn icon và hình trông lệch). Lỗi từng hình không làm hỏng lượt dựng.
+  // Vẽ 1 hình 3D (nền tách trong suốt) → asset id, lỗi → null (trang giữ biểu tượng / ô trống như cũ).
+  async function drawArt(tenantId, id, spec, w) {
+    const color = spec.parts?.[spec.slides[w.slide]?.part]?.color;
+    try {
+      const out = await gemini.generateImage({ prompt: artPrompt(w.subject, color), aspectRatio: '1:1' });
+      const img = await normalizeImage(await cutoutArt(out.buffer), { maxSide: 1024 });
+      const a = await storeImage({ tenant_id: tenantId, id }, 'image', img, `ai-hinh-3d-trang-${w.slide + 1}${w.item === null ? '' : `-muc-${w.item + 1}`}`);
+      return a.id;
+    } catch (err) {
+      logger.warn('ai_art_failed', { id, slide: w.slide, item: w.item, code: err.code || null, err: err instanceof HttpError ? undefined : err.message });
+      return null;
+    }
+  }
+
+  // Bộ hình 3D của bài theo kế hoạch planArt → { added, subjects } (subjects: "trang:mục" → mô tả vật thể, để vòng tự soát vẽ lại).
+  async function illustrateArt(tenantId, id, spec, arts) {
+    const plan = planArt(spec, arts, config.aiImages.artPerDeck);
+    const done = new Map(); // "trang:mục" → asset
+    const subjects = new Map(plan.map((w) => [`${w.slide}:${w.item}`, w.subject]));
+    await Promise.all(
+      plan.map((w) =>
+        aiQueue.run(async () => {
+          const asset = await drawArt(tenantId, id, spec, w);
+          if (asset) done.set(`${w.slide}:${w.item}`, asset);
+        }),
+      ),
+    );
+    let added = 0;
+    const bySlide = new Map();
+    for (const w of plan) (bySlide.get(w.slide) || bySlide.set(w.slide, []).get(w.slide)).push(w);
+    for (const [i, ws] of bySlide) {
+      const sl = spec.slides[i];
+      if (ws[0].item === null) {
+        const asset = done.get(`${i}:null`);
+        if (asset) {
+          sl.image = { asset, alt: plainTitle(sl.title), caption: '', fit: 'contain', frame: 'art' };
+          added += 1;
+        }
+        continue;
+      }
+      if (!ws.every((w) => done.has(`${i}:${w.item}`))) continue;
+      for (const w of ws) {
+        const it = sl.items[w.item];
+        it.image = { asset: done.get(`${i}:${w.item}`), alt: plainTitle(it.title), caption: '', fit: 'contain', frame: 'art' };
+        added += 1;
+      }
+    }
+    return { added, subjects };
+  }
+
+  /**
+   * Vòng AI tự soát (DESIGN_REVIEW): dựng HTML bài vừa xong → chụp mọi trang (½ cỡ, JPEG) → model chấm từng lượt REVIEW_BATCH trang
+   * → applyReview (đổi kiểu / bỏ hình) + vẽ lại hình lỗi 1 lần. Lỗi ở bước nào cũng không làm hỏng lượt dựng bài (giữ bản chưa soát).
+   */
+  /** Gọi model dàn chữ; lỗi không làm hỏng lượt dựng (trả null → chỉ áp phần tự xử lý của applyTypeset). */
+  async function typesetLines(id, spec) {
+    const lines = typesetBrief(spec);
+    if (!lines.length || typeof gemini.typeset !== 'function') return null;
+    try {
+      return await gemini.typeset({ lines });
+    } catch (err) {
+      logger.warn('design_typeset_failed', { id, code: err.code || null });
+      return null;
+    }
+  }
+
+  /**
+   * Bàn soát chữ + chọn kiểu vừa nhất: đo từng trang (hệ số co chữ + lỗi dàn chữ: rơi chữ, tràn khung, hình đè chữ — deckLint); trang điểm thấp →
+   * thử mọi kiểu trình bày còn hợp nội dung trong 1 bài thử, đổi sang kiểu điểm cao nhất; lỗi che/cắt chữ còn lại → gỡ phần tử trang trí gây lỗi.
+   */
+  async function fitPass(tenantId, id, spec, ratio) {
+    const useLint = config.design.lint === true && typeof browser.lintDeck === 'function';
+    if (!useLint && typeof browser.measureFit !== 'function') return null;
+    const started = Date.now();
+    const before = artAssets(spec);
+    try {
+      const { width, height } = deckSize(ratio);
+      const [rw, rh] = String(ratio || '16:9').split(':').map(Number);
+      const r = rw / rh || 16 / 9;
+      const res = await resolvers(id, { inline: true, spec });
+      const html = (sp) => renderDeck(sp, { ratio, mode: 'present', embedFont: true, ...res });
+      const measure = async (sp) => (useLint ? browser.lintDeck(html(sp), { width, height }) : (await browser.measureFit(html(sp), { width, height })).map((k) => ({ k, issues: [] })));
+      let lint = await measure(spec);
+      const ks = lint.map(lintScore);
+      const trials = fitTrials(spec, ks, r);
+      const fit = trials.length ? applyFit(spec, ks, trials, (await measure(fitProbe(spec, trials))).map(lintScore)) : { changed: 0, dropped: 0 };
+      let fixed = 0;
+      if (useLint) {
+        if (fit.changed) lint = await measure(spec);
+        fixed = lintFixes(spec, lint);
+        if (fixed) lint = await measure(spec);
+      }
+      if (fit.dropped || fixed) await pruneArt(tenantId, before, spec);
+      const out = { tight: ks.filter((k) => k < FIT_TIGHT).length, trials: trials.length, ...fit, ...(useLint ? { fixed, lint: lintTotals(lint) } : {}), ms: Date.now() - started };
+      logger.info('design_fit_done', { id, ...out });
+      return out;
+    } catch (err) {
+      logger.warn('design_fit_failed', { id, code: err.code || null });
+      return null;
+    }
+  }
+
+  async function selfReview(tenantId, id, spec, ratio, subjects) {
+    const started = Date.now();
+    const before = artAssets(spec);
+    try {
+      const html = renderDeck(spec, { ratio, mode: 'present', embedFont: true, ...(await resolvers(id, { inline: true, spec })) });
+      const { width, height } = deckSize(ratio);
+      const indices = spec.slides.map((_, i) => i);
+      const pngs = await browser.screenshotSlides(html, { width, height, indices, scale: 0.5 });
+      const [rw, rh] = String(ratio || '16:9').split(':').map(Number);
+      const r = rw / rh || 16 / 9;
+      const shots = await Promise.all(pngs.map(async (png, i) => ({ brief: slideBrief(spec.slides[i], i, r), jpeg: await sharp(png).jpeg({ quality: 72 }).toBuffer() })));
+      const batches = [];
+      for (let k = 0; k < shots.length; k += REVIEW_BATCH) batches.push(shots.slice(k, k + REVIEW_BATCH));
+      const verdicts = (
+        await Promise.all(batches.map((b) => aiQueue.run(() => gemini.reviewSlides({ shots: b }).then((x) => (Array.isArray(x?.slides) ? x.slides : [])).catch((err) => (logger.warn('design_review_batch_failed', { id, code: err.code || null }), [])))))
+      ).flat();
+      const res = applyReview(spec, verdicts, r);
+      // Vẽ lại hình lỗi (cùng mô tả vật thể): bộ hình từng mục chỉ thay khi vẽ lại đủ cả bộ, không thì bỏ cả bộ cho đồng bộ.
+      let redrawn = 0;
+      const got = new Map();
+      await Promise.all(
+        res.redraw.map((w) =>
+          aiQueue.run(async () => {
+            const subject = subjects?.get(`${w.slide}:${w.item}`);
+            const asset = subject ? await drawArt(tenantId, id, spec, { ...w, subject }) : null;
+            if (asset) got.set(`${w.slide}:${w.item}`, asset);
+          }),
+        ),
+      );
+      const bySlide = new Map();
+      for (const w of res.redraw) (bySlide.get(w.slide) || bySlide.set(w.slide, []).get(w.slide)).push(w);
+      for (const [i, ws] of bySlide) {
+        const sl = spec.slides[i];
+        if (ws[0].item === null) {
+          const asset = got.get(`${i}:null`);
+          if (asset) (sl.image.asset = asset), (redrawn += 1);
+          else delete sl.image;
+          continue;
+        }
+        if (ws.every((w) => got.has(`${i}:${w.item}`))) {
+          for (const w of ws) sl.items[w.item].image.asset = got.get(`${i}:${w.item}`);
+          redrawn += ws.length;
+        } else (sl.items || []).forEach((it) => it.image?.frame === 'art' && delete it.image);
+      }
+      await pruneArt(tenantId, before, spec);
+      const out = { checked: res.checked, flagged: res.flagged, variants: res.variants, dropped: res.dropped, redrawn, issues: res.issues, ms: Date.now() - started };
+      logger.info('design_review_done', { id, ...out });
+      return out;
+    } catch (err) {
+      logger.warn('design_review_failed', { id, code: err.code || null, err: err instanceof HttpError ? undefined : err.message });
+      return null;
+    }
+  }
+  const artAssets = (spec) => {
+    const ids = new Set();
+    for (const sl of spec.slides) {
+      if (sl.image?.frame === 'art' && sl.image.asset) ids.add(sl.image.asset);
+      for (const it of sl.items || []) if (it.image?.frame === 'art' && it.image.asset) ids.add(it.image.asset);
+    }
+    return ids;
+  };
+  // Hình 3D đã thay/bỏ không còn trang nào dùng → xoá khỏi kho (không tính vào dung lượng của bài).
+  async function pruneArt(tenantId, before, spec) {
+    const after = artAssets(spec);
+    for (const old of before) {
+      if (after.has(old)) continue;
+      const oldRow = await assets.findById(old).catch(() => null);
+      await assets.deleteOwned(tenantId, old).catch(() => {});
+      if (oldRow) await storage.remove(oldRow.storage_key).catch(() => {});
+    }
+  }
+  const plainTitle = (t) => String(t || '').replace(/[*_`]/g, '').slice(0, SPEC_LIMITS.alt);
 
   /* ---------------- đọc ---------------- */
   function toDto(row, viewerId) {
@@ -1011,23 +1282,11 @@ export function createPresentationService({ config, repos, storage, gemini, brow
       const type = sniffVideo(await readHead(file.path));
       if (!type) throw unprocessable('Chỉ hỗ trợ video MP4, MOV hoặc WebM', 'INVALID_VIDEO');
       const name = String(file.originalname || '').normalize('NFC').slice(0, 255);
-      // Đọc thông số (kích thước, codec) + chụp ảnh bìa khi trình duyệt không chụp được (MOV/HEVC trên Chrome…). Tệp hỏng → từ chối ngay.
-      const { info, poster: frame, broken } = await videos.inspect(file.path, { wantPoster: !posterFile });
-      if (broken) throw unprocessable('Tệp video bị hỏng hoặc không đọc được hình', 'INVALID_VIDEO');
-      let poster = null;
-      const posterBuf = posterFile ? await readFile(posterFile.path) : frame;
-      if (posterBuf) {
-        const img = await normalizeImage(posterBuf, { maxSide: 1280 }).catch(() => null);
-        if (img) poster = await storeImage(deck, 'poster', img, null);
-      }
-      const assetId = randomUUID();
-      const key = assetKey(deck.tenant_id, id, assetId, type);
-      await storage.putFile(key, file.path);
-      const dims = { width: info?.width || null, height: info?.height || null };
-      const processState = info ? 'pending' : null;
-      await assets.create(deck.tenant_id, { id: assetId, presentationId: id, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, ...dims, storageKey: key, originalName: name, processState });
-      if (processState) videos.enqueue(assetId);
-      const asset = assetDto({ id: assetId, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, ...dims, original_name: name, process_state: processState });
+      // Kiểm tệp (hỏng → 422) + ảnh bìa + ghi kho/DB + xếp hàng nén: dùng chung ingestVideo với 2 đường còn lại.
+      const v = await ingestVideo(deck, { path: file.path, type, name, size: file.size, posterFile: posterFile?.path || null });
+      const asset = assetDto({ id: v.assetId, kind: 'video', mime: VIDEO_MIME[type], bytes: file.size, ...v.dims, original_name: name, process_state: v.processState });
+      const poster = v.poster;
+      const assetId = v.assetId;
       return { video: { provider: 'file', asset: assetId, poster: poster?.id || null, title: name.replace(/\.[a-z0-9]+$/i, '').slice(0, 200) }, assets: [asset, poster].filter(Boolean) };
     } finally {
       await removeUploads([file, posterFile]);

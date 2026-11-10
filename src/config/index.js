@@ -94,6 +94,18 @@ export function loadConfig() {
       enabled: bool('AI_IMAGES', true),
       perDeck: int('AI_IMAGES_PER_DECK', 6, { min: 0, max: 20 }),
       concurrency: int('AI_IMAGES_CONCURRENCY', 3, { min: 1, max: 8 }),
+      // Chỉ đạo thiết kế (DESIGN_DIRECT): bộ hình minh hoạ 3D đồng bộ cả bài — số hình tối đa mỗi bài (bìa, mở đầu phần, hình từng thẻ).
+      artPerDeck: int('AI_ART_PER_DECK', 36, { min: 0, max: 80 }),
+    }),
+    // Chỉ đạo thiết kế bằng AI khi dựng bài (phần + màu, biến thể theo nghĩa, bộ hình 3D). 0 = cách dựng cũ (bốc biến thể ngẫu nhiên).
+    design: Object.freeze({
+      direct: bool('DESIGN_DIRECT', true),
+      // Vòng AI tự soát sau khi dựng (chỉ khi DESIGN_DIRECT bật): chụp từng trang → model chấm theo danh sách kiểm → đổi kiểu / vẽ lại hoặc bỏ hình lỗi.
+      review: bool('DESIGN_REVIEW', true),
+      // Bước dàn chữ (mọi lần dựng): AI tách cụm nghĩa của tiêu đề / câu chốt / tiêu đề mục + chọn cụm nhấn trọn ý → dòng không ngắt giữa cụm.
+      typeset: bool('DESIGN_TYPESET', true),
+      // Bàn soát chữ (đo trên trang đã dựng, không dùng AI): rơi chữ, tràn khung, hình đè chữ → tự đổi kiểu / gỡ phần tử gây lỗi.
+      lint: bool('DESIGN_LINT', true),
     }),
     // Tìm ảnh trên Internet theo từ khoá (Pixabay API — ảnh miễn phí bản quyền, tải về máy chủ khi người dùng chọn).
     pixabay: Object.freeze({
@@ -131,6 +143,8 @@ export function loadConfig() {
       // Video tải lên gắn vào slide (mỗi tệp) và số video tối đa/bài.
       maxVideoMb: int('MAX_VIDEO_MB', 200, { min: 1, max: 2000 }),
       maxVideosPerDeck: int('MAX_VIDEOS_PER_DECK', 10, { min: 0, max: 50 }),
+      // Số lượt tải video lên cùng lúc cho cả máy chủ (vượt → 503 UPLOAD_BUSY): mỗi lượt giữ tệp tạm tới MAX_VIDEO_MB + ffprobe/poster.
+      maxConcurrentUploads: int('VIDEO_MAX_CONCURRENT_UPLOADS', 4, { min: 1, max: 32 }),
       // Ảnh/video người dùng gửi kèm khi tạo bài (bắt buộc đưa vào bài) — số tệp tối đa mỗi lần tạo (video còn theo MAX_VIDEOS_PER_DECK).
       maxCreateMedia: int('MAX_CREATE_MEDIA', 20, { min: 0, max: 60 }),
       // Tệp HTML xuất ra nhúng luôn video tải lên khi tổng dung lượng video không vượt mức này (vượt → chỉ có ảnh bìa).

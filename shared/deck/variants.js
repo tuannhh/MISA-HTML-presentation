@@ -5,6 +5,7 @@
 
 import { plainText } from './rich.js';
 import { CHART_LIMITS } from './chart.js';
+import { SPEC_LIMITS } from './limits.js';
 
 // Phần tử đầu = mặc định (giao diện gốc trước khi có biến thể).
 export const VARIANTS = Object.freeze({
@@ -41,6 +42,20 @@ export const MANUAL_VARIANTS = Object.freeze(new Set([
 export const LIST_LAYOUTS = Object.freeze(['bullets', 'cards', 'agenda', 'process', 'timeline']);
 export const LIST_KEY = Object.freeze({ bullets: 'items', cards: 'items', agenda: 'items', process: 'steps', timeline: 'steps' });
 // Họ bố cục đổi qua lại giữ nội dung (bảng chọn kiểu hiện kiểu của các bố cục cùng họ): danh sách · số liệu (Con số ↔ Biểu đồ).
+/**
+ * Đổi sang bố cục L có làm mất mục không (CT-006)? Các mục đang có (items ↔ steps) vượt giới hạn danh sách của bố cục đích → chặn,
+ * KHÔNG cắt. Chỉ tính khi sẽ thật sự chuyển (danh sách đích đang trống — cùng điều kiện với useEditor.changeLayout).
+ * @returns {{ from: string, to: string, count: number, max: number } | null}
+ */
+export function listBlock(s, L) {
+  const from = LIST_KEY[s?.layout];
+  const to = LIST_KEY[L];
+  if (!from || !to || from === to || (s[to] || []).length) return null;
+  const count = (s[from] || []).length;
+  const max = SPEC_LIMITS[to];
+  return count > max ? { from, to, count, max } : null;
+}
+
 export const LAYOUT_FAMILIES = Object.freeze([LIST_LAYOUTS, Object.freeze(['stats', 'chart'])]);
 export const familyOf = (layout) => LAYOUT_FAMILIES.find((f) => f.includes(layout)) || null;
 
@@ -236,9 +251,11 @@ function pick(list, weights, rnd) {
  * @param {object} spec spec đã chuẩn hoá (normalizeSpec)
  * @param {{ seed?: string|number, ratio?: number, style?: string }} o seed khác nhau → bài khác nhau
  */
-export function artDirect(spec, { seed = 1, ratio = 16 / 9, style } = {}) {
+// honor = true (chỉ đạo thiết kế bằng AI): giữ phong cách + biến thể AI đã chọn theo nội dung nếu hợp lệ và còn vừa nội dung;
+// trang AI không chọn/chọn sai mới bốc ngẫu nhiên như cũ.
+export function artDirect(spec, { seed = 1, ratio = 16 / 9, style, honor = false } = {}) {
   const rnd = rng(seed);
-  spec.style = STYLES.includes(style) ? style : pick(STYLES, STYLES.map(() => 1), rnd);
+  spec.style = STYLES.includes(style) ? style : honor && STYLES.includes(spec.style) ? spec.style : pick(STYLES, STYLES.map(() => 1), rnd);
   const aff = AFFINITY[spec.style] || {};
   const used = {}; // bố cục → số lần đã dùng mỗi biến thể
   let prev = '';
@@ -248,8 +265,14 @@ export function artDirect(spec, { seed = 1, ratio = 16 / 9, style } = {}) {
       s.variant = '';
       continue;
     }
-    const options = vs.filter((v) => !MANUAL_VARIANTS.has(`${s.layout}:${v}`) && fits(s.layout, v, s, ratio));
     const seen = used[s.layout] || (used[s.layout] = {});
+    if (honor && s.layout !== 'chart' && vs.includes(s.variant) && fits(s.layout, s.variant, s, ratio)) {
+      seen[s.variant] = (seen[s.variant] || 0) + 1;
+      prev = `${s.layout}:${s.variant}`;
+      if (s.variant === vs[0]) s.variant = '';
+      continue;
+    }
+    const options = vs.filter((v) => !MANUAL_VARIANTS.has(`${s.layout}:${v}`) && fits(s.layout, v, s, ratio));
     const weights = options.map((v) => {
       let w = contentWeight(s.layout, v, s) * (aff[v] || 1);
       w *= 0.2 ** (seen[v] || 0); // đã dùng ở trang cùng bố cục → giảm mạnh cơ hội lặp lại

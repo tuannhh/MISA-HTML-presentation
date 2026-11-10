@@ -1,12 +1,14 @@
 // Gọi Gemini (REST generateContent) để biến tài liệu nguồn thành đặc tả bài trình bày JSON theo responseSchema.
 // Developer API: khoá chỉ gửi qua header x-goog-api-key; Agent Platform: token Bearer từ file khoá service account (không đặt vào URL để không lọt vào log proxy).
-import { AI_LAYOUTS as LAYOUTS, TONE_THEMES } from '../../shared/deck/render.js';
-import { THEME_PRESETS } from '../../shared/deck/palette.js';
+import { AI_LAYOUTS as LAYOUTS, TONE_THEMES, VARIANTS, STYLES } from '../../shared/deck/render.js';
+import { THEME_PRESETS, PART_COLORS } from '../../shared/deck/palette.js';
 import { ICON_NAMES } from '../../shared/deck/icons.js';
 import { logger } from '../lib/logger.js';
 import { stripLinks } from '../../shared/deck/mdLinks.js';
 import { HttpError, unavailable } from '../lib/httpError.js';
 import { createServiceAccountTokens, loadServiceAccount } from '../lib/googleAuth.js';
+import { REVIEW_PROMPT, reviewResponseSchema } from './designReview.js';
+import { TYPESET_PROMPT, typesetResponseSchema } from './typeset.js';
 
 const S = (description) => ({ type: 'STRING', ...(description ? { description } : {}) });
 const ITEM = {
@@ -310,9 +312,26 @@ CHẾ ĐỘ GIỮ NGUYÊN NỘI DUNG (người dùng yêu cầu — ƯU TIÊN CA
 
 /* ---------------- bước 2: dựng bài từ dàn ý đã duyệt ---------------- */
 // withImagePrompt: người dùng bật "AI tạo ảnh minh hoạ" → mỗi trang có thêm imagePrompt (mô tả ảnh tiếng Anh hoặc rỗng).
-export function designResponseSchema({ withImagePrompt = false } = {}) {
+export function designResponseSchema({ withImagePrompt = false, direct = false } = {}) {
   const base = structuredClone(DECK_RESPONSE_SCHEMA);
   const item = base.properties.slides.items;
+  if (direct) {
+    // Chỉ đạo thiết kế: AI chọn biến thể theo nghĩa nội dung + mô tả vật thể cho hình minh hoạ 3D (trang và từng mục).
+    const art = S('mô tả TIẾNG ANH 1 vật thể làm hình minh hoạ, rỗng nếu không cần');
+    item.properties.items = { type: 'ARRAY', items: { ...ITEM, properties: { ...ITEM.properties, art }, required: [...ITEM.required, 'art'] } };
+    item.properties.variant = S('biến thể trình bày của layout (xem quy tắc 10c)');
+    item.properties.art = art;
+    // Mục then chốt + câu chốt cuối trang (quy tắc 10i, 10j).
+    item.properties.focus = { type: 'OBJECT', properties: { at: { type: 'INTEGER', description: 'số thứ tự mục/bước then chốt, 0 = không có' }, badge: S('huy hiệu ≤ 6 từ') }, required: ['at', 'badge'] };
+    item.properties.takeaway = {
+      type: 'OBJECT',
+      properties: { style: { type: 'STRING', enum: ['none', 'band', 'quote'] }, text: S('câu chốt nguyên văn từ dàn ý'), sub: S('giải thích kèm theo, tuỳ chọn'), highlight: S('1–3 từ nằm nguyên văn trong text'), art: S('mô tả TIẾNG ANH 1 vật thể ẩn dụ cho câu chốt') },
+      required: ['style', 'text', 'sub', 'highlight', 'art'],
+    };
+    item.required.push('variant', 'art', 'focus', 'takeaway');
+    item.propertyOrdering.splice(1, 0, 'variant');
+    item.propertyOrdering.push('art', 'focus', 'takeaway');
+  }
   delete item.properties.image;
   delete item.properties.images;
   item.properties.ref = S('mã trang trong dàn ý (S1, S2…) — giữ nguyên');
@@ -326,8 +345,79 @@ export function designResponseSchema({ withImagePrompt = false } = {}) {
   delete base.properties.theme;
   base.required = ['title', 'footer', 'slides'];
   base.propertyOrdering = ['title', 'footer', 'slides'];
+  if (direct) {
+    base.properties.style = { type: 'STRING', enum: [...STYLES] };
+    base.properties.parts = {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: { start: S('ref trang đầu của phần (S1, S2…)'), title: S('nhãn phần ≤ 3 từ'), color: { type: 'STRING', enum: Object.keys(PART_COLORS) } },
+        required: ['start', 'title', 'color'],
+      },
+    };
+    base.required = ['title', 'footer', 'style', 'parts', 'slides'];
+    base.propertyOrdering = ['title', 'footer', 'style', 'parts', 'slides'];
+  }
   return base;
 }
+
+// Ý nghĩa từng biến thể — để AI chọn theo NGHĨA nội dung (không bốc ngẫu nhiên). Thiếu mô tả → chỉ liệt kê tên.
+const VARIANT_MEANING = {
+  cover: 'split = chữ trái, hình phải · mirror = hình trái, chữ phải · center = chữ giữa trang · bottom = chữ dưới, hình phía trên',
+  section: 'num = số phần lớn bên trái · center = chữ giữa · band = dải màu ngang · ghost = số phần rất lớn mờ phía sau',
+  agenda: 'list = danh sách · tiles = các ô lưới · split = tiêu đề trái, danh sách phải · path = đường tiến trình ngang',
+  bullets: 'icons = ý có biểu tượng · numbered = ý có thứ tự · split = tiêu đề trái, ý phải · panels = mỗi ý một khung · checks = danh sách kiểm (việc cần làm, điều kiện) · big = 2–3 ý ngắn, chữ lớn',
+  cards: 'grid = lưới thẻ ngang hàng · bento = thẻ đầu nổi bật (mục quan trọng nhất đứng đầu) · rows = mỗi mục một hàng ngang (mục có mô tả dài, 3–6 mục) · numbered = thẻ có số thứ tự (chỉ khi thứ tự có nghĩa) · alternate = hàng so le · arrows = chuỗi thẻ nối mũi tên (nhân → quả, tuần tự 3–4 mục) · matrix = ma trận 2×2 (đúng 4 mục) · solid / outline / labeled = kiểu khung thẻ',
+  stats: 'cards = mỗi số một thẻ · hero = 1 số rất lớn + các số phụ (số đầu là con số gây ấn tượng nhất) · bars = thanh so sánh độ lớn · rings = vòng tròn (số %) · plain = số trên nền trơn',
+  image: 'side = ảnh trái · right = ảnh phải · full = ảnh tràn trang',
+  timeline: 'line = trục ngang · vertical = trục dọc (mốc có mô tả dài) · zigzag = so le · cards = mỗi mốc một thẻ',
+  process: 'cards = các bước dạng thẻ · chevrons = mũi tên nối nhau · stairs = bậc thang đi lên (tiến bộ, nâng cấp) · vertical = các bước dọc (bước có mô tả dài) · funnel = phễu (sàng lọc, thu hẹp) · cycle = vòng lặp lại',
+  quote: 'classic · center · band = dải màu nổi bật',
+  comparison: 'columns = các cột song song · split = 2 nửa trang · versus = đối đầu A vs B (đúng 2 cột: cũ ↔ mới, sai ↔ đúng)',
+  closing: 'center · split · minimal',
+};
+const variantGuide = () =>
+  Object.entries(VARIANTS)
+    .filter(([L]) => L !== 'chart')
+    .map(([L, vs]) => `   - ${L}: ${VARIANT_MEANING[L] || vs.join(', ')} (hợp lệ: ${vs.join(', ')})`)
+    .join('\n');
+
+// Chỉ đạo thiết kế toàn bài: bài trình bày phải có ý đồ hình ảnh, không đổ chữ vào khuôn.
+// n = số trang dàn ý → chỉ tiêu số trang có bộ hình từng mục (AI hay bỏ trống items[].art nếu chỉ nói "khoảng 1/3").
+const DESIGN_DIRECT_RULE = (n) => `
+10. CHỈ ĐẠO THIẾT KẾ — bạn là art director: mỗi trang có ý đồ thể hiện riêng, hợp nghĩa nội dung; cả bài thống nhất một ngôn ngữ hình ảnh.
+ a. parts: chia bài thành 2–6 PHẦN theo mạch nội dung (thường bắt đầu ở trang mở đầu phần / mục lục phần). Mỗi phần: start = ref trang đầu
+    phần (phần đầu tiên bắt đầu ở S1), title = nhãn ≤ 3 từ cho thanh tiến độ chân trang (vd "Thực trạng"), color theo cảm xúc nội dung:
+    red = cảnh báo, rủi ro, thủ đoạn · green = giải pháp, an toàn · blue = bối cảnh, tổng quan · violet = hành động, chiến lược ·
+    amber = lưu ý, cơ hội · cyan = công nghệ, dữ liệu. Hai phần liền nhau khác màu. Bài ngắn một mạch (< 8 trang) → parts = [].
+ b. style (cả bài): soft = thẻ trắng bo mềm, bóng nhẹ (truyền thông nội bộ, đào tạo, tuyên truyền) · editorial = kiểu báo chí, chữ là chính ·
+    solid = khối màu đậm · outline = nét mảnh, kỹ thuật · neon = công nghệ, nền tối.
+ c. variant: chọn theo NGHĨA nội dung trang, đa dạng giữa các trang liền nhau, không lặp một kiểu quá 2 lần liên tiếp:
+${variantGuide()}
+ d. Chỉ đánh số (01, 02…) khi thứ tự có nghĩa (bước, mục lục, xếp hạng). Mục ngang hàng → biểu tượng hoặc hình minh hoạ, không dùng numbered.
+    Không lặp số thứ tự: bố cục đã có số lớn thì title không mở đầu bằng "Bước 1:" / "1."; items[].value là nhãn có nghĩa ("Áp lực", "Tài sản") hoặc để rỗng — không phải "Yếu tố 1", "01". Bỏ chỉ dẫn số trang của tài liệu nguồn như "(SLIDE 3 – 10)".
+ e. art (trang): mô tả TIẾNG ANH 6–14 từ về MỘT vật thể cụ thể, giàu ẩn dụ, làm hình minh hoạ 3D cho trang — với cover, section, closing và
+    trang ý chính/ảnh có ≤ 4 ý mà KHÔNG có media người dùng gắn. Ví dụ: "a smartphone caught on a fishing hook", "a shield protecting a family".
+    Trang số liệu, quy trình, dòng thời gian, so sánh, sơ đồ, trang đã có media, trang có hình cho từng mục → "".
+ f. items[].art: trang cards/bullets/agenda có 2–6 mục NGANG HÀNG, mỗi mục là khái niệm hình dung được (kiểu lừa đảo, nhóm đối tượng, yếu tố,
+    kênh…) → mô tả TIẾNG ANH 4–10 từ một vật thể cho TỪNG mục (đủ cho mọi mục của trang, khác nhau rõ). Mục trừu tượng khó vẽ hoặc trang
+    nhiều chữ → "" cho cả trang. Bài này cần ÍT NHẤT ${Math.max(2, Math.round(n / 4))} trang có hình cho từng mục (ưu tiên trang cards, các nhóm
+    khái niệm của từng phần); trang có hình từng mục thì art của trang = "".
+ g. art KHÔNG mô tả chữ, số, logo, thương hiệu, người thật/người nổi tiếng; KHÔNG mô tả phong cách vẽ (hệ thống áp một phong cách 3D thống nhất).
+ h. highlight = cụm 1–4 từ đắt giá nhất của tiêu đề; icon từng mục khác nhau và đúng nghĩa.
+ i. focus (trang danh sách cards/bullets/process/timeline): khi nội dung có MỘT mục/bước then chốt rõ ràng (bước chặn được kẻ gian, dấu hiệu
+    nguy hiểm nhất, điều quan trọng nhất) → at = số thứ tự mục/bước đó (1, 2…), badge = huy hiệu ≤ 6 từ LẤY TỪ NỘI DUNG (vd. "Dừng lại ở đây là
+    an toàn") hoặc vai trò ngắn ("Điểm chặn"). Câu huy hiệu đang nằm trong text của mục thì vẫn ghi — hệ thống tự bỏ chỗ lặp. Không có → at = 0.
+    Tối đa khoảng ${Math.max(1, Math.round(n / 4))} trang có focus; không đặt focus khi các mục ngang hàng.
+ j. takeaway (trang danh sách cards/bullets/process/timeline/agenda/stats): khi dàn ý của trang có CÂU CHỐT / kết luận / khẩu hiệu (dòng
+    "Kết luận…", "Chốt…", câu tổng kết cuối, câu trích, câu khuyên) → đưa câu đó thành khối riêng cuối trang thay vì một mục ngang hàng:
+    text = CHỈ câu chốt, ngắn gọn dễ nhớ (nguyên văn, ≤ 12 từ; câu có dạng "Khẩu hiệu: giải thích" hoặc "Khẩu hiệu — giải thích" thì text =
+    khẩu hiệu, phần sau dấu ":"/"—" sang sub), sub = phần giải thích kèm theo (nếu có, nguyên văn), highlight = 1–3 từ đắt giá nằm nguyên văn
+    trong text; dòng đó KHÔNG còn xuất hiện trong items/steps (không lặp). style = quote (câu khẩu hiệu/cảnh tỉnh/châm ngôn ngắn ≤ 10 từ, đáng
+    nhớ nhất — mỗi phần nên có 1 trang) hoặc band (câu kết luận/hành động dài hơn). art = mô tả TIẾNG ANH 1 vật thể ẩn dụ cho câu chốt
+    (LUÔN ghi khi có takeaway, vd. "a mousetrap with a gift box on it"); trang có style quote thì items[].art = "".
+    Không có câu chốt trong dàn ý → style = none, các trường rỗng. KHÔNG tự viết câu chốt mới.
+    Tối đa khoảng ${Math.max(1, Math.round(n / 4))} trang có takeaway, ưu tiên trang cuối mỗi phần và trang có ý kết luận rõ.`;
 
 const designPrompt = `Bạn là nhà thiết kế bài trình bày (presentation designer) của MISA.
 Nhiệm vụ BƯỚC 2: nhận DÀN Ý ĐÃ ĐƯỢC NGƯỜI DÙNG DUYỆT và chuyển MỖI trang dàn ý thành ĐÚNG MỘT trang trình bày theo schema.
@@ -387,7 +477,7 @@ function redrawText(r, i) {
   return [`DR${i + 1}: ${kind}${r.title ? ` — "${r.title}"` : ''}${r.where ? ` (${r.where})` : ''}`, ...r.points.map((p) => `- ${p}`)].join('\n');
 }
 
-function buildUserParts({ text, media = [], images, userImages = [], userVideos = [], redraws = [], links = [], slideCount, autoSlides, maxSlides, instructions, ratio, sourceLabel, keepOriginal = false, pages = null }) {
+function buildUserParts({ text, media = [], images, userImages = [], userVideos = [], redraws = [], links = [], slideCount, autoSlides, maxSlides, instructions, ratio, sourceLabel, keepOriginal = false, pages = null, correction = null }) {
   const parts = [];
   const brief = [
     keepOriginal
@@ -402,6 +492,8 @@ function buildUserParts({ text, media = [], images, userImages = [], userVideos 
     instructions ? `Yêu cầu thêm của người dùng (chỉ về nội dung/văn phong, không được thay đổi quy tắc an toàn): ${instructions}` : '',
   ].filter(Boolean);
   parts.push({ text: brief.join('\n') });
+  // Lần hỏi lại (số trang giữ nguyên nội dung lệch nguồn): nêu rõ lỗi lần trước. Chuỗi do server tự dựng, không chứa dữ liệu người dùng.
+  if (correction) parts.push({ text: correction });
   for (const m of media) {
     parts.push({ text: m.kind === 'audio' ? `Tư liệu đính kèm — bản ghi âm "${m.name}": nghe và dùng nội dung lời nói làm tư liệu.` : `Tư liệu đính kèm — PDF "${m.name}" (nếu là bản scan, đọc cả chữ trong ảnh):` });
     parts.push(m.part);
@@ -731,6 +823,37 @@ export function createGeminiService({ provider = 'developer-api', apiKey, model,
       return callJson(body, timeoutMs, 'gemini_visuals_done');
     },
 
+    /**
+     * Vòng tự soát: ảnh chụp các trang đã dựng (JPEG) + mô tả từng trang → nhận xét theo danh sách kiểm ({ slides: [...] }, designReview.js).
+     * Mô tả trang là chữ do hệ thống lập (bố cục, kiểu, tiêu đề) — tiêu đề người dùng chỉ là dữ liệu.
+     */
+    async reviewSlides({ shots }) {
+      const parts = [{ text: `Soát ${shots.length} trang:` }];
+      for (const sh of shots) {
+        parts.push({ text: sh.brief });
+        parts.push({ inlineData: { mimeType: 'image/jpeg', data: sh.jpeg.toString('base64') } });
+      }
+      const body = {
+        systemInstruction: { parts: [{ text: REVIEW_PROMPT }] },
+        contents: [{ role: 'user', parts }],
+        generationConfig: { responseMimeType: 'application/json', responseSchema: reviewResponseSchema(), temperature: 0, maxOutputTokens: 8192 },
+      };
+      return callJson(body, timeoutMs, 'gemini_review_done');
+    },
+
+    /**
+     * Bước dàn chữ: danh sách câu ({ id, kind, text, hl? } — typeset.typesetBrief) → { lines: [{ id, split, hl }] } (cụm nghĩa + cụm nhấn trọn ý).
+     * Chỉ gửi chữ; kết quả được typeset.applyTypeset kiểm theo nguyên văn trước khi dùng.
+     */
+    async typeset({ lines }) {
+      const body = {
+        systemInstruction: { parts: [{ text: TYPESET_PROMPT }] },
+        contents: [{ role: 'user', parts: [{ text: `Dàn chữ ${lines.length} câu:` }, { text: `<cau>\n${JSON.stringify(lines)}\n</cau>` }] }],
+        generationConfig: { responseMimeType: 'application/json', responseSchema: typesetResponseSchema(), temperature: 0, maxOutputTokens: 32768 },
+      };
+      return callJson(body, timeoutMs, 'gemini_typeset_done');
+    },
+
     /** Bước 1: tư liệu → dàn ý (tiêu đề + các dòng nội dung từng trang, ảnh gợi ý). */
     async generateOutline(input) {
       const tone = input.tone === 'light' ? 'light' : 'dark';
@@ -748,7 +871,7 @@ export function createGeminiService({ provider = 'developer-api', apiKey, model,
     },
 
     /** Bước 2: dàn ý đã duyệt → đặc tả bài trình bày (bố cục, icon, số liệu…), mỗi trang mang ref Sn để ghép lại. */
-    async designDeck({ outline, ratio, instructions, imagePrompts = false, keepOriginal = false }) {
+    async designDeck({ outline, ratio, instructions, imagePrompts = false, keepOriginal = false, direct = false }) {
       const brief = [
         `Tỷ lệ khung hình: ${ratio} (khung càng rộng càng hợp nhiều cột).`,
         `Tên bài: ${outline.title}`,
@@ -757,9 +880,9 @@ export function createGeminiService({ provider = 'developer-api', apiKey, model,
         `Dàn ý gồm ${outline.slides.length} trang:`,
       ].filter(Boolean).join('\n');
       const body = {
-        systemInstruction: { parts: [{ text: designPrompt + (imagePrompts ? IMAGE_PROMPT_RULE : '') + (keepOriginal ? DESIGN_KEEP_RULE : '') }] },
+        systemInstruction: { parts: [{ text: designPrompt + (imagePrompts && !direct ? IMAGE_PROMPT_RULE : '') + (keepOriginal ? DESIGN_KEEP_RULE : '') + (direct ? DESIGN_DIRECT_RULE(outline.slides?.length || 0) : '') }] },
         contents: [{ role: 'user', parts: [{ text: brief }, { text: `<dan_y>\n${outlineForModel(outline)}\n</dan_y>` }] }],
-        generationConfig: { responseMimeType: 'application/json', responseSchema: designResponseSchema({ withImagePrompt: imagePrompts }), temperature: keepOriginal ? 0.2 : 0.4, maxOutputTokens: 65536 },
+        generationConfig: { responseMimeType: 'application/json', responseSchema: designResponseSchema({ withImagePrompt: imagePrompts && !direct, direct }), temperature: keepOriginal ? 0.3 : 0.5, maxOutputTokens: 65536 },
       };
       return callJson(body, timeoutMs, 'gemini_design_done');
     },

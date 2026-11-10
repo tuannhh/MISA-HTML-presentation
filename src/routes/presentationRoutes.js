@@ -9,6 +9,7 @@ import { ok, pick, paging, uuidParam } from '../lib/validate.js';
 import { tooLarge, notFound, badRequest } from '../lib/httpError.js';
 import { isUuid } from '../repositories/tenantScope.js';
 import { cappedDiskStorage } from '../lib/cappedDiskStorage.js';
+import { createUploadSlots } from '../lib/uploadSlots.js';
 
 // Tên file tải về: bỏ ký tự cấm, kèm filename* UTF-8 để giữ tiếng Việt.
 const fileBase = (title) => String(title || 'bai-trinh-bay').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'bai-trinh-bay';
@@ -24,8 +25,12 @@ export function presentationRoutes({ service, templates, sharing, publications, 
   const maxSourceBytes = config.limits.maxUploadMb * 1048576;
   // Trình duyệt gửi tên tệp dạng UTF-8 thô; multer mặc định giải mã latin1 → "Báo cáo.pptx" thành "BÃ¡o cÃ¡o.pptx".
   const UTF8_NAMES = { defParamCharset: 'utf8' };
+  // Trần số lượt tải video cùng lúc (CT-005): POST /:id/videos giữ chỗ trước multer; đường tạo bài chỉ giữ chỗ khi request có tệp video.
+  const uploadSlots = createUploadSlots(config.limits.maxConcurrentUploads);
+  const isVideoFile = (f) => /^video\//i.test(f.mimetype || '') || /\.(mp4|m4v|mov|webm)$/i.test(f.originalname || '');
   const upload = multer({
     ...UTF8_NAMES,
+    fileFilter: (req, file, cb) => cb(isVideoFile(file) ? uploadSlots.holdFor(req, req.res) : null, true),
     // Đếm byte thực nhận của CẢ request (tư liệu + media + ảnh bìa): trần = tổng tệp + phần dư cho ảnh bìa video.
     storage: cappedDiskStorage({ destination: config.storage.uploadDir, maxBytes: maxSourceBytes + 20 * 1048576, message: `Tổng dung lượng tệp tối đa ${config.limits.maxUploadMb} MB` }),
     limits: { fileSize: maxSourceBytes, files: config.limits.maxUploadFiles + config.limits.maxCreateMedia + config.limits.maxVideosPerDeck, fields: 20 + config.limits.maxSourceLinks, fieldSize: config.limits.maxTextChars * 4 },
@@ -144,7 +149,7 @@ export function presentationRoutes({ service, templates, sharing, publications, 
     ok(res, await service.cutoutLogo(req.user, req.params.id, req.params.assetId, body), null, 201);
   });
 
-  r.post('/:id/videos', auth, id, limits.media, capVideoBody, videoUpload, async (req, res) => {
+  r.post('/:id/videos', auth, id, limits.media, capVideoBody, uploadSlots.hold, videoUpload, async (req, res) => {
     const file = req.files?.file?.[0] || null;
     const poster = req.files?.poster?.[0] || null;
     ok(res, await service.addVideo(req.user, req.params.id, file, poster), null, 201);

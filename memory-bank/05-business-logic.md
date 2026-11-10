@@ -299,6 +299,65 @@ Slide sản phẩm (PDF) thường dán nhiều ảnh chụp giao diện; trư�
 
 ### Ảnh: AI, tìm Internet, chỉnh sửa
 - **Ảnh AI khi dựng bài** (tuỳ chọn ở màn Tạo, mặc định bật, lưu ở `outline.options.aiImages`): `designDeck` được yêu cầu thêm `imagePrompt` (tiếng Anh) cho trang **cần** minh hoạ mà chưa có ảnh thật/ảnh giao diện; `illustrate()` tạo tối đa `AI_IMAGES_PER_DECK` (6) ảnh 4:3 — ưu tiên bìa → mở đầu phần → còn lại — chạy song song `AI_IMAGES_CONCURRENCY`; ảnh lỗi bỏ qua, không làm hỏng bài.
+- **Chỉ đạo thiết kế** (`DESIGN_DIRECT`, mặc định bật; `src/services/artDirection.js`) thay cho ảnh minh hoạ ở trên:
+  1. `prepareOutline` dọn bản sao dàn ý (bản lưu không đổi): bỏ ảnh cắt trang nguồn (`"… · trang N"`) gắn sai trang hoặc trang đã ≥ 3 dòng,
+     chữ rác trang video chưa có video ("Slide 5", "02 VIDEO" → bố cục image), số gõ tay 1..n, chỉ dẫn "(SLIDE 3 – 10)".
+  2. `designDeck({direct})` thêm luật 10: `parts` [{start, title ≤ 3 từ, color theo cảm xúc}], `style`, `variant` theo nghĩa, `art` (tiếng Anh) cho
+     trang + `items[].art` cho từng mục (chỉ tiêu ≥ số trang/4 trang có bộ hình).
+  3. `applyDirection` → `spec.parts` + `slide.part` (≥ 2 phần), `tidySlide` (bỏ "Phần N ·" ở trang section, nhãn chỉ là số/lặp tiêu đề, "Bước N:" ở
+     bước, sửa hoa/thường của `highlight`); `artDirect(..., {honor:true})` giữ phong cách + biến thể AI chọn nếu hợp lệ.
+  4. `illustrateArt`: `planArt` (bìa → mở đầu phần → trọn bộ hình từng mục → hình trang khác, ≤ `AI_ART_PER_DECK`), một phong cách 3D clay
+     (`ART_STYLE`, màu theo phần), `cutoutArt` tách nền trắng → PNG trong suốt + cắt sát vật thể (bóng xám → bóng mờ thật), lưu `frame:'art'`.
+     Bộ hình từng mục thiếu 1 hình → bỏ cả bộ.
+  - Hiển thị: `.slide.pt-N` đổi `--accent`/`--blue`… theo màu phần; chân trang = thanh tiến độ phần (`ft-parts`); số trang mở đầu phần = số phần,
+    trang section giữa phần không mang số (`.sec.no-num`); `frame:'art'` → `.plate.art` / `.has-art` (không ô trắng, quầng màu phần + bóng CSS).
+  5. Sau `artDirect`: `tidyNumbers` — số thứ tự gõ trong tiêu đề mục ("Kiểu 01: …", "01. …") không lặp với số bố cục tự vẽ: bố cục đã vẽ số → bỏ;
+     còn lại → nhãn nhỏ trên tiêu đề `items[i].label` (mốc thời gian → `value`). `tidyHeads` — kicker/tiêu đề/phụ đề/thẻ chủ đề không nhắc lại nhau.
+  6. Vòng AI tự soát (`DESIGN_REVIEW`, `designReview.js`): chụp mọi trang → Gemini chấm checklist (tràn/chồng chữ, số lặp, trống/dày, hình lỗi/không hợp,
+     tương phản, chữ nhỏ) → đổi kiểu (chỉ kiểu hợp nội dung), vẽ lại ≤ 6 hình / bỏ hình, trang chữ nhỏ có hình cỡ trang → bỏ hình. Lỗi soát không làm hỏng bài.
+  - Chữ là chính: hình từng mục ≤ 168px, hình cỡ trang 78% ô và cột chữ rộng hơn; trang ý chính nhiều chữ không nhận hình cỡ trang.
+  7. Nhấn mạnh (luật 10i, 10j; `applyEmphasis` trong `applyDirection`, trước `normalizeSpec`): AI trả `focus {at, badge}` và `takeaway {style, text, sub,
+     highlight, art}` cho từng trang.
+     - focus → `items/steps[at-1].badge` (huy hiệu "DỪNG LẠI Ở ĐÂY LÀ AN TOÀN" đè mép trên thẻ, thẻ `.is-focus`); câu huy hiệu bị bỏ khỏi mô tả của mục.
+       ≤ ⌈n/4⌉ trang. Chỉ cards/bullets/process/timeline, danh sách ≥ 2, huy hiệu ≤ 8 từ.
+     - takeaway → `slide.callout {tone:'note', style: band|quote, text, sub?, highlight?}` (dải kết luận màu phần / câu chốt cỡ lớn có ngoặc kép);
+       mục "Kết luận"/trùng câu chốt rời danh sách (chỉ khi còn > 2 mục), phụ đề trùng → bỏ; không chồng hộp chú thích người dùng đặt. ≤ ⌈n/3⌉ trang.
+     - Câu chốt cỡ lớn: khẩu hiệu ≤ 10 từ trên trang ≤ 4 mục, ≤ ⌈n/10⌉ trang; trang dày/hết hạn mức → dải kết luận. Bố cục `QUOTE_ART_LAYOUTS`
+       (agenda/cards/stats/timeline/process) có hình 3D ẩn dụ bên câu chốt = `slide.image` (`calloutArt`: không ảnh nhấn, không video); `planArt`
+       ưu tiên hình này như trang mở đầu phần và không vẽ bộ hình từng mục cho trang đó.
+  8. Nhãn gốc làm kicker (`tidyHeads`, dàn ý "giữ nguyên nội dung" khiến AI để trống kicker): tiền tố "PHẦN 3 · / CÂU HỎI 1 ·" của tiêu đề, cụm IN HOA
+     trước "—" của phụ đề, phụ đề IN HOA nhiều cụm "·" → kicker; tiền tố tiêu đề trùng cụm đầu kicker có sẵn → bỏ khỏi tiêu đề.
+  9. Đo độ vừa (`fitPass`, sau vòng soát, cùng cờ `DESIGN_REVIEW`): `browser.measureFit` lấy hệ số co chữ `--k` từng trang; trang < `FIT_TIGHT` 0,78 →
+     dựng 1 bài thử gồm mọi kiểu còn hợp nội dung (`altVariants`) + bản bỏ bộ hình từng mục → đổi sang phép thử vừa nhất nếu hơn ≥ 0,08; giữ hình
+     được ưu tiên nếu đã vừa (≥ 0,78). ~1 s/bài 37 trang. Lỗi → giữ nguyên.
+  10. **Dàn chữ** (`DESIGN_TYPESET`, mặc định bật, MỌI lần dựng kể cả khi tắt chỉ đạo thiết kế; `src/services/typeset.js`): sau `tidyHeads`, gửi
+      Gemini danh sách câu chữ thuần (tiêu đề trang, câu chốt dải/cỡ lớn, tiêu đề mục/bước — `typesetBrief`, tối đa 260 câu, chỉ chữ) → model chèn `|`
+      giữa các CỤM NGHĨA và chọn cụm nhấn trọn ý. `applyTypeset` chỉ nhận khi ghép cụm ra đúng nguyên văn (`parseGroups`; cụm > 5 từ/34 ký tự → bỏ) →
+      ghi `slide.wrap` / `callout.wrap` / `items|steps[i].wrap` (mảng cụm) và nới cụm nhấn cho trọn cụm (`snapHighlight`: bỏ hư từ dẫn đầu, dấu câu
+      cuối; không tô cả câu). Câu ≤ 2 từ tự thành 1 cụm (không hỏi model). Gọi song song với vòng tự soát, áp TRƯỚC bước đo. Model lỗi → bỏ qua.
+      Renderer (`rich.phraseHtml`): mỗi cụm 1 `span.nbp` (inline-block) → dòng chỉ ngắt GIỮA các cụm ("LỪA ĐẢO", "15 tỷ đồng" không bao giờ bị tách).
+      `wrap` tự mất hiệu lực khi người dùng sửa chữ (`validPhrases` — `normalizeSpec` bỏ khi lưu, renderer bỏ qua khi không khớp).
+  11. **Tiêu đề tự chọn cỡ chữ** (engine `fitTitles`, chạy đầu `fitSlide` ở mọi chế độ — không cần AI, áp cho cả bài cũ): tiêu đề nhiều dòng thử cỡ nhỏ
+      dần (nấc 4%) để gom về ít dòng hơn — bìa / mở phần / kết / câu chốt cỡ lớn co tới 68% và dừng ở 2 dòng; tiêu đề trang 3 dòng → 2 (tới 80%),
+      2 dòng → 1 (tới 88%). Cỡ ghi inline `calc(<px> * var(--k))` nên vẫn co theo trang. Tiêu đề, phụ đề, h3/h4 dùng `text-wrap: balance`.
+  12. **Bàn soát chữ** (`DESIGN_LINT`, mặc định bật; `src/services/deckLint.js` + `browser.lintDeck`): đo TRÊN TRANG ĐÃ DỰNG (không AI, ~1,3 s/37 trang)
+      từng dòng chữ thật — `orphan` (dòng cuối 1 từ ngắn), `clip` (bị cắt), `spill` (tràn khỏi thẻ/hộp/huy hiệu/trang), `overlap` (hình, biểu tượng,
+      huy hiệu, logo đè dòng chữ), `tiny` (k < 0,6). Điểm trang = k − phạt (`lintScore`; clip/spill/overlap 0,25 → trang chữ nguyên cỡ có lỗi vẫn rơi
+      dưới `FIT_TIGHT`) → `fitPass` thử kiểu trình bày khác theo ĐIỂM (thay cho chỉ đo k ở mục 9); lỗi còn lại → `lintFixes` gỡ phần tử trang trí gây
+      lỗi (huy hiệu; hình hộp câu chốt → về dạng dải). `build_ready.refit.lint` ghi tổng lỗi còn lại.
+  13. **Thị giác bìa → kết**: hình 3D chủ đạo của bìa / mở phần / trang kết đặt trên "sân khấu" quỹ đạo quay chậm (`plate` với `o.stage` →
+      `.vbox.stage` + `stageRings`, hình trôi nhẹ `data-loop="float"`); trang chuyển đoạn không số, không hình (trang dẫn video) có hình lõi quỹ đạo +
+      biểu tượng của trang (`.sec.has-core` dùng lại `coreArt`); trang kết nhận hình chủ đạo (`planArt` — `HERO_LAYOUTS` có `closing`, bố cục
+      `.cl-hero` chữ trái hình phải) hoặc quỹ đạo mờ sau chữ, tiêu đề kết cũng tô cụm nhấn. Mốc thời gian lặp ở đầu tiêu đề bước timeline
+      ("2015 – 2019 · …" khi nhãn mốc đã là "2015–2019") → `tidyNumbers.stepMarks` đưa về nhãn mốc.
+  14. **Khoảng chừa logo phía trên — chỉ chừa vừa đủ** (engine `logoRoom` / `logoNeed` / `logoPush`, chạy trong `fitSlide` ở mọi chế độ, không cần AI,
+      áp cho cả bài cũ): CSS mặc định `.slide.lg-top` lùi cả trang xuống dưới logo (`--lh + 92px`, logo 144px → 236px thay vì 100px). Engine bỏ khoảng
+      chừa (`.lg-free`) rồi đo mực chữ từng dòng + khung hình/thẻ/nhãn của nội dung so với vùng logo (lề an toàn ngang 56px, dọc 28px khung):
+      không chạm → nội dung dâng lên như trang không logo (lề 100px; bìa 120px); có chạm (tiêu đề dài tới logo) → chỉ đẩy xuống phần còn thiếu
+      (biến `--lgs`, vd. 54px: nhãn mục nằm ngang hàng logo, tiêu đề ngay dưới logo); phần phải đẩy ≥ khoảng chừa mặc định → trả về mặc định.
+      Đo SAU `fitTitles` (tiêu đề co về 1 dòng sẽ dài ra phía logo) và đo lại sau khi trang co chữ. Ô chữ người dùng kéo dời đo ở vị trí gốc
+      (`.fit-m`). Hoạ tiết nền (vòng quỹ đạo, hình mờ) không tính. Không có JS → CSS vẫn chừa đủ. Logo phía dưới (`.lg-bot`) giữ nguyên.
+  - Lưới thẻ có hàng cuối lẻ (5 thẻ = 3 + 2) căn giữa: `.cards.ctr` (lưới 2×cột rãnh, thẻ chiếm 2 rãnh, thẻ đầu hàng cuối đặt `grid-column`).
 - **Hộp "Đổi / chỉnh sửa ảnh"** (`ImageStudioPanel`; desktop = dialog, mobile = màn toàn màn hình): Tải lên · Ảnh trong bài · Tìm ảnh (Pixabay, từ khoá Việt/Anh, lọc hướng) · Tạo bằng AI (mô tả + tỷ lệ, gợi ý sẵn từ tiêu đề trang) · Chỉnh sửa. Chọn ảnh mới giữ chú thích/kiểu hiển thị + khung/lớp phủ (§26), bỏ thông số chỉnh sửa của ảnh cũ.
 - **Chỉnh sửa ảnh** (`ImageEditor`, Cropper.js v1, không AI): cắt theo tỷ lệ (tự do/vừa khung/16:9/4:3/1:1/3:4), xoay 90° + xoay tinh ±45°, lật ngang/dọc, sáng/tối – độ rực – tương phản (xem trước bằng CSS filter), **vị trí trong khung** (lấp đầy/hiện trọn, phóng 100–300%, kéo để chọn phần hiển thị).
   - Cắt/xoay/lật/màu → `POST /assets/:src/edit` tạo ảnh mới từ **ảnh gốc** (`src`) — tham chiếu lưu `{asset: ảnh mới, src: ảnh gốc, edit: thông số}` → mở lại tiếp tục từ trạng thái cũ, không giảm chất lượng qua nhiều lần sửa.

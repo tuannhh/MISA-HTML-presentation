@@ -54,3 +54,30 @@
 - Sau khi thay đổi: cập nhật memory bank tương ứng + `10-development-history.md` (bắt buộc).
 - Thêm/bớt lời gọi từ máy chủ ra Internet (tên miền mới) → cập nhật bảng chiều ra trong `docs/DEVOPS-NETWORK.md` để DevOps mở firewall.
 - Commit message tiếng Việt hoặc tiếng Anh, mô tả thay đổi; không đẩy `.env`, `data/`, `tmp/`, `dist/`, `node_modules/`.
+- HTML nhập vào là dữ liệu không tin cậy: chỉ mở bằng `browserService.withPage` (context riêng + CSP + chặn mạng cấp tiến trình); không thêm đường mở Chromium khác cho nội dung người dùng.
+- Mọi đường lưu video đi qua `ingestVideo` (kiểm tệp hỏng, không để rác); tải video lên đi qua `uploadSlots` (503 `UPLOAD_BUSY`).
+- Số trong ô biểu đồ đi qua `parseCell`/`showCell` (không đoán dấu `.`/`,` như `parseNum`); đổi bố cục không được làm mất mục (`layoutBlockReason`).
+- Hình 3D của chỉ đạo thiết kế luôn qua `cutoutArt` và mang `frame:'art'`; chỉ ảnh có `frame:'art'` mới được bỏ tấm nền trắng (`.plate.art`,
+  `has-art`) — logo/ảnh người dùng giữ nền trắng. Thay ảnh trong editor không mang `frame:'art'` sang ảnh mới (`useImageDrop`).
+- Số thứ tự/nhãn trang trí không nằm trong tiêu đề mục: dùng `items[i].label` (nhãn nhỏ) hoặc để bố cục tự vẽ số; trường mới của mục phải thêm đủ
+  `cleanItem` + `limits` + `layers.MOVE_PATH_RE` + `editPaths.ITEM_MAX` + `outlineService.textSlots`. Vòng tự soát chỉ được đổi kiểu trong `altVariants`
+  (hợp nội dung, không phải kiểu chỉ người dùng chọn) và mọi lỗi của nó phải rơi về bản chưa soát.
+- Hình bên câu chốt cỡ lớn dùng lại `slide.image` (không thêm đường tham chiếu tài sản mới) — điều kiện hiện thống nhất ở `blocks.calloutArt`, mọi nơi
+  (render, editor, planArt) gọi hàm này. Kiểu khối `callout.style` 'box' là mặc định không lưu; `sub`/`highlight` chỉ đi kèm band/quote, `highlight`
+  phải nằm nguyên văn trong `text`. Trường tạm của AI (`focus`, `takeaway`) bị xoá trong `applyEmphasis`, không bao giờ vào spec.
+- Hình 3D bị bỏ/thay ở bước soát hoặc bước đo phải dọn khỏi kho qua `pruneArt`. Bước đo/soát chạy trên đúng theme của bài (bản mẫu: đặt theme vào
+  `outline.design` trước khi dựng, không sửa spec sau).
+- Cụm nghĩa (`wrap` của trang / câu chốt / mục) KHÔNG phải nội dung: chỉ hợp lệ khi ghép bằng 1 dấu cách ra đúng nguyên văn chữ thuần 1 dòng
+  (`rich.validPhrases`) — `normalizeSpec` bỏ khi không khớp, renderer bỏ qua; không thêm vào `textSlots`/`editPaths`. Kết quả model ở bước dàn chữ
+  không bao giờ được ghi đè chữ của bài (`typeset.parseGroups` kiểm nguyên văn); câu gửi model là dữ liệu (lời nhắc ghi rõ).
+- Tiêu đề lớn trong HTML phải đi qua `titleHtml(s)` (render.js) — đừng gọi `richHtml` trực tiếp cho tiêu đề trang; câu chốt/tiêu đề mục qua `phrased`.
+- `deckLint.lintInPage` chạy TRONG trang (tuần tự hoá qua `page.evaluate`) → tự chứa, không tham chiếu biến ngoài hàm; thêm loại phần tử trang trí
+  mới có thể đè chữ thì thêm vào danh sách `ART`, khung chứa chữ mới thì thêm vào `BOX`. `lintFixes` chỉ GỠ phần tử trang trí, không sửa nội dung.
+- Engine `fitTitles` ghi `font-size` inline trên tiêu đề (`calc(px * var(--k))`) — CSS mới cho tiêu đề phải giữ cỡ chữ tỉ lệ thuận `--k`.
+- Khoảng chừa logo phía trên do engine quyết định (`.lg-free` + `--lgs` trên `.slide`, đặt lại mỗi lần `fitSlide`): CSS mới KHÔNG đặt `padding-top` cố
+  định cho `.slide.lg-top` theo bố cục — muốn đổi lề gốc thì sửa cả cặp `.lg-top` / `.lg-top.lg-free` trong `theme.css`. Thêm loại khối nội dung mới
+  (khung, nhãn, hình) có thể nằm ở góc trên → thêm selector vào `LOGO_BOX` (engine.js); hoạ tiết nền mới không tính chạm logo → thêm vào danh sách
+  loại trừ (`.stage-rings,.cv-ghost`). `logoNeed` chỉ xét con trực tiếp `.hd/.body/.callout/.free` của trang.
+- `.cl-t` (tiêu đề trang kết) dùng `background-clip: text` → KHÔNG dùng hiệu ứng `words` (span có `will-change` mất màu chuyển); giữ `zoom`.
+- "Giữ nguyên nội dung" không cắt chữ im lặng: AI lập dàn ý ở chế độ lỏng (dòng thừa nối vào dòng cuối bằng `; `, dòng dài giữ + cảnh báo); lưu dàn ý và dựng bài vẫn chặn dòng > 400 ký tự. Chuỗi hiển thị trong ô nhập 1 dòng không được chứa `
+`.

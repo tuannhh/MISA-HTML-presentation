@@ -3,14 +3,14 @@
 // AN TOÀN: mọi chuỗi từ spec đều escape; icon chỉ lấy từ ICONS (hằng số tin cậy); URL ảnh/video do server cấp;
 // mã YouTube đã được kiểm định dạng ở specService (11 ký tự [A-Za-z0-9_-]).
 import { ICONS } from './icons.js';
-import { THEME_PRESETS, CUSTOM_THEME, resolveTheme, themeVarsCss, inkVarsCss, presetsForTone } from './palette.js';
+import { THEME_PRESETS, CUSTOM_THEME, resolveTheme, themeVarsCss, inkVarsCss, presetsForTone, partVarsCss, PART_COLORS } from './palette.js';
 import { fontStack, DECK_FONTS, DEFAULT_FONT } from './fonts.js';
 import { STYLES, resolveVariant, userCols } from './variants.js';
-import { accentPos, CALLOUT_TONES, CALLOUT_LAYOUTS, TRANSITIONS } from './blocks.js';
+import { accentPos, calloutArt, CALLOUT_TONES, CALLOUT_LAYOUTS, TRANSITIONS } from './blocks.js';
 import { chartHtml } from './chartView.js';
 import { SPEC_LIMITS as LIM } from './limits.js';
 import { TEXT_STYLES } from './free.js';
-import { richHtml, plainText, linkAttrs } from './rich.js';
+import { richHtml, phraseHtml, plainText, linkAttrs } from './rich.js';
 import { moveAttr, hideClasses } from './layers.js';
 import { qrSvg } from './qr.js';
 import { lookCss, overlayHtml } from './imgstyle.js';
@@ -75,6 +75,10 @@ function icon(name, fallback = 'sparkles') {
 // richHtml escape toàn bộ chữ; chỉ ghép thẻ từ thuộc tính đã kiểm.
 const hl = (text, highlight) => richHtml(text, highlight);
 const rt = (text) => richHtml(text);
+// Tiêu đề trang: có danh sách cụm nghĩa hợp lệ (slide.wrap) → dòng chỉ ngắt giữa các cụm; không thì như chữ thường.
+const titleHtml = (s) => phraseHtml(s.title, s.highlight, s.wrap) ?? richHtml(s.title, s.highlight);
+// Câu chốt của dải kết luận / hộp trích dẫn (callout.wrap) — cùng cách.
+const phrased = (text, highlight, wrap) => phraseHtml(text, highlight, wrap) ?? richHtml(text, highlight);
 
 // Chế độ sửa trực tiếp (mode 'edit', chỉ khung xem trước của trình soạn thảo): gắn đường dẫn trường spec vào phần tử chữ
 // (data-e) → engine bật contenteditable và gửi nội dung sửa về ứng dụng. ml = cho phép nhiều dòng. Bản xuất không có thuộc tính này.
@@ -118,7 +122,9 @@ function plate(ref, url, cap, ctx, o) {
   const web = ref.frame === 'browser';
   const bar = web ? '<div class="pbar" aria-hidden="true"><i></i><i></i><i></i></div>' : '';
   const st = imgPos(ref);
-  return `<div class="vbox" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"><figure class="media plate${web ? ' web' : ''}${cap ? ' cap' : ''}" style="--ar:${ar.toFixed(4)}${lookCss(ref) ? `;${lookCss(ref)}` : ''}"${M(ctx, o.mp)}>${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"${st ? ` style="${st}"` : ''}></div>${overlayHtml(ref)}${
+  // Hình minh hoạ 3D chủ đạo (bìa, mở đầu phần, trang kết — o.stage): đặt trên "sân khấu" quỹ đạo quay chậm, hình trôi nhẹ khi trình chiếu.
+  const stage = ref.frame === 'art' && o.stage === true;
+  return `<div class="vbox${stage ? ' stage' : ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}">${stage ? stageRings() : ''}<figure${stage && !ctx.edit ? ' data-loop="float" data-p="7" data-amp="12"' : ''} class="media plate${web ? ' web' : ''}${ref.frame === 'art' ? ' art' : ''}${cap ? ' cap' : ''}" style="--ar:${ar.toFixed(4)}${lookCss(ref) ? `;${lookCss(ref)}` : ''}"${M(ctx, o.mp)}>${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"${st ? ` style="${st}"` : ''}></div>${overlayHtml(ref)}${
     cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''
   }</figure></div>`;
 }
@@ -180,7 +186,7 @@ function head(s, ctx, { sub = true } = {}) {
   const k = s.kicker
     ? `<div class="kicker" data-a="left" data-d="0"><span class="num">${pad2(ctx.index + 1)}</span><span${E(ctx, 'kicker', LIM.kicker)}>${rt(s.kicker)}</span></div>`
     : '';
-  const t = s.title ? `<h2 class="title" data-a="words" data-d="4" data-s="2"${E(ctx, 'title', LIM.title, true)}>${hl(s.title, s.highlight)}</h2>` : '';
+  const t = s.title ? `<h2 class="title" data-a="words" data-d="4" data-s="2"${E(ctx, 'title', LIM.title, true)}>${titleHtml(s)}</h2>` : '';
   const st = sub && s.subtitle ? `<p class="sub" data-a="up" data-d="16" data-dist="40"${E(ctx, 'subtitle', LIM.subtitle, true)}>${rt(s.subtitle)}</p>` : '';
   return k || t || st ? `<header class="hd">${k}${t}${st}</header>` : '';
 }
@@ -192,8 +198,12 @@ function chips(tags, d0, ctx) {
 }
 
 // p = đường dẫn phần tử (vd. 'items.2') cho chế độ sửa.
+// Mục/bước then chốt (items[i].badge / steps[i].badge): viền nổi + huy hiệu trên đầu thẻ.
+const focusCls = (it) => (it && it.badge ? ' is-focus' : '');
+const focusBadge = (it, ctx, p) => (it && it.badge ? `<span class="fbadge"${E(ctx, `${p}.badge`, LIM.itemBadge)}>${rt(it.badge)}</span>` : '');
+const itemLabel = (it, ctx, p) => (it.label ? `<span class="ilab"${E(ctx, `${p}.label`, LIM.itemLabel)}>${rt(it.label)}</span>` : '');
 function itemText(it, ctx, p) {
-  return `<h4${E(ctx, `${p}.title`, LIM.itemTitle, true)}>${rt(it.title)}</h4>${it.text ? `<p${E(ctx, `${p}.text`, LIM.itemText, true)}>${rt(it.text)}</p>` : ''}`;
+  return `${itemLabel(it, ctx, p)}<h4${E(ctx, `${p}.title`, LIM.itemTitle, true)}>${phrased(it.title, '', it.wrap)}</h4>${it.text ? `<p${E(ctx, `${p}.text`, LIM.itemText, true)}>${rt(it.text)}</p>` : ''}`;
 }
 // Biểu tượng của thẻ/ý: ảnh/logo người dùng gắn (items[i].image) thay icon. Chế độ sửa: bấm biểu tượng để gắn/đổi ảnh.
 function mark(it, ctx, p, fallback) {
@@ -203,6 +213,18 @@ function mark(it, ctx, p, fallback) {
   return ctx.edit && p.startsWith('items.') ? html.replace(/^<span class="(ib[^"]*)"/, `<span class="$1"${M(ctx, `${p}.image`)}`) : html;
 }
 const valueTag = (it, ctx, p) => (it.value ? `<span class="tag"${E(ctx, `${p}.value`, LIM.itemValue)}>${rt(it.value)}</span>` : '');
+
+// Vòng quỹ đạo phía sau hình minh hoạ 3D chủ đạo (cùng ngôn ngữ với hình lõi coreArt): 3 vòng + 3 chấm sáng quay chậm ngược chiều nhau.
+function stageRings() {
+  return `<svg class="stage-rings" viewBox="0 0 900 900" aria-hidden="true">
+<circle cx="450" cy="450" r="436" fill="none" style="stroke:var(--line-2)" stroke-width="2" stroke-dasharray="2 16" data-loop="spin" data-p="90"/>
+<circle cx="450" cy="450" r="352" fill="none" style="stroke:var(--accent)" stroke-opacity=".34" stroke-width="2.5" stroke-dasharray="190 40 10 40" data-loop="spin" data-p="46" data-dir="-1"/>
+<circle cx="450" cy="450" r="262" fill="none" style="stroke:var(--accent-2)" stroke-opacity=".26" stroke-width="2"/>
+<g data-loop="spin" data-p="22"><circle cx="450" cy="450" r="352" fill="none"/><circle cx="802" cy="450" r="12" style="fill:var(--accent)"/></g>
+<g data-loop="spin" data-p="34" data-dir="-1"><circle cx="450" cy="450" r="262" fill="none"/><circle cx="188" cy="450" r="9" style="fill:var(--amber)"/></g>
+<g data-loop="spin" data-p="58"><circle cx="450" cy="450" r="436" fill="none"/><circle cx="450" cy="14" r="8" style="fill:var(--mint)"/></g>
+</svg>`;
+}
 
 function coreArt(ctx, iconName, pick = true) {
   const id = `g${ctx.index}`;
@@ -384,26 +406,29 @@ const L = {
     const m = hasMedia(s);
     const txt = `<div class="cv-l">
 ${s.kicker ? `<div class="live" data-a="left" data-d="0"><i></i><span${E(ctx, 'kicker', LIM.kicker)}>${rt(s.kicker)}</span></div>` : ''}
-<h1 class="cv-title" data-a="words" data-d="6" data-s="3"${E(ctx, 'title', LIM.title, true)}>${hl(s.title, s.highlight)}</h1>
+<h1 class="cv-title" data-a="words" data-d="6" data-s="3"${E(ctx, 'title', LIM.title, true)}>${titleHtml(s)}</h1>
 ${s.subtitle ? `<p class="cv-sub" data-a="up" data-d="24" data-dist="40"${E(ctx, 'subtitle', LIM.subtitle, true)}>${rt(s.subtitle)}</p>` : ''}
 ${chips(s.tags, 32, ctx)}
 ${s.caption ? `<div class="cv-cap" data-a="fade" data-d="44"${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</div>` : ''}
 </div>`;
     // center: chữ giữa trang; có ảnh → ảnh tràn nền, không có → hình minh hoạ mờ phía sau.
     if (v === 'center') return `${m ? bleed(s.image, ctx) : ''}<div class="body"><div class="cv">${m ? '' : `<div class="cv-ghost">${coreArt(ctx, s.icon, false)}</div>`}${txt}</div></div>`;
-    const art = m ? slot(s, ctx, { d: 14 }) : coreArt(ctx, s.icon);
+    const art = m ? slot(s, ctx, { d: 14, stage: true }) : coreArt(ctx, s.icon);
     return `<div class="body"><div class="cv">${v === 'mirror' ? art + txt : txt + art}</div></div>`;
   },
 
   section(s, ctx) {
     const img = hasMedia(s);
     // Các biến thể (center/band/ghost) chỉ khác cách đặt số thứ tự phần → xử lý bằng CSS.
-    return `<div class="body"><div class="sec${img ? ' has-media' : ''}">
-<div class="sec-no" data-a="zoom" data-d="0"${DC(ctx, 'secno')}>${pad2(ctx.sectionNo)}</div>
+    const no = ctx.sectionNo !== null;
+    // Trang chuyển đoạn không số, không hình (vd. trang dẫn video): hình lõi quỹ đạo + biểu tượng của trang thay cho khoảng trống.
+    const core = !img && !no;
+    return `<div class="body"><div class="sec${img ? ' has-media' : ''}${no ? '' : ' no-num'}${core ? ' has-core' : ''}">
+${no ? `<div class="sec-no" data-a="zoom" data-d="0"${DC(ctx, 'secno')}>${pad2(ctx.sectionNo)}</div>` : ''}
 <div class="sec-c">${s.kicker ? `<div class="kicker" data-a="left" data-d="6"><span${E(ctx, 'kicker', LIM.kicker)}>${rt(s.kicker)}</span></div>` : ''}
-<h2 class="sec-t" data-a="words" data-d="8" data-s="3"${E(ctx, 'title', LIM.title, true)}>${hl(s.title, s.highlight)}</h2>
+<h2 class="sec-t" data-a="words" data-d="8" data-s="3"${E(ctx, 'title', LIM.title, true)}>${titleHtml(s)}</h2>
 ${s.subtitle ? `<p class="sub" data-a="up" data-d="24" data-dist="40"${E(ctx, 'subtitle', LIM.subtitle, true)}>${rt(s.subtitle)}</p>` : ''}${chips(s.tags, 32, ctx)}</div>
-${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
+${img ? slot(s, ctx, { d: 16, stage: true }) : core ? coreArt(ctx, s.icon || 'sparkles') : ''}</div></div>`;
   },
 
   agenda(s, ctx, v) {
@@ -434,7 +459,7 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
         .join('')}</div></div>`;
     }
     const mk = (it, i) => (v === 'numbered' && !it.image ? `<span class="bn">${pad2(i + 1)}</span>` : v === 'checks' && !it.image ? `<span class="ib ck">${icon('check')}</span>` : mark(it, ctx, `items.${i}`));
-    const one = (it, i) => `<div class="bi${v === 'panels' ? ' panel' : ''}" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}">${mk(it, i)}<div>${itemText(it, ctx, `items.${i}`)}${valueTag(it, ctx, `items.${i}`)}</div></div>`;
+    const one = (it, i) => `<div class="bi${v === 'panels' ? ' panel' : ''}${focusCls(it)}" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}">${mk(it, i)}<div>${focusBadge(it, ctx, `items.${i}`)}${itemText(it, ctx, `items.${i}`)}${valueTag(it, ctx, `items.${i}`)}</div></div>`;
     if (v === 'split') return `<div class="body"><div class="hsplit">${head(s, ctx)}<div class="bl" style="--cols:1">${items.map(one).join('')}</div></div></div>`;
     const wideCols = Math.max(1, Math.round((ctx.CW - 2 * PAD_X) / 1050));
     // ≤3 ý: 1 cột (đọc dọc dễ hơn bố cục 2+1 lệch); nhiều hơn: chia cột theo độ rộng khung.
@@ -449,7 +474,7 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
     const n = items.length;
     if (v === 'rows') {
       return `${head(s, ctx)}<div class="body"><div class="crows">${items
-        .map((it, i) => `<div class="crow" style="${accent(i)}" data-a="left" data-d="${18 + i * 5}">${mark(it, ctx, `items.${i}`)}<h4${E(ctx, `items.${i}.title`, LIM.itemTitle, true)}>${rt(it.title)}</h4><p${E(ctx, `items.${i}.text`, LIM.itemText, true)}>${rt(it.text)}</p>${it.value ? valueTag(it, ctx, `items.${i}`) : '<span></span>'}</div>`)
+        .map((it, i) => `<div class="crow" style="${accent(i)}" data-a="left" data-d="${18 + i * 5}">${mark(it, ctx, `items.${i}`)}${it.label ? `<div class="crow-t">${itemLabel(it, ctx, `items.${i}`)}<h4${E(ctx, `items.${i}.title`, LIM.itemTitle, true)}>${phrased(it.title, '', it.wrap)}</h4></div>` : `<h4${E(ctx, `items.${i}.title`, LIM.itemTitle, true)}>${phrased(it.title, '', it.wrap)}</h4>`}<p${E(ctx, `items.${i}.text`, LIM.itemText, true)}>${rt(it.text)}</p>${it.value ? valueTag(it, ctx, `items.${i}`) : '<span></span>'}</div>`)
         .join('')}</div></div>`;
     }
     const P = (i) => `items.${i}`;
@@ -475,7 +500,7 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
       // Venn 2–3 vòng giao nhau: tên mục trong vòng, mô tả ở chú giải bên phải; biểu tượng trang ở vùng giao.
       const pos = n === 2 ? [[2, 19, 62], [36, 19, 62]] : [[4, 2, 58], [38, 2, 58], [21, 34, 58]];
       const circles = items
-        .map((it, i) => `<div class="vn-c p${i}" style="${accent(i)};left:${pos[i][0]}%;top:${pos[i][1]}%;width:${pos[i][2]}%;height:${pos[i][2]}%" data-a="zoom" data-d="${10 + i * 8}"><b>${rt(it.title)}</b></div>`)
+        .map((it, i) => `<div class="vn-c p${i}" style="${accent(i)};left:${pos[i][0]}%;top:${pos[i][1]}%;width:${pos[i][2]}%;height:${pos[i][2]}%" data-a="zoom" data-d="${10 + i * 8}"><b>${phrased(it.title, '', it.wrap)}</b></div>`)
         .join('');
       const core = `<span class="vn-core" style="top:${n === 2 ? 50 : 46}%" data-a="pop" data-d="${20 + n * 8}">${icon(s.icon)}</span>`;
       return `${head(s, ctx)}<div class="body"><div class="dg vn n${n}"><div class="dg-art"><div class="dg-sq">${circles}${core}</div></div>${dgLegend(items, ctx, 'items', 24, false)}</div></div>`;
@@ -490,8 +515,13 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
     const cols = bento ? (n === 5 ? 3 : 2) : userCols(s, v, n) || gridCols(n, ctx.CW);
     const style = bento ? `--cols:${cols};--span:${n === 5 ? 2 : n - 1}` : `--cols:${cols}`;
     const kind = v === 'solid' || v === 'outline' ? ` k-${v}` : '';
-    return `${head(s, ctx)}<div class="body"><div class="cards${bento ? ' bento' : ''}${kind}" style="${style}">${items
-      .map((it, i) => `<div class="panel card${i === 0 && n > 2 && !kind ? ' hot' : ''}" style="${accent(i)}" data-a="up" data-d="${18 + i * 5}">${v === 'numbered' && !it.image ? `<span class="cn">${pad2(i + 1)}</span>` : mark(it, ctx, `items.${i}`)}${itemText(it, ctx, `items.${i}`)}${valueTag(it, ctx, `items.${i}`)}</div>`)
+    const focused = items.some((it) => it.badge);
+    // Hàng cuối thiếu thẻ (5 thẻ = 3 + 2): lưới gấp đôi số cột, mỗi thẻ chiếm 2 ô → hàng cuối căn giữa, không để lỗ.
+    const rem = bento ? 0 : n % cols;
+    const ctr = rem && cols > 1 ? ' ctr' : '';
+    const at = (i) => (ctr && i === n - rem ? `;grid-column:${cols - rem + 1} / span 2` : '');
+    return `${head(s, ctx)}<div class="body"><div class="cards${bento ? ' bento' : ''}${kind}${ctr}" style="${style}">${items
+      .map((it, i) => `<div class="panel card${(focused ? it.badge : i === 0 && n > 2) && !kind ? ' hot' : ''}${focusCls(it)}" style="${accent(i)}${at(i)}" data-a="up" data-d="${18 + i * 5}">${focusBadge(it, ctx, `items.${i}`)}${v === 'numbered' && !it.image ? `<span class="cn">${pad2(i + 1)}</span>` : mark(it, ctx, `items.${i}`)}${itemText(it, ctx, `items.${i}`)}${valueTag(it, ctx, `items.${i}`)}</div>`)
       .join('')}</div></div>`;
   },
 
@@ -591,7 +621,7 @@ ${img ? slot(s, ctx, { d: 16 }) : ''}</div></div>`;
       const full = Math.max(4, ...labels.map((t) => t.length));
       const one = full <= 18;
       return `${head(s, ctx)}<div class="body"><div class="proc tl-cards${one ? ' one' : ''}" style="--cols:${cols};--vl:${one ? full : longestWord(labels)}">${steps
-        .map((st, i) => `<div class="panel ps" style="${accent(i)}" data-a="up" data-d="${18 + i * 7}"><span class="tlc-v"${st.value ? E(ctx, `steps.${i}.value`, LIM.itemValue) : ''}>${rt(st.value || pad2(i + 1))}</span>${itemText(st, ctx, `steps.${i}`)}${i < cols - 1 ? `<span class="arr">${icon('arrow')}</span>` : ''}</div>`)
+        .map((st, i) => `<div class="panel ps${focusCls(st)}" style="${accent(i)}" data-a="up" data-d="${18 + i * 7}">${focusBadge(st, ctx, `steps.${i}`)}<span class="tlc-v"${st.value ? E(ctx, `steps.${i}.value`, LIM.itemValue) : ''}>${rt(st.value || pad2(i + 1))}</span>${itemText(st, ctx, `steps.${i}`)}${i < cols - 1 ? `<span class="arr">${icon('arrow')}</span>` : ''}</div>`)
         .join('')}</div></div>`;
     }
     const lab = (st, i, cls) => `<span class="${cls}"${st.value ? E(ctx, `steps.${i}.value`, LIM.itemValue) : ''}>${rt(st.value || pad2(i + 1))}</span>`;
@@ -626,14 +656,14 @@ ${st.value ? `<span class="label" data-a="up" data-d="${18 + i * 7}" data-dist="
     if (v === 'vertical') return `${head(s, ctx)}<div class="body">${railList(steps, (_st, i) => pad2(i + 1), ctx, false)}</div>`;
     if (v === 'chevrons') {
       return `${head(s, ctx)}<div class="body"><div class="chev" style="--cols:${steps.length}">${steps
-        .map((st, i) => `<div class="chev-i" style="${accent(i)}"><div class="chev-h" data-a="left" data-d="${14 + i * 7}"><span class="chev-n">${pad2(i + 1)}</span><h4${E(ctx, `steps.${i}.title`, LIM.itemTitle, true)}>${rt(st.title)}</h4></div>${st.value ? `<span class="label" data-a="up" data-d="${20 + i * 7}"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${st.text ? `<p data-a="up" data-d="${22 + i * 7}" data-dist="30"${E(ctx, `steps.${i}.text`, LIM.itemText, true)}>${rt(st.text)}</p>` : ''}</div>`)
+        .map((st, i) => `<div class="chev-i${focusCls(st)}" style="${accent(i)}">${focusBadge(st, ctx, `steps.${i}`)}<div class="chev-h" data-a="left" data-d="${14 + i * 7}"><span class="chev-n">${pad2(i + 1)}</span><h4${E(ctx, `steps.${i}.title`, LIM.itemTitle, true)}>${phrased(st.title, '', st.wrap)}</h4></div>${st.value ? `<span class="label" data-a="up" data-d="${20 + i * 7}"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${st.text ? `<p data-a="up" data-d="${22 + i * 7}" data-dist="30"${E(ctx, `steps.${i}.text`, LIM.itemText, true)}>${rt(st.text)}</p>` : ''}</div>`)
         .join('')}</div></div>`;
     }
     if (v === 'stairs') {
       // Bậc thang đi lên: bậc sau cao hơn bậc trước (min-height — nội dung dài vẫn giãn được).
       const k = steps.length - 1 || 1;
       return `${head(s, ctx)}<div class="body"><div class="stairs" style="--cols:${steps.length}">${steps
-        .map((st, i) => `<div class="panel stair" style="${accent(i)};min-height:${Math.round(42 + (58 * i) / k)}%" data-a="up" data-d="${16 + i * 7}"><span class="ps-n">${pad2(i + 1)}</span>${st.value ? `<span class="label"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${itemText(st, ctx, `steps.${i}`)}</div>`)
+        .map((st, i) => `<div class="panel stair${focusCls(st)}" style="${accent(i)};min-height:${Math.round(42 + (58 * i) / k)}%" data-a="up" data-d="${16 + i * 7}">${focusBadge(st, ctx, `steps.${i}`)}<span class="ps-n">${pad2(i + 1)}</span>${st.value ? `<span class="label"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${itemText(st, ctx, `steps.${i}`)}</div>`)
         .join('')}</div></div>`;
     }
     if (v === 'pyramid' || v === 'funnel') {
@@ -649,7 +679,7 @@ ${st.value ? `<span class="label" data-a="up" data-d="${18 + i * 7}" data-dist="
     return `${head(s, ctx)}<div class="body"><div class="proc" style="--cols:${cols}">${steps
       .map((st, i) => {
         const rowEnd = (i + 1) % cols === 0 || i === steps.length - 1;
-        return `<div class="panel ps" style="${accent(i)}" data-a="up" data-d="${18 + i * 7}"><span class="ps-n">${pad2(i + 1)}</span>${st.value ? `<span class="label"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${itemText(st, ctx, `steps.${i}`)}${rowEnd ? '' : `<span class="arr">${icon('arrow')}</span>`}</div>`;
+        return `<div class="panel ps${focusCls(st)}" style="${accent(i)}" data-a="up" data-d="${18 + i * 7}">${focusBadge(st, ctx, `steps.${i}`)}<span class="ps-n">${pad2(i + 1)}</span>${st.value ? `<span class="label"${E(ctx, `steps.${i}.value`, LIM.itemValue)}>${rt(st.value)}</span>` : ''}${itemText(st, ctx, `steps.${i}`)}${rowEnd ? '' : `<span class="arr">${icon('arrow')}</span>`}</div>`;
       })
       .join('')}</div></div>`;
   },
@@ -671,7 +701,7 @@ ${st.value ? `<span class="label" data-a="up" data-d="${18 + i * 7}" data-dist="
       const d = 30 + i * 6;
       const kids = list(c.points);
       return `<div class="org-br" style="${accent(i)}">${s.root ? `<div class="org-dw" aria-hidden="true"><i class="org-drop" data-a="grow" data-to="100" data-d="${d - 4}"></i></div>` : ''}
-<div class="org-h" data-a="pop" data-d="${d}"><span class="org-hi">${icon(c.icon || 'layers')}</span><h4${E(ctx, `columns.${i}.title`, LIM.colTitle, true)}>${rt(c.title)}</h4></div>${
+<div class="org-h" data-a="pop" data-d="${d}"><span class="org-hi">${icon(c.icon || 'layers')}</span><h4${E(ctx, `columns.${i}.title`, LIM.colTitle, true)}>${phrased(c.title, '', c.wrap)}</h4></div>${
         kids.length
           ? `<div class="org-kids" role="list">${kids
               .map((k, j) => `<div class="org-k" role="listitem" data-a="left" data-d="${d + 10 + j * 4}" data-dist="24"><i class="org-dot" aria-hidden="true"></i><span${E(ctx, `columns.${i}.points.${j}`, LIM.point, true)}>${rt(k)}</span></div>`)
@@ -708,7 +738,7 @@ ${q.author ? `<div class="qt-by" data-a="up" data-d="40" data-dist="30"><b${E(ct
     const colHtml = (c, i) => {
       const tone = toneIcon[c.tone] ? c.tone : i === cols.length - 1 ? 'pos' : 'neutral';
       return `<div class="panel col${tone === 'pos' ? ' hot' : ''}" style="--c:var(--${toneColor[tone]})" data-a="${two ? (i === 0 ? 'left' : 'right') : 'up'}" data-d="${16 + i * 8}">
-${c.subtitle ? `<span class="label"${E(ctx, `columns.${i}.subtitle`, LIM.colSubtitle)}>${rt(c.subtitle)}</span>` : ''}<h3${E(ctx, `columns.${i}.title`, LIM.colTitle, true)}>${rt(c.title)}</h3>
+${c.subtitle ? `<span class="label"${E(ctx, `columns.${i}.subtitle`, LIM.colSubtitle)}>${rt(c.subtitle)}</span>` : ''}<h3${E(ctx, `columns.${i}.title`, LIM.colTitle, true)}>${phrased(c.title, '', c.wrap)}</h3>
 <ul class="pts">${list(c.points).map((p, k) => `<li>${icon(toneIcon[tone])}<span${E(ctx, `columns.${i}.points.${k}`, LIM.point, true)}>${rt(p)}</span></li>`).join('')}</ul></div>`;
     };
     if (v === 'split' && two) {
@@ -747,7 +777,7 @@ ${c.subtitle ? `<span class="label"${E(ctx, `columns.${i}.subtitle`, LIM.colSubt
     const items = list(s.items).slice(0, 6);
     const pts = items.length
       ? `<ul class="of-pts">${items
-          .map((it, i) => `<li data-a="left" data-d="${14 + i * 6}" data-dist="40">${icon(it.icon && it.icon !== 'sparkles' ? it.icon : 'check')}<div>${it.title ? `<b${E(ctx, `items.${i}.title`, LIM.itemTitle, true)}>${rt(it.title)}</b>` : ''}${it.text ? `<span${E(ctx, `items.${i}.text`, LIM.itemText, true)}>${rt(it.text)}</span>` : ''}</div></li>`)
+          .map((it, i) => `<li data-a="left" data-d="${14 + i * 6}" data-dist="40">${icon(it.icon && it.icon !== 'sparkles' ? it.icon : 'check')}<div>${it.title ? `<b${E(ctx, `items.${i}.title`, LIM.itemTitle, true)}>${phrased(it.title, '', it.wrap)}</b>` : ''}${it.text ? `<span${E(ctx, `items.${i}.text`, LIM.itemText, true)}>${rt(it.text)}</span>` : ''}</div></li>`)
           .join('')}</ul>`
       : '';
     const cap = s.caption ? `<div class="of-cap" data-a="fade" data-d="30">${icon('clock')}<span${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</span></div>` : '';
@@ -757,17 +787,24 @@ ${c.subtitle ? `<span class="label"${E(ctx, `columns.${i}.subtitle`, LIM.colSubt
 
   closing(s, ctx, v) {
     const t = `${s.kicker ? `<div class="kicker" data-a="up" data-d="0"><span${E(ctx, 'kicker', LIM.kicker)}>${rt(s.kicker)}</span></div>` : ''}
-<h2 class="cl-t" data-a="zoom" data-d="4"${E(ctx, 'title', LIM.title, true)}>${rt(s.title)}</h2>
+<h2 class="cl-t" data-a="zoom" data-d="4"${E(ctx, 'title', LIM.title, true)}>${titleHtml(s)}</h2>
 ${s.subtitle ? `<p class="cl-sub" data-a="up" data-d="20" data-dist="40"${E(ctx, 'subtitle', LIM.subtitle, true)}>${rt(s.subtitle)}</p>` : ''}`;
-    if (v === 'split') {
+    // Hình minh hoạ 3D chủ đạo của trang kết (không phải ảnh nhấn) — có hình thì mọi kiểu đều dùng bố cục chữ trái, hình phải.
+    const hero = !!(s.image && s.image.frame === 'art' && !s.video && !accentPos(s) && ctx.assetUrl(s.image.asset));
+    if (v === 'split' && !hero) {
       return `<div class="body"><div class="cl-split"><div class="cl-l">${t}</div><div class="panel cl-r" data-a="left" data-d="24">${list(s.tags)
         .map((x, i) => `<div class="cl-tag" style="${accent(i)}">${icon(i === 0 ? 'sparkles' : 'arrow')}<span${E(ctx, `tags.${i}`, LIM.tag)}>${rt(x)}</span></div>`)
         .join('')}${s.caption ? `<div class="cv-cap"${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</div>` : ''}</div></div></div>`;
     }
-    return `<div class="body"><div class="cl">
+    const rest = `${chips(s.tags, 28, ctx)}
+${s.caption ? `<div class="cv-cap" data-a="fade" data-d="40"${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</div>` : ''}`;
+    if (hero) {
+      return `<div class="body"><div class="cl-hero"><div class="cl">${t}${rest}</div>${slot(s, ctx, { d: 12, stage: true })}</div></div>`;
+    }
+    // Không có hình: quỹ đạo mờ quay chậm phía sau chữ (như bìa căn giữa).
+    return `<div class="body"><div class="cl"><div class="cv-ghost">${coreArt(ctx, s.icon, false)}</div>
 ${t}
-${chips(s.tags, 28, ctx)}
-${s.caption ? `<div class="cv-cap" data-a="fade" data-d="40"${E(ctx, 'caption', LIM.caption, true)}>${rt(s.caption)}</div>` : ''}
+${rest}
 </div></div>`;
   },
 };
@@ -786,9 +823,22 @@ function accentFig(s, ctx, pos) {
   return `<figure class="acc acc-${pos}${fit}" data-a="fade" data-d="0" data-dur="30"${look ? ` style="${look}"` : ''}${M(ctx, 'slot')}><img src="${esc(url)}" alt="${esc(img.alt || '')}" style="${imgPos(img)}"${kb ? ' data-loop="kb" data-p="24"' : ''}>${overlayHtml(img)}</figure>`;
 }
 const CALLOUT_ICON = { note: 'bulb', warn: 'alert', ok: 'check' };
+const CALLOUT_ICON_BAND = { note: 'flag', warn: 'alert', ok: 'check' };
 function calloutHtml(s, ctx) {
   const c = s.callout;
   if (!c || !CALLOUT_LAYOUTS.includes(s.layout) || !CALLOUT_TONES.includes(c.tone) || !(c.text || ctx.edit)) return '';
+  const ph = (t) => (ctx.edit ? ` data-ph="${t}"` : '');
+  const sub = c.sub || ctx.edit ? `<div class="co-s"${E(ctx, 'callout.sub', LIM.calloutSub, true)}${ph('Thêm dòng giải thích (tuỳ chọn)…')}>${rt(c.sub || '')}</div>` : '';
+  // Dải kết luận: câu chốt đậm trên nền màu nhấn của phần, cuối trang.
+  if (c.style === 'band') {
+    return `<aside class="callout cb co-${c.tone}" data-a="up" data-d="40" data-dist="30"><span class="co-ic">${icon(CALLOUT_ICON_BAND[c.tone])}</span><div class="co-b"><div class="co-t"${E(ctx, 'callout.text', LIM.callout, true)}${ph('Nhập câu kết luận…')}>${phrased(c.text, c.highlight, c.wrap)}</div>${sub}</div></aside>`;
+  }
+  // Câu chốt: dấu ngoặc kép lớn, chữ cỡ lớn có cụm tô nhấn, hình minh hoạ của trang bên phải (khi có).
+  if (c.style === 'quote') {
+    const url = calloutArt(s) ? ctx.assetUrl(s.image.asset) : null;
+    const art = url ? `<span class="cq-art${s.image.frame === 'art' ? ' art' : ''}" data-a="zoom" data-d="46"${M(ctx, 'slot')}><img src="${esc(url)}" alt="${esc(s.image.alt || '')}"></span>` : '';
+    return `<aside class="callout cq co-${c.tone}${art ? ' cq-has' : ''}" data-a="up" data-d="38" data-dist="40"><span class="cq-mk" aria-hidden="true">“</span><div class="co-b"><div class="co-t"${E(ctx, 'callout.text', LIM.callout, true)}${ph('Nhập câu chốt…')}>${phrased(c.text, c.highlight, c.wrap)}</div>${sub}</div>${art}</aside>`;
+  }
   return `<aside class="callout co-${c.tone}" data-a="up" data-d="44" data-dist="30"><span class="co-ic">${icon(CALLOUT_ICON[c.tone])}</span><div class="co-t"${E(ctx, 'callout.text', LIM.callout, true)}${ctx.edit ? ' data-ph="Nhập nội dung chú thích…"' : ''}>${rt(c.text)}</div></aside>`;
 }
 
@@ -934,6 +984,13 @@ function brandFor(brand, s, tone) {
  * @param {object} opts  { ratio, mode:'present'|'print'|'edit', assetUrl(id)→url|null, assetMeta(id)→{width,height}|null, videoEmbed(assetId)→id|null }
  * @returns {{ W, H, mode, attrs, rootCss, themeCss, slides: string[], title }}
  */
+// Mọi thẻ/ý của trang đều có hình riêng (bộ hình minh hoạ của bài hoặc logo người dùng gắn) → hình to như minh hoạ, không thu về cỡ biểu tượng.
+const ART_LAYOUTS = new Set(['cards', 'bullets', 'agenda']);
+function artItems(s) {
+  const items = list(s.items);
+  return ART_LAYOUTS.has(s.layout) && items.length >= 2 && items.length <= 6 && items.every((it) => it.image && it.image.asset && it.image.frame === 'art');
+}
+
 export function deckParts(spec, opts) {
   const [W, H] = RATIO_SIZES[opts.ratio] || RATIO_SIZES['16:9'];
   const theme = THEMES.includes(spec.theme) ? spec.theme : 'midnight';
@@ -951,9 +1008,21 @@ export function deckParts(spec, opts) {
   const logo = logoInfo(spec, { W, assetUrl, assetMeta: opts.assetMeta });
   const brand = brandInfo(spec, { W, H, assetUrl, assetMeta: opts.assetMeta });
   let sectionNo = 0;
+  const opened = new Set(); // phần đã có trang mở đầu
+  // Bài chia phần (spec.parts): số thứ tự trang mở đầu phần = số thứ tự phần (không đếm trang mở đầu không thuộc phần nào),
+  // chân trang = thanh tiến độ theo phần thay cho chữ chân trang.
+  const parts = list(spec.parts).filter((p) => PART_COLORS[p?.color]);
+  const partOf = (s) => (parts.length >= 2 && Number.isInteger(s.part) && s.part >= 0 && s.part < parts.length ? s.part : null);
+  const partBar = (pi) => `<span class="ft-parts">${parts.map((p, k) => `<i class="fp${k === pi ? ' on' : ''}${pi !== null && k < pi ? ' done' : ''}" style="--pc:${PART_COLORS[p.color]}"><b></b><span>${esc(p.title)}</span></i>`).join('')}</span>`;
 
   const slideHtml = slides.map((s, index) => {
-    if (s.layout === 'section') sectionNo += 1;
+    const pi = partOf(s);
+    // Trang mở đầu phần (trang đầu tiên của phần) lấy số phần; trang kiểu "section" khác (trang video chờ chèn, trang chuyển ý giữa
+    // phần) không mang số — số phần đặt ở trang không phải mở đầu phần gây hiểu nhầm.
+    if (s.layout === 'section') {
+      if (pi === null) sectionNo = (sectionNo || 0) + 1;
+      else sectionNo = !opened.has(pi) && (index === 0 || partOf(slides[index - 1]) !== pi) ? (opened.add(pi), pi + 1) : null;
+    }
     const acc = accentPos(s);
     // Ảnh nhấn trái/phải chiếm ~40% khung → các bố cục chia cột theo phần còn lại (CW).
     const CW = acc === 'left' || acc === 'right' ? Math.round(W * 0.6) : W;
@@ -964,13 +1033,13 @@ export function deckParts(spec, opts) {
     // Logo phía dưới nằm trong hàng chân trang (flex) để không chồng lên chữ chân trang; trang bìa không có chân trang.
     const inFooter = lg && !lg.top && s.layout !== 'cover';
     const ftLogo = inFooter ? logoImg(lg, 'lg-in') : '';
-    const ftText = `<span class="ft-t"${E(ctx, '@footer', LIM.footer, false, true)}>${esc(footer)}</span>`;
+    const ftText = parts.length >= 2 ? partBar(pi) : `<span class="ft-t"${E(ctx, '@footer', LIM.footer, false, true)}>${esc(footer)}</span>`;
     const ftNum = `<span class="ft-n"><b>${pad2(index + 1)}</b> / ${pad2(total)}</span>`;
     const ftInner = !inFooter ? ftText + ftNum : lg.pos === 'bl' ? ftLogo + ftText + ftNum : lg.pos === 'bc' ? ftText + ftLogo + ftNum : ftText + ftNum + ftLogo;
     const ft = s.layout === 'cover' ? '' : `<div class="ft${inFooter ? ` ft-lg ft-${lg.pos}` : ''}">${ftInner}</div>`;
     const abs = lg && !inFooter ? logoImg(lg, `lg-${lg.pos}`) : '';
     const b = brandFor(brand, s, tone);
-    const cls = `${lg ? ` lg-${lg.top ? 'top' : 'bot'}` : ''}${b.cls}${hideClasses(s.hide)}${acc ? ` A-${acc}` : ''}`;
+    const cls = `${lg ? ` lg-${lg.top ? 'top' : 'bot'}` : ''}${b.cls}${hideClasses(s.hide)}${acc ? ` A-${acc}` : ''}${pi !== null ? ` pt-${pi}` : ''}${artItems(s) ? ' has-art' : ''}`;
     const vars = `${lg ? `--lw:${lg.w}px;--lh:${lg.h}px;` : ''}${b.vars}`;
     const style = vars ? ` style="${vars}"` : '';
     // Lớp phần tử chèn thêm (ảnh, logo, chữ…) phía trên bố cục — trang tự do đã tự vẽ phần tử của nó.
@@ -985,7 +1054,7 @@ export function deckParts(spec, opts) {
     W, H, mode,
     attrs: { theme, tone, font: fontBody, style: deckStyle, bg, tcase: spec.font?.titleCase === 'upper' ? 'upper' : 'sentence', tr: TRANSITIONS.includes(spec.transition) ? spec.transition : TRANSITIONS[0] },
     rootCss: `:root{--W:${W}px;--H:${H}px;--f-sans:${fontStack(fontBody)};--f-head:${fontStack(fontHead)}}`,
-    themeCss: `${themeVarsCss(theme, spec.palette)}${brand ? inkVarsCss(theme, spec.palette) : ''}`,
+    themeCss: `${themeVarsCss(theme, spec.palette)}${brand ? inkVarsCss(theme, spec.palette) : ''}${partVarsCss(theme, spec.palette, parts)}`,
     fontIds: [fontHead, fontBody],
     slides: slideHtml,
     title: spec.title || 'Bài trình bày',

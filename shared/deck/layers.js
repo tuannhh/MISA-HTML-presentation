@@ -11,7 +11,7 @@
 import { SPEC_LIMITS } from './limits.js';
 
 // Trường chữ được phép dời (khớp đường dẫn data-e của renderer, trừ phần tử tự do/chân trang — phần tử tự do đã có toạ độ riêng).
-const MOVE_PATH_RE = /^(?:kicker|title|subtitle|caption|root|quote\.(?:text|author|role)|(?:items|steps)\.\d{1,2}\.(?:title|text|value)|stats\.\d{1,2}\.(?:value|label|prefix|suffix)|columns\.\d\.(?:title|subtitle|points\.\d{1,2})|tags\.\d{1,2}|images\.\d{1,2}\.caption|(?:image|video)\.caption)$/;
+const MOVE_PATH_RE = /^(?:kicker|title|subtitle|caption|root|quote\.(?:text|author|role)|(?:items|steps)\.\d{1,2}\.(?:title|text|value|label)|stats\.\d{1,2}\.(?:value|label|prefix|suffix)|columns\.\d\.(?:title|subtitle|points\.\d{1,2})|tags\.\d{1,2}|images\.\d{1,2}\.caption|(?:image|video)\.caption)$/;
 export const MOVE_LIMIT = SPEC_LIMITS.moves; // số ô chữ dời được mỗi trang
 export const MOVE_RANGE = 100; // ±% khung
 export const SIZE_MIN = 0.5; // cỡ chữ tối thiểu / tối đa so với cỡ bố cục

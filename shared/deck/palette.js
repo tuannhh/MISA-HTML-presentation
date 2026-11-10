@@ -222,3 +222,34 @@ export function themeSwatch(theme, palette) {
 
 export const themeTone = (theme, palette) => resolveTheme(theme, palette).tone;
 export const presetsForTone = (tone) => Object.keys(THEME_PRESETS).filter((k) => THEME_PRESETS[k].tone === tone);
+
+/* ---------------- màu theo phần (chỉ đạo thiết kế toàn bài) ---------------- */
+// Bài chia nhiều phần (Thực trạng · Nhận diện · Phòng tránh…) → mỗi phần một màu nhấn: người xem biết đang ở phần nào.
+// Chỉ đổi nhóm màu nhấn của trang; màu chữ/nền giữ theo tông bài. Tên màu cố định (AI chọn trong danh sách, không tự pha hex).
+export const PART_COLORS = Object.freeze({
+  blue: '#1957F5',
+  red: '#E3262E',
+  green: '#0C9A63',
+  violet: '#6A4CF5',
+  amber: '#E08A00',
+  cyan: '#0891B2',
+});
+const PART_KEYS = ['--blue', '--amber', '--violet', '--glow-a', '--node', '--on-accent', '--core', '--core-ink'];
+
+/** CSS `.slide.pt-N{…}` cho từng phần — chèn sau biến của theme. parts: [{ color }] (đã chuẩn hoá). */
+export function partVarsCss(theme, palette, parts) {
+  if (!Array.isArray(parts) || parts.length < 2) return '';
+  const base = theme === CUSTOM_THEME && palette && isHex(palette.primary) ? palette : THEME_PRESETS[theme] || THEME_PRESETS.midnight;
+  const tone = base.tone === 'light' ? 'light' : 'dark';
+  const secondary = base.secondary || base.swatch?.b;
+  const bg = base.bg || base.swatch?.bg;
+  return parts
+    .map((p, i) => {
+      const hex = PART_COLORS[p.color];
+      if (!hex) return '';
+      const { vars } = paletteVars({ tone, primary: hex, secondary, bg });
+      // --accent đặt thẳng màu phần: theme tinh chỉnh tay (vd. midnight) trỏ --accent sang --cyan, chỉ đổi --blue thì chữ nhấn không đổi màu.
+      return `.slide.pt-${i}{${PART_KEYS.map((k) => `${k}:${vars[k]}`).join(';')};--accent:${vars['--blue']};--part:${vars['--blue']}}`;
+    })
+    .join('');
+}
