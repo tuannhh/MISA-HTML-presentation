@@ -59,7 +59,7 @@ Một tiến trình Node duy nhất phục vụ cả API lẫn SPA tĩnh (`dist/
 | `src/repositories/tenantScope.js` | Helper **duy nhất** sinh điều kiện `tenant_id = ?` |
 | `shared/deck/*` | Renderer dùng chung server + giao diện (`limits.js`, `icons.js`, `palette.js`, `fonts.js`, `backgrounds.js` cũng được frontend import để xem trước) |
 | `shared/deck/variants.js` | Biến thể bố cục + phong cách bài, `artDirect` chọn ngầm khi dựng (`05` §9) |
-| `shared/deck/fonts/` | Phông woff2 đóng gói (Inter, Montserrat, Barlow, Roboto, Google Sans — tập con latin/latin-ext/vietnamese, nguồn @fontsource, giấy phép OFL kèm theo) |
+| `shared/deck/fonts/` | Phông woff2 đóng gói (Inter, Montserrat, Barlow, Roboto, Google Sans — mặc định bài mới từ 2026-11-12, Quicksand, Dosis, Prompt, Tinos thay Times New Roman — tập con latin/latin-ext/vietnamese, nguồn @fontsource 5.x, giấy phép OFL kèm theo) |
 | `models/u2netp.onnx` | Mô hình tách nền 4.6 MB (Apache-2.0, `models/README.md` có SHA-256) |
 
 ### Vì sao chọn công nghệ này?

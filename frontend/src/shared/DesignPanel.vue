@@ -15,6 +15,7 @@ import DesignPreview from './DesignPreview.vue'
 import { CUSTOM_THEME, themeTone } from '@/lib/design.js'
 import { SPEC_LIMITS as L, STYLE_OPTIONS, TRANSITION_LABELS } from '@/lib/slideModel.js'
 import MSelect from '@/components/mds/MSelect.vue'
+import MSwitch from '@/components/mds/MSwitch.vue'
 import { TRANSITIONS } from '@shared/deck/blocks.js'
 import MButton from '@/components/mds/MButton.vue'
 import MIcon from '@/components/mds/MIcon.vue'
@@ -65,6 +66,22 @@ const transition = computed({
   set: (v) => {
     if (v && v !== TRANSITIONS[0]) d.value.transition = v
     else delete d.value.transition
+  },
+})
+// Chân trang + xem ảnh khi trình chiếu (cả bài). Mặc định bật / phóng toàn màn hình → không lưu trường (khớp specService.cleanDesign).
+function setShown(key, on) {
+  if (on) delete d.value[key]
+  else d.value[key] = false
+}
+const IMAGE_VIEW_OPTIONS = [
+  { value: 'full', label: 'Phóng vừa toàn màn hình' },
+  { value: 'natural', label: 'Giữ kích thước gốc của ảnh' },
+]
+const imageView = computed({
+  get: () => d.value.imageView || 'full',
+  set: (v) => {
+    if (v === 'natural') d.value.imageView = v
+    else delete d.value.imageView
   },
 })
 function fixTitleCase() {
@@ -132,5 +149,13 @@ function onColor(key, v) {
     <FormField v-if="footer !== undefined" label="Chân trang" hint="Hiển thị ở góc dưới mỗi trang; để trống sẽ dùng tên bài">
       <MInput :model-value="footer" :error="(footer || '').length > L.footer ? `Tối đa ${L.footer} ký tự` : ''" @update:model-value="(v) => emit('update:footer', v)" />
     </FormField>
+    <fieldset v-if="isDeck" class="flex flex-col gap-2">
+      <legend class="mb-1 text-[13px] font-medium">Hiển thị khi trình chiếu</legend>
+      <MSwitch :model-value="d.footerBar !== false" label="Thanh tiến trình (hoặc chữ chân trang)" @update:model-value="(v) => setShown('footerBar', v)" />
+      <MSwitch :model-value="d.pageNum !== false" label="Số trang" @update:model-value="(v) => setShown('pageNum', v)" />
+      <FormField label="Bấm vào ảnh lúc trình chiếu" hint="Phóng vừa toàn màn hình: ảnh nhỏ cũng phóng to cho dễ xem. Giữ kích thước gốc: ảnh nhỏ hiện đúng cỡ thật, không bị nhoè">
+        <MSelect v-model="imageView" :options="IMAGE_VIEW_OPTIONS" />
+      </FormField>
+    </fieldset>
   </div>
 </template>

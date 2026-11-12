@@ -789,3 +789,23 @@ kéo góc theo tỷ lệ, tương tự với ảnh / video chèn thêm.
 - Giới hạn: hình vector do AI viết — ẩn dụ phức tạp (vd. "thước cặp đo đồng xu") có thể kém rõ hơn ảnh 3D; tay nắm đổi cỡ hiện khi rê chuột / bấm
   (màn hình cảm ứng: bấm vào ảnh); ảnh trong thư viện ảnh, ảnh của từng thẻ và ảnh nền tràn trang chưa có tay nắm; ảnh phóng > 100% có thể chờm
   lên chữ bên cạnh (người dùng tự chọn).
+
+## 2026-11-12 — Góp ý 9 mục: bảng, thanh định dạng trang tự do, giãn chữ / nghiêng, tắt chân trang, xem ảnh, dời khối bìa, ngắt dòng, bóng đổ, phông
+- **Bảng**: nút thêm hàng / cột rõ nghĩa (lưới 2×2), bảng lấp đầy khung (`.fe-table .fe-tb {height:100%}`, ô giữa dọc).
+- **Thanh nổi trên trang tự do**: `feText` / `boxable` / `feLook` + thông điệp `deck:ellook` → `applyElementLook`. **Lỗi gốc tìm thấy khi thử bằng Chromium
+  thật**: `fitFree` đo `scrollHeight` của khung — khi đang chọn, tay nắm `.fe-h` thò ra mép dưới → chữ bị co về 40% mỗi lần chỉnh, ô pt hiện cỡ đã co rồi
+  Enter áp lại → co dồn. Sửa: đo chính `.fe-t` / `.fe-tb`; ô pt hiện cỡ đặt; khung tự nới khi chữ to. Kèm: biến `PT` khai báo trùng (cờ plaintext-only và
+  hệ số pt) → đổi tên cờ thành `PTO`.
+- **Giãn chữ / nghiêng**: `moves.t` (đủ 4 chỗ theo quy tắc 15), phần tử chữ `ls`; rich `i`.
+- **Tắt thanh tiến trình / số trang, chế độ xem ảnh**: `footerBar`, `pageNum`, `imageView` (`cleanDesign`, `DesignPanel`), `data-hud` / `data-iv`.
+- **Bìa**: `blk.text` / `blk.media` (`blockMove`), kéo ảnh trực tiếp; `.fit-m` bỏ `scale` của ảnh khi đo → phóng ảnh không co chữ (trước: bố cục chữ trái –
+  ảnh phải co chữ vì ảnh phóng gây "tràn").
+- **Ngắt dòng**: gốc thứ nhất `text-wrap: balance` → `pretty`; gốc thứ hai cụm nghĩa `inline-block` rớt nguyên cụm → engine `unwaste` (`.nbf`) +
+  `fixOrphans` (`.nbb`). Rà 37 trang bản sao `c9dee269…`: 8 trang có cụm được cho chảy, không trang nào tạo chữ lẻ; "Người quen, / nhà sư" giữ đúng.
+- **Bóng đổ**: `.body { overflow: clip; overflow-clip-margin: 140px }` (bìa 1200px) — trước `overflow: hidden` cắt bóng thẻ.
+- **Phông**: Quicksand, Dosis, Prompt, Tinos (thay Times New Roman); `DEFAULT_FONT = 'google-sans'`.
+- Kiểm chứng: `npm test` 420/420 (mới `text-look.test.js` 12 test, 2 test Chromium thật: cụm dài không để lỗ trống + thẻ hẹp không rớt chữ; phần tử
+  chữ đang chọn không tự co, 40pt giữ 40pt), `npm run build` đạt; dựng lại toàn bộ 37 trang bản sao bằng renderer mới + chụp Chrome; thử bìa chữ trái /
+  ảnh trái với ảnh 150% + dời khối; trang tự do ở chế độ soạn (thanh nổi đủ Cỡ / Giãn dòng / Giãn chữ / I, gửi `deck:ellook`).
+- Giới hạn: kéo khối ảnh bìa ra sát mép sẽ bị cắt ở mép trang (lề cắt 1200px theo khung trang); nới khung tự động chỉ khi người dùng chủ động đổi cỡ /
+  giãn (gõ chữ dài vẫn tự co như cũ); Times New Roman hiển thị bằng Tinos (giống số đo, khác nét chút ít).

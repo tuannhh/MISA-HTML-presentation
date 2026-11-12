@@ -5,7 +5,7 @@
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { deckParts } from '@shared/deck/render.js';
 import { fontFaceCss } from '@shared/deck/fonts.js';
-import { applyFrameEdit, applyFrameMove, applyMediaSize, applyDeco, convertElement as convertEl } from '@/lib/editPaths.js';
+import { applyFrameEdit, applyFrameMove, applyMediaSize, applyElementLook, applyDeco, convertElement as convertEl } from '@/lib/editPaths.js';
 import { prepareSpecForSave, clone, SPEC_LIMITS, ratioNum } from '@/lib/slideModel.js';
 import { newElementId } from '@shared/deck/free.js';
 
@@ -110,7 +110,11 @@ export function useLiveDeck(frameRef, { draft, deck, selected, assets, onMedia, 
       case 'deck:move':
         // Ô chữ của trang có bố cục được kéo dời (x/y % khung) / đổi cỡ (s) / giãn dòng (l) / độ rộng khung (w) — đường dẫn theo
         // danh sách cho phép, số bị kẹp.
-        if (draft.value) applyFrameMove(draft.value.spec, idx, d.path, d.x, d.y, d.s, d.l, d.w);
+        if (draft.value) applyFrameMove(draft.value.spec, idx, d.path, d.x, d.y, d.s, d.l, d.w, d.t);
+        break;
+      case 'deck:ellook':
+        // Thanh định dạng nổi trên phần tử chữ (trang tự do / lớp chèn đè): cỡ chữ, giãn dòng, giãn chữ — kẹp trong applyElementLook.
+        if (draft.value && typeof d.id === 'string') applyElementLook(draft.value.spec, idx, d.id, { size: d.size, lh: d.lh, ls: d.ls });
         break;
       case 'deck:msize':
         // Kéo góc ảnh / video của ô media chính → ghi cỡ (%) vào bản nháp (số bị kẹp trong applyMediaSize).

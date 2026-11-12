@@ -2,10 +2,10 @@
 // Chọn phông chữ cho tiêu đề và nội dung. Phông được nhúng sẵn trong bài (không phụ thuộc máy người xem),
 // ô chọn hiển thị mẫu chữ tiếng Việt bằng chính phông đó.
 import { onMounted } from 'vue'
-import { FONT_OPTIONS, ensureDeckFonts } from '@/lib/design.js'
+import { FONT_OPTIONS, ensureDeckFonts, DEFAULT_FONT } from '@/lib/design.js'
 
 const props = defineProps({
-  modelValue: { type: Object, default: () => ({ heading: 'inter', body: 'inter' }) },
+  modelValue: { type: Object, default: () => ({ heading: DEFAULT_FONT, body: DEFAULT_FONT }) },
   name: { type: String, default: 'deck-font' },
 })
 const emit = defineEmits(['update:modelValue'])
@@ -39,7 +39,7 @@ onMounted(ensureDeckFonts)
           :class="modelValue[r.key] === f.value ? 'border-[var(--mds-brand-600)] bg-[var(--mds-brand-50)]' : 'border-[var(--mds-border)] hover:border-[var(--mds-brand-600)]'"
         >
           <input type="radio" class="sr-only" :name="`${name}-${r.key}`" :value="f.value" :checked="modelValue[r.key] === f.value" @change="set(r.key, f.value)" />
-          <span class="w-[92px] shrink-0 text-[12px] text-[var(--mds-text-secondary)]">{{ f.label }}</span>
+          <span class="w-[112px] shrink-0 text-[12px] text-[var(--mds-text-secondary)]" :title="f.note || undefined">{{ f.label }}</span>
           <span class="min-w-0 flex-1 truncate leading-6 text-[var(--mds-text)]" :style="{ fontFamily: f.stack, fontWeight: r.weight, fontSize: `${r.size}px` }">{{ r.sample }}</span>
         </label>
       </div>

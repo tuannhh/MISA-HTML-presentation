@@ -148,15 +148,25 @@ svg * { transform-box: fill-box; transform-origin: center; }
 .w { display: inline-block; will-change: transform, opacity; }
 /* Cụm nghĩa của tiêu đề (rich.js phraseHtml): dòng chỉ ngắt giữa các cụm; cụm dài hơn dòng vẫn tự xuống dòng bên trong. */
 .nbp { display: inline-block; max-width: 100%; }
+/* Cụm để lại lỗ trống lớn ở dòng trên (engine unwaste) → chảy như chữ thường, không rớt nguyên cụm. */
+.nbp.nbf { display: inline; }
+/* Cụm phải gãy bên trong mà dòng cuối chỉ còn 1 chữ (engine fixOrphans) → chia đều trong cụm. */
+.nbp.nbb { text-wrap: balance; }
 
 /* ---------- header ---------- */
 .hd { flex: none; display: flex; flex-direction: column; gap: var(--g2); }
-.kicker { display: flex; align-items: center; gap: 20px; font: 600 var(--t-xs)/1.3 var(--f-sans); text-wrap: balance; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); }
+.kicker { display: flex; align-items: center; gap: 20px; font: 600 var(--t-xs)/1.3 var(--f-sans); text-wrap: pretty; letter-spacing: .2em; text-transform: uppercase; color: var(--accent); }
 .kicker .num { color: var(--on-accent); background: var(--accent); padding: 9px 14px; border-radius: 10px; letter-spacing: .04em; font-weight: 800; font-variant-numeric: tabular-nums; }
-.title { margin: 0; font-weight: 800; font-size: var(--t-h1); line-height: 1.1; letter-spacing: -.025em; text-wrap: balance; max-width: 2400px; }
+/* text-wrap: pretty (không phải balance): chữ lấp đầy dòng rồi mới xuống, chỉ tránh rơi 1 chữ lẻ ở dòng cuối. balance chia đều
+   các dòng → tiêu đề 2 dòng luôn ngắt giữa chừng dù dòng 1 còn rộng, giảm cỡ chữ cũng không kéo chữ lên được (lỗi 11/2026). */
+.title { margin: 0; font-weight: 800; font-size: var(--t-h1); line-height: 1.1; letter-spacing: -.025em; text-wrap: pretty; max-width: 2400px; }
 .hl { font-style: normal; color: var(--accent); }
-.sub { margin: 0; font-size: var(--t-lg); line-height: 1.4; color: var(--muted); font-weight: 400; max-width: 2000px; text-wrap: balance; }
-.body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; justify-content: safe center; overflow: hidden; }
+.sub { margin: 0; font-size: var(--t-lg); line-height: 1.4; color: var(--muted); font-weight: 400; max-width: 2000px; text-wrap: pretty; }
+/* overflow: clip (không cuộn được) + nới vùng cắt 140px: bóng đổ của thẻ/khung (var(--shadow) tới ~140px) không bị cắt thành
+   mép vuông ở rìa .body (lỗi 11/2026). scrollHeight vẫn đo tràn như overflow: hidden (engine fitSlide). Trang bìa nới rộng hơn:
+   ảnh phóng to (image.size > 100%) / khối kéo dời không bị cắt giữa chừng — khung trang (.slide overflow: hidden) vẫn là giới hạn. */
+.body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; justify-content: safe center; overflow: clip; overflow-clip-margin: 140px; }
+.L-cover .body { overflow-clip-margin: 1200px; }
 
 .ft {
   position: absolute; left: 160px; right: 160px; bottom: calc(52px + var(--bb)); display: flex; justify-content: space-between; align-items: center; gap: 40px;
@@ -191,7 +201,7 @@ svg * { transform-box: fill-box; transform-origin: center; }
   align-self: flex-start; font: 600 var(--t-xs)/1.2 var(--f-sans); letter-spacing: .06em; color: var(--c); padding: 12px 18px; border-radius: 10px;
   background: color-mix(in srgb, var(--c) 10%, transparent); border: 1.5px solid color-mix(in srgb, var(--c) 35%, transparent);
 }
-.label { font: 600 var(--t-xs)/1.35 var(--f-sans); text-wrap: balance; letter-spacing: .16em; text-transform: uppercase; color: var(--c, var(--accent)); }
+.label { font: 600 var(--t-xs)/1.35 var(--f-sans); text-wrap: pretty; letter-spacing: .16em; text-transform: uppercase; color: var(--c, var(--accent)); }
 .media { position: relative; margin: 0; height: 100%; min-height: 0; border-radius: var(--r); overflow: hidden; border: 1.5px solid var(--line-2); box-shadow: var(--shadow); background: var(--panel-b); }
 .media img { display: block; width: 100%; height: 100%; }
 /* Cỡ ảnh người dùng kéo trên khung (image.size → --mz): thu / phóng quanh tâm, không đổi bố cục. */
@@ -261,7 +271,9 @@ svg * { transform-box: fill-box; transform-origin: center; }
 body:not(.edit) .slide.on [data-lb] { cursor: zoom-in; }
 #lbx { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(0, 0, 0, 0); cursor: zoom-out; transition: background .3s ease; }
 #lbx.in { background: rgba(0, 0, 0, .94); }
-#lbx img { max-width: 100vw; max-height: 100vh; width: auto; height: auto; object-fit: contain; opacity: 0; scale: .92; transition: opacity .3s ease, scale .38s cubic-bezier(.22, .8, .24, 1); }
+/* Mặc định ảnh phóng vừa toàn màn hình (kể cả ảnh nhỏ hơn màn hình); Thiết lập bài "giữ kích thước gốc" (data-iv=natural) → không phóng ảnh nhỏ. */
+#lbx img { width: 100vw; height: 100vh; object-fit: contain; opacity: 0; scale: .92; transition: opacity .3s ease, scale .38s cubic-bezier(.22, .8, .24, 1); }
+[data-iv="natural"] #lbx img { max-width: 100vw; max-height: 100vh; width: auto; height: auto; }
 #lbx.in img { opacity: 1; scale: 1; }
 #lbx .vx { position: fixed; right: 16px; top: 16px; z-index: 2; width: 44px; height: 44px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .4); background: rgba(0, 0, 0, .5); color: #fff; font: 400 26px/1 system-ui, sans-serif; cursor: pointer; }
 #lbx figcaption { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); max-width: 80vw; color: #fff; font: 500 16px/1.4 system-ui, sans-serif; text-align: center; text-shadow: 0 1px 4px #000; }
@@ -297,8 +309,8 @@ h3, h4, p { margin: 0; }
 .cv-l { display: flex; flex-direction: column; gap: var(--g3); min-width: 0; }
 .live { display: inline-flex; align-items: center; gap: 16px; font: 600 var(--t-xs)/1 var(--f-sans); letter-spacing: .18em; text-transform: uppercase; color: var(--soft); }
 .live i { width: 14px; height: 14px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 6px color-mix(in srgb, var(--mint) 20%, transparent); }
-.cv-title { margin: 0; font-size: var(--t-hero); line-height: 1.1; font-weight: 800; letter-spacing: -.03em; text-wrap: balance; }
-.cv-sub { margin: 0; font-size: var(--t-lg); line-height: 1.45; color: var(--soft); max-width: 1500px; text-wrap: balance; }
+.cv-title { margin: 0; font-size: var(--t-hero); line-height: 1.1; font-weight: 800; letter-spacing: -.03em; text-wrap: pretty; }
+.cv-sub { margin: 0; font-size: var(--t-lg); line-height: 1.45; color: var(--soft); max-width: 1500px; text-wrap: pretty; }
 .cv-cap { font: 600 var(--t-xs)/1.4 var(--f-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
 .cv-art { position: relative; height: 100%; max-height: 1100px; aspect-ratio: 1; justify-self: center; max-width: 100%; }
 .cv-art svg { width: 100%; height: 100%; overflow: visible; }
@@ -311,7 +323,7 @@ h3, h4, p { margin: 0; }
 .sec.has-media { grid-template-columns: auto minmax(0, 1.1fr) minmax(0, 1fr); }
 .sec-no { font-size: calc(400px * var(--k)); font-weight: 900; line-height: .9; letter-spacing: -.06em; font-variant-numeric: tabular-nums; padding-bottom: .04em; background: linear-gradient(160deg, var(--accent) 10%, var(--accent-2) 60%, transparent 105%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .sec-c { display: flex; flex-direction: column; gap: var(--g3); min-width: 0; }
-.sec-t { margin: 0; font-size: var(--t-hero); line-height: 1.08; font-weight: 800; letter-spacing: -.03em; text-wrap: balance; }
+.sec-t { margin: 0; font-size: var(--t-hero); line-height: 1.08; font-weight: 800; letter-spacing: -.03em; text-wrap: pretty; }
 
 /* ---------- agenda ---------- */
 .ag { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); column-gap: calc(80px * var(--k)); align-content: safe center; }
@@ -412,11 +424,11 @@ h3, h4, p { margin: 0; }
 /* ---------- closing ---------- */
 .cl { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: var(--g3); text-align: center; }
 .cl-t {
-  margin: 0; font-size: calc(210px * var(--k)); line-height: 1.02; font-weight: 900; letter-spacing: -.04em; text-wrap: balance; padding: 0 .04em .06em;
+  margin: 0; font-size: calc(210px * var(--k)); line-height: 1.02; font-weight: 900; letter-spacing: -.04em; text-wrap: pretty; padding: 0 .04em .06em;
   background: linear-gradient(120deg, var(--text) 0%, var(--cyan) 35%, var(--blue) 70%, var(--violet) 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-.cl-sub { margin: 0; font-size: var(--t-lg); line-height: 1.45; color: var(--soft); max-width: 2000px; text-wrap: balance; }
+.cl-sub { margin: 0; font-size: var(--t-lg); line-height: 1.45; color: var(--soft); max-width: 2000px; text-wrap: pretty; }
 .cl .chips { justify-content: center; }
 
 /* ---------- trang Liên hệ / Ưu đãi (slide.contact) ---------- */
@@ -621,7 +633,7 @@ a.ct-b:hover { transform: translateY(-3px) scale(1.06); }
 .tlv { display: flex; flex-direction: column; justify-content: safe center; max-width: 2300px; }
 /* Cột mốc rộng theo nhãn dài nhất (--vw = số ký tự, renderer đặt): "Tháng 4–6/2026" không bị bẻ đôi; tối đa 560px rồi mới xuống dòng. */
 .tlv-i { display: grid; grid-template-columns: calc(min(560px, max(300px, var(--vw, 0) * 31px)) * var(--k)) calc(44px * var(--k)) minmax(0, 1fr); column-gap: var(--g3); }
-.tlv-v { padding-top: calc(2px * var(--k)); text-align: right; font: 800 var(--t-h3)/1.1 var(--f-head); color: var(--c); letter-spacing: -.01em; overflow-wrap: anywhere; text-wrap: balance; }
+.tlv-v { padding-top: calc(2px * var(--k)); text-align: right; font: 800 var(--t-h3)/1.1 var(--f-head); color: var(--c); letter-spacing: -.01em; overflow-wrap: anywhere; text-wrap: pretty; }
 .tlv-rail { display: flex; flex-direction: column; align-items: center; }
 .tlv .tl-dot { position: relative; flex: none; }
 .tlv-ln { flex: 1; width: 4px; margin: calc(10px * var(--k)) 0; border-radius: 4px; background: linear-gradient(var(--c), color-mix(in srgb, var(--c) 12%, transparent)); }
@@ -751,6 +763,8 @@ a.ct-b:hover { transform: translateY(-3px) scale(1.06); }
 #hint { position: fixed; left: 50%; top: max(16px, 2vh); transform: translateX(-50%); z-index: 10; font: 500 13px/1 var(--f-sans); letter-spacing: .04em; color: var(--soft); background: var(--chip-bg); border: 1px solid var(--line-2); padding: 10px 16px; border-radius: 999px; transition: opacity .8s; white-space: nowrap; pointer-events: none; }
 body.idle #hud { opacity: 0; }
 body.still #hud, body.still #bar, body.still #hint, body.embed #hint { display: none; }
+/* Thiết lập bài tắt thanh tiến trình / số trang → ẩn cả vạch tiến trình đáy màn hình và số trang trên cụm điều hướng khi trình chiếu. */
+[data-hud]:not([data-hud~="bar"]) #bar, [data-hud]:not([data-hud~="num"]) #count { display: none; }
 /* Nhúng trong ứng dụng (iframe): ứng dụng tự có nút Trước/Sau/Toàn màn hình → ẩn HUD để không che nội dung slide. */
 body.embed #hud { display: none; }
 @media (max-width: 600px) { #hint { display: none; } }
@@ -809,6 +823,10 @@ body.print .im-glass { -webkit-backdrop-filter: none; backdrop-filter: none; bac
 .fe-fig .ph, .fe-video .ph { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 18px; align-items: center; justify-content: center; color: var(--muted); font: 600 30px/1.2 var(--f-sans); text-align: center; }
 .fe-fig .ph .ic { width: 96px; height: 96px; }
 .fe-video > .vbox, .fe-video .media { width: 100%; height: 100%; }
+/* Bảng lấp đầy khung phần tử (kéo cao khung → hàng giãn đều), không để khoảng trống dưới bảng. */
+/* Bảng lấp đầy khung (kéo khung cao lên → hàng giãn đều); chữ ô giữa theo chiều dọc để hàng giãn không bị hẫng phía dưới. */
+.fe-table .fe-tb { height: 100%; }
+.fe-table .fe-tb td { vertical-align: middle; }
 .fe-tb { width: 100%; border-collapse: separate; border-spacing: 0; font-size: calc(30px * var(--fz, 1) * var(--fk, 1)); line-height: 1.35; color: var(--text); background: var(--panel-a); border-radius: 22px; overflow: hidden; border: 1.5px solid var(--line); }
 .fe-tb th, .fe-tb td { padding: .62em .9em; text-align: left; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; outline: none; }
 .fe-tb th { background: var(--accent); color: var(--on-accent); font-weight: 700; }
@@ -873,7 +891,8 @@ body.edit a.rl { cursor: text; }
 /* Chữ trên trang: lấp đầy dòng (pretty — chỉ tránh 1 chữ mồ côi ở dòng cuối). KHÔNG dùng balance: balance chia đều các dòng nên chữ bị
    đẩy xuống dù bên phải còn trống và người dùng không kéo lên được (2026-10-14) — muốn ngắt ở đâu thì Enter. Không cắt giữa từ trừ khi từ dài hơn cả khung. */
 .slide p, .slide li, .slide h3, .slide h4, .slide figcaption, .slide blockquote, .cv-cap, .im-cap { text-wrap: pretty; overflow-wrap: break-word; }
-.slide h3, .slide h4, .label, .tag, .chip, .slide p.sub, .slide p.cv-sub, .slide p.cl-sub { text-wrap: balance; }
+/* Chỉ nhãn/thẻ dạng viên (1–2 dòng ngắn) cân dòng; tiêu đề, mô tả lấp đầy dòng (pretty, ở trên). */
+.tag, .chip { text-wrap: balance; }
 
 /* ---------- thanh định dạng nổi khi sửa chữ (chỉ trình soạn thảo; kích thước theo màn hình, không theo khung slide) ---------- */
 #rtb {
@@ -891,6 +910,7 @@ body.edit a.rl { cursor: text; }
 #rtb .tb-sw { min-width: 22px; width: 22px; height: 22px; padding: 0; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .55); }
 #rtb .tb-sw:hover { background: var(--sw); transform: scale(1.12); }
 #rtb .tb-bold { font-weight: 900; }
+#rtb .tb-it { font: italic 700 15px/1 Georgia, "Times New Roman", serif; }
 #rtb .tb-pick { position: relative; width: 26px; height: 26px; min-width: 26px; padding: 0; border-radius: 50%; overflow: hidden;
   background: conic-gradient(#EF4444, #F59E0B, #EAB308, #22C55E, #06B6D4, #3B82F6, #8B5CF6, #EC4899, #EF4444); }
 #rtb .tb-pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
@@ -943,7 +963,7 @@ body.edit a.rl { cursor: text; }
 /* Bìa thiết kế sẵn: bỏ hình minh hoạ trang trí (chữ chiếm cả trang) — trang bìa có ảnh/video của người dùng vẫn giữ cột media. */
 .bspec .cv:has(> .cv-art) { grid-template-columns: minmax(0, 1fr); }
 .no-ftt > .ft .ft-t, .no-ftt > .ft .ft-n { visibility: hidden; }
-.no-ftt > .ft { border-top-color: transparent; }
+.no-ftt > .ft, .ft.ft-bare { border-top-color: transparent; }
 
 /* ---------- ảnh / logo thay biểu tượng của thẻ, ý ---------- */
 /* Ảnh/logo thay biểu tượng: ô vuông nền trắng (logo màu nào cũng rõ), ảnh định vị tuyệt đối để không bị kích thước gốc của ảnh kéo giãn ô. */
@@ -962,6 +982,12 @@ body.edit .free.over > .fe { pointer-events: auto; }
 span[data-mv], b[data-mv], small[data-mv] { display: inline-block; }
 /* Engine đo tràn chữ (co --k) ở vị trí gốc — không tính phần ô chữ bị kéo ra ngoài. */
 .slide.fit-m [data-mv] { translate: none !important; }
+/* … và ảnh ô media chính ở cỡ gốc: kéo ảnh to lên (image.size) không làm cả trang co chữ — chữ giữ nguyên cỡ ở mọi bố cục. */
+.slide.fit-m .media[data-mz] { scale: none !important; }
+/* Kéo dời ảnh trang bìa (khối blk.media): con trỏ di chuyển; đang kéo thì không hiện nhãn "Bấm để đổi". */
+body.edit [data-mk="blk.media"] [data-m], body.edit [data-mk="blk.media"][data-m] { cursor: move; }
+body.edit [data-mk="blk.media"] [data-m]::after, body.edit [data-mk="blk.media"][data-m]::after { content: "Kéo để dời · bấm để đổi"; }
+body.edit .bm-drag [data-m]::after, body.edit .bm-drag[data-m]::after { opacity: 0 !important; }
 /* Chế độ sửa: co chữ tới mức nhỏ nhất vẫn tràn (engine fitSlide → .ovf) → viền đỏ vùng nội dung + nhắc cách xử lý. Không in/xuất. */
 /* Khoảng số (2026–2035…) giữ trên 1 dòng — rich.js keepRanges. */
 .nb { white-space: nowrap; }
@@ -1016,8 +1042,8 @@ body.edit [data-mv] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%
 #mvg button { width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; display: grid; place-items: center; background: none; color: inherit; font: inherit; cursor: pointer; }
 #mvg button:hover { background: rgba(255, 255, 255, .14); }
 #mvg button:focus-visible { outline: 2px solid #60A5FA; outline-offset: 1px; }
-#mvg .mv-grip { cursor: grab; touch-action: none; }
-#mvg .mv-grip.drag { cursor: grabbing; background: #2563EB; }
+#mvg .mv-grip, #mvg .mv-blk { cursor: grab; touch-action: none; }
+#mvg .mv-grip.drag, #mvg .mv-blk.drag { cursor: grabbing; background: #2563EB; }
 #mvg .mv-fz sup { font-size: 10px; margin-left: 1px; }
 #mvg svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 #mvt {
@@ -1191,7 +1217,7 @@ body.edit [data-mv] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%
 .tpill-line { position: absolute; left: 0; top: calc(48px * var(--k)); height: 4px; width: 0; margin-top: -2px; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
 .tp-i { display: flex; flex-direction: column; gap: var(--g3); min-width: 0; }
 .tp-p { position: relative; z-index: 1; align-self: flex-start; max-width: 100%; display: flex; align-items: center; min-height: calc(96px * var(--k)); padding: 0 calc(40px * var(--k)); border-radius: 999px; background: var(--c); color: var(--on-accent); box-shadow: 0 0 0 calc(10px * var(--k)) color-mix(in srgb, var(--bg1) 70%, transparent); }
-.tp-v { font: 800 var(--t-md)/1.1 var(--f-head, var(--f-sans)); letter-spacing: -.01em; text-wrap: balance; overflow-wrap: anywhere; }
+.tp-v { font: 800 var(--t-md)/1.1 var(--f-head, var(--f-sans)); letter-spacing: -.01em; text-wrap: pretty; overflow-wrap: anywhere; }
 .tp-c { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .tp-c h4 { font-size: var(--t-lg); line-height: 1.18; font-weight: 800; }
 .tp-c p { font-size: var(--t-sm); line-height: 1.45; color: var(--muted); }
@@ -1205,7 +1231,7 @@ body.edit [data-mv] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%
   clip-path: polygon(0 0, calc(100% - 64px * var(--k)) 0, 100% 50%, calc(100% - 64px * var(--k)) 100%, 0 100%, calc(64px * var(--k)) 50%);
 }
 .ta-i:first-child .ta-h { padding-left: var(--g4); border-radius: var(--r) 0 0 var(--r); clip-path: polygon(0 0, calc(100% - 64px * var(--k)) 0, 100% 50%, calc(100% - 64px * var(--k)) 100%, 0 100%); }
-.ta-v { font: 800 var(--t-md)/1.1 var(--f-head, var(--f-sans)); text-wrap: balance; overflow-wrap: anywhere; min-width: 0; }
+.ta-v { font: 800 var(--t-md)/1.1 var(--f-head, var(--f-sans)); text-wrap: pretty; overflow-wrap: anywhere; min-width: 0; }
 .ta-c { display: flex; flex-direction: column; gap: 10px; padding: 0 calc(40px * var(--k)) 0 calc(64px * var(--k)); min-width: 0; }
 .ta-i:first-child .ta-c { padding-left: var(--g2); }
 .ta-c h4 { font-size: var(--t-lg); line-height: 1.18; font-weight: 800; }
@@ -1354,7 +1380,7 @@ body.edit [data-mv] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%
 .dg-arw path { fill: none; stroke: var(--text); stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 /* Venn 2–3 vòng */
 .vn-c { position: absolute; display: flex; padding: 13%; border-radius: 50%; background: color-mix(in srgb, var(--c) 22%, transparent); border: calc(4px * var(--k)) solid color-mix(in srgb, var(--c) 75%, transparent); }
-.vn-c b { max-width: 60%; font: 800 var(--t-md)/1.15 var(--f-head, var(--f-sans)); color: var(--text); overflow-wrap: anywhere; text-wrap: balance; }
+.vn-c b { max-width: 60%; font: 800 var(--t-md)/1.15 var(--f-head, var(--f-sans)); color: var(--text); overflow-wrap: anywhere; text-wrap: pretty; }
 .vn.n2 .vn-c { align-items: center; }
 .vn.n2 .vn-c.p1 { justify-content: flex-end; text-align: right; }
 .vn.n3 .vn-c.p1 { justify-content: flex-end; text-align: right; }
@@ -1419,7 +1445,7 @@ body.edit [data-mv] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%
 .ch-cols.wf .ch-b.tot { --c: var(--accent); }
 .ch-cn { position: absolute; left: 78%; width: 44%; height: 0; border-top: 2px dashed var(--line-2); }
 .ch-xl { flex: none; margin-left: var(--gw); display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); column-gap: 8px; }
-.ch-xl span { text-align: center; font-size: var(--t-sm); font-weight: 600; line-height: 1.2; color: var(--soft); overflow-wrap: anywhere; text-wrap: balance; }
+.ch-xl span { text-align: center; font-size: var(--t-sm); font-weight: 600; line-height: 1.2; color: var(--soft); overflow-wrap: anywhere; text-wrap: pretty; }
 .chart.dense .ch-xl span { font-size: var(--t-xs); }
 /* Đường / vùng: khung .ch-rev rộng dần (engine bar), hình bên trong giữ bề rộng vùng vẽ (100cqw). */
 .ch-rev { position: absolute; left: 0; top: 0; bottom: 0; overflow: hidden; }
@@ -1567,7 +1593,7 @@ body.print .stage-rings { opacity: .7; }
 .callout.cb.co-ok { --co: var(--accent); }
 .callout.cb .co-ic { width: calc(76px * var(--k)); height: calc(76px * var(--k)); color: #FFFFFF; background: rgba(255, 255, 255, .18); }
 .co-b { min-width: 0; display: flex; flex-direction: column; gap: calc(6px * var(--k)); }
-.callout.cb .co-t { padding: 0; font-size: calc(var(--t-lg) * 1.22); font-weight: 800; line-height: 1.22; letter-spacing: -.004em; color: #FFFFFF; text-wrap: balance; }
+.callout.cb .co-t { padding: 0; font-size: calc(var(--t-lg) * 1.22); font-weight: 800; line-height: 1.22; letter-spacing: -.004em; color: #FFFFFF; text-wrap: pretty; }
 .callout.cb .co-t .hl { color: #FFFFFF; text-decoration: underline; text-decoration-thickness: .08em; text-underline-offset: .14em; }
 .callout.cb .co-s { font-size: var(--t-md); line-height: 1.45; color: rgba(255, 255, 255, .86); }
 .co-s:empty { display: none; }
@@ -1583,7 +1609,7 @@ body.edit .co-s:empty { display: block; }
 }
 .callout.cq.cq-has { grid-template-columns: auto minmax(0, 1fr) auto; padding-right: calc(40px * var(--k)); }
 .cq-mk { align-self: start; font: 900 calc(190px * var(--k))/.72 Georgia, "Times New Roman", serif; color: var(--co); margin-top: calc(-6px * var(--k)); }
-.callout.cq .co-t { padding: 0; font: 800 var(--t-h2)/1.14 var(--f-head, var(--f-sans)); letter-spacing: -.012em; color: var(--text); text-wrap: balance; }
+.callout.cq .co-t { padding: 0; font: 800 var(--t-h2)/1.14 var(--f-head, var(--f-sans)); letter-spacing: -.012em; color: var(--text); text-wrap: pretty; }
 .callout.cq .co-t .hl { color: var(--co); }
 .callout.cq .co-s { margin-top: calc(8px * var(--k)); font-size: var(--t-md); line-height: 1.5; color: var(--muted); }
 .cq-art { position: relative; width: calc(300px * var(--k)); height: calc(300px * var(--k)); margin: calc(-84px * var(--k)) calc(-8px * var(--k)) calc(-64px * var(--k)) 0; display: block; }

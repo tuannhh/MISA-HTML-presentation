@@ -9,9 +9,9 @@ import { STYLES, resolveVariant, userCols } from './variants.js';
 import { accentPos, calloutArt, CALLOUT_TONES, CALLOUT_LAYOUTS, TRANSITIONS } from './blocks.js';
 import { chartHtml } from './chartView.js';
 import { SPEC_LIMITS as LIM } from './limits.js';
-import { TEXT_STYLES } from './free.js';
+import { TEXT_STYLES, cleanTextLook } from './free.js';
 import { richHtml, phraseHtml, plainText, linkAttrs } from './rich.js';
-import { moveAttr, hideClasses } from './layers.js';
+import { moveAttr, blockMove, hideClasses } from './layers.js';
 import { qrSvg } from './qr.js';
 import { lookCss, overlayHtml } from './imgstyle.js';
 import { videoFlags, videoBoxAttr, cleanImageSize, VIMEO_ID_RE, VIMEO_HASH_RE } from './video.js';
@@ -51,6 +51,8 @@ export const BUILDS = Object.freeze(['step', 'dim', 'tour']);
 export const MEDIA_LAYOUTS = Object.freeze(['cover', 'section', 'bullets', 'image', 'quote']);
 export const LOGO_POSITIONS = Object.freeze(['tl', 'tc', 'tr', 'bl', 'bc', 'br']);
 export const LOGO_SHOW = Object.freeze(['all', 'cover', 'inner']);
+// Bấm ảnh lúc trình chiếu: 'full' = phóng vừa toàn màn hình (mặc định), 'natural' = giữ kích thước thật của ảnh (không phóng ảnh nhỏ).
+export const IMAGE_VIEWS = Object.freeze(['full', 'natural']);
 export const LOGO_SIZE = Object.freeze({ min: 40, max: 360, def: 110 });
 // Ô ảnh của bộ nhận diện thương hiệu (spec.brand): nền trang bìa / trang nội dung / trang mở đầu phần / trang kết, dải đầu & chân trang.
 export const BRAND_SLOTS = Object.freeze(['cover', 'page', 'section', 'closing', 'header', 'footer']);
@@ -132,7 +134,9 @@ function plate(ref, url, cap, ctx, o) {
   // Hình minh hoạ 3D chủ đạo (bìa, mở đầu phần, trang kết — o.stage): đặt trên "sân khấu" quỹ đạo quay chậm, hình trôi nhẹ khi trình chiếu.
   const stage = ref.frame === 'art' && o.stage === true;
   const mz = sizeCss(ref, o);
-  return `<div class="vbox${stage ? ' stage' : ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}">${stage ? stageRings() : ''}<figure${stage && !ctx.edit ? ' data-loop="float" data-p="7" data-amp="12"' : ''} class="media plate${web ? ' web' : ''}${ref.frame === 'art' ? ' art' : ''}${cap ? ' cap' : ''}"${mz ? ' data-mz=""' : ''} style="--ar:${ar.toFixed(4)}${lookCss(ref) ? `;${lookCss(ref)}` : ''}${mz ? `;${mz}` : ''}"${M(ctx, o.mp)}>${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"${st ? ` style="${st}"` : ''}></div>${overlayHtml(ref)}${
+  // Khối dời được (trang bìa: kéo ảnh sang chỗ khác) — dời cả khung (vbox), không đụng transform hiệu ứng.
+  const bk = o.blk || { attr: '', css: '' };
+  return `<div class="vbox${stage ? ' stage' : ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"${bk.attr}${bk.css ? ` style="${bk.css}"` : ''}>${stage ? stageRings() : ''}<figure${stage && !ctx.edit ? ' data-loop="float" data-p="7" data-amp="12"' : ''} class="media plate${web ? ' web' : ''}${ref.frame === 'art' ? ' art' : ''}${cap ? ' cap' : ''}"${mz ? ' data-mz=""' : ''} style="--ar:${ar.toFixed(4)}${lookCss(ref) ? `;${lookCss(ref)}` : ''}${mz ? `;${mz}` : ''}"${M(ctx, o.mp)}>${bar}<div class="pimg"><img src="${esc(url)}" alt="${esc(ref.alt || '')}"${st ? ` style="${st}"` : ''}></div>${overlayHtml(ref)}${
     cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''
   }</figure></div>`;
 }
@@ -149,8 +153,9 @@ function media(ref, ctx, o = {}) {
     ? `<img src="${esc(url)}" alt="${esc(ref.alt || '')}" style="object-fit:${fit};${imgPos(ref)}"${kb ? ' data-loop="kb" data-p="20"' : ''}>`
     : `<div class="ph">${icon('image')}</div>`;
   const mz = url ? sizeCss(ref, o) : '';
-  const look = [url ? lookCss(ref) : '', mz].filter(Boolean).join(';');
-  return `<figure class="media ${o.cls || ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"${mz ? ' data-mz=""' : ''}${look ? ` style="${look}"` : ''}${M(ctx, o.mp)}>${inner}${url ? overlayHtml(ref) : ''}${cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''}</figure>`;
+  const bk = url && o.blk ? o.blk : { attr: '', css: '' };
+  const look = [url ? lookCss(ref) : '', mz, bk.css].filter(Boolean).join(';');
+  return `<figure class="media ${o.cls || ''}" data-a="${o.anim || 'zoom'}" data-d="${o.d ?? 10}"${mz ? ' data-mz=""' : ''}${bk.attr}${look ? ` style="${look}"` : ''}${M(ctx, o.mp)}>${inner}${url ? overlayHtml(ref) : ''}${cap ? `<figcaption${E(ctx, o.capPath, LIM.caption, true)}>${rt(cap)}</figcaption>` : ''}</figure>`;
 }
 
 const PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>';
@@ -413,7 +418,9 @@ const ORG_SCALE = [1, 1, 1, 1, 0.92, 0.84, 0.76];
 const L = {
   cover(s, ctx, v) {
     const m = hasMedia(s);
-    const txt = `<div class="cv-l">
+    // Khối chữ và ảnh của trang bìa dời được nguyên cụm (slide.moves['blk.text' | 'blk.media']) — kéo ảnh to lên không đè chữ.
+    const bt = blockMove(ctx.moves, 'blk.text', ctx.W, ctx.H, ctx.edit);
+    const txt = `<div class="cv-l"${bt.attr}${bt.css ? ` style="${bt.css}"` : ''}>
 ${s.kicker ? `<div class="live" data-a="left" data-d="0"><i></i><span${E(ctx, 'kicker', LIM.kicker)}>${rt(s.kicker)}</span></div>` : ''}
 <h1 class="cv-title" data-a="words" data-d="6" data-s="3"${E(ctx, 'title', LIM.title, true)}>${titleHtml(s)}</h1>
 ${s.subtitle ? `<p class="cv-sub" data-a="up" data-d="24" data-dist="40"${E(ctx, 'subtitle', LIM.subtitle, true)}>${rt(s.subtitle)}</p>` : ''}
@@ -422,7 +429,9 @@ ${s.caption ? `<div class="cv-cap" data-a="fade" data-d="44"${E(ctx, 'caption', 
 </div>`;
     // center: chữ giữa trang; có ảnh → ảnh tràn nền, không có → hình minh hoạ mờ phía sau.
     if (v === 'center') return `${m ? bleed(s.image, ctx) : ''}<div class="body"><div class="cv">${m ? '' : `<div class="cv-ghost">${coreArt(ctx, s.icon, false)}</div>`}${txt}</div></div>`;
-    const art = m ? slot(s, ctx, { d: 14, stage: true }) : coreArt(ctx, s.icon);
+    // Ảnh (không phải video) dời được; video giữ chỗ bố cục.
+    const blk = m && !s.video ? blockMove(ctx.moves, 'blk.media', ctx.W, ctx.H, ctx.edit) : null;
+    const art = m ? slot(s, ctx, { d: 14, stage: true, ...(blk ? { blk } : {}) }) : coreArt(ctx, s.icon);
     return `<div class="body"><div class="cv">${v === 'mirror' ? art + txt : txt + art}</div></div>`;
   },
 
@@ -872,7 +881,11 @@ function freeEl(e, i, ctx) {
     // Chữ "màu chính" trên nền màu nhấn/nền tối → tự đổi màu tương phản.
     const color = e.color === 'text' && fill === 'accent' ? 'var(--on-accent)' : e.color === 'text' && fill === 'dark' ? '#FFFFFF' : TXT_COLOR[e.color] || TXT_COLOR.text;
     cls += ` ts-${esc(e.style)} fill-${fill} al-${esc(e.align || 'left')} va-${esc(e.valign || 'top')}`;
-    inner = `<div class="fe-t" style="--fs:${st.px}px;--fz:${n2(e.size, 1)};--fw:${st.weight};color:${color}"${E(ctx, `${P}.text`, LIM.elText, true)}${ctx.edit ? ' data-ph="Nhập chữ…"' : ''}>${rt(e.text)}</div>`;
+    // Giãn dòng / giãn chữ chỉnh tay (thanh định dạng) ghi đè kiểu chữ; data-lh/data-ls để engine đọc lại giá trị đang có.
+    const look = cleanTextLook(e);
+    const lk = `${look.lh ? `;line-height:${look.lh}` : ''}${look.ls ? `;letter-spacing:${look.ls}em` : ''}`;
+    const la = `${look.lh ? ` data-lh="${look.lh}"` : ''}${look.ls ? ` data-ls="${look.ls}"` : ''}`;
+    inner = `<div class="fe-t" style="--fs:${st.px}px;--fz:${n2(e.size, 1)};--fw:${st.weight};color:${color}${lk}"${la}${E(ctx, `${P}.text`, LIM.elText, true)}${ctx.edit ? ' data-ph="Nhập chữ…"' : ''}>${rt(e.text)}</div>`;
   } else if (e.type === 'image') {
     const ref = e.image;
     const url = ref && ref.asset ? ctx.assetUrl(ref.asset) : null;
@@ -1013,6 +1026,9 @@ export function deckParts(spec, opts) {
   const slides = list(spec.slides);
   const total = slides.length;
   const footer = spec.footer || spec.title || '';
+  // Người dùng tắt thanh tiến trình (thanh theo phần / chữ chân trang) hoặc số trang ở Thiết lập bài.
+  const showBar = spec.footerBar !== false;
+  const showNum = spec.pageNum !== false;
   const assetUrl = opts.assetUrl || (() => null);
   const logo = logoInfo(spec, { W, assetUrl, assetMeta: opts.assetMeta });
   const brand = brandInfo(spec, { W, H, assetUrl, assetMeta: opts.assetMeta });
@@ -1042,10 +1058,12 @@ export function deckParts(spec, opts) {
     // Logo phía dưới nằm trong hàng chân trang (flex) để không chồng lên chữ chân trang; trang bìa không có chân trang.
     const inFooter = lg && !lg.top && s.layout !== 'cover';
     const ftLogo = inFooter ? logoImg(lg, 'lg-in') : '';
-    const ftText = parts.length >= 2 ? partBar(pi) : `<span class="ft-t"${E(ctx, '@footer', LIM.footer, false, true)}>${esc(footer)}</span>`;
-    const ftNum = `<span class="ft-n"><b>${pad2(index + 1)}</b> / ${pad2(total)}</span>`;
+    const ftText = !showBar ? '' : parts.length >= 2 ? partBar(pi) : `<span class="ft-t"${E(ctx, '@footer', LIM.footer, false, true)}>${esc(footer)}</span>`;
+    const ftNum = showNum ? `<span class="ft-n"><b>${pad2(index + 1)}</b> / ${pad2(total)}</span>` : '';
+    // Tắt cả hai: bỏ hẳn chân trang (còn logo đặt ở chân trang thì giữ hàng cho logo, không kẻ vạch).
+    const bare = !ftText && !ftNum;
     const ftInner = !inFooter ? ftText + ftNum : lg.pos === 'bl' ? ftLogo + ftText + ftNum : lg.pos === 'bc' ? ftText + ftLogo + ftNum : ftText + ftNum + ftLogo;
-    const ft = s.layout === 'cover' ? '' : `<div class="ft${inFooter ? ` ft-lg ft-${lg.pos}` : ''}">${ftInner}</div>`;
+    const ft = s.layout === 'cover' || (bare && !inFooter) ? '' : `<div class="ft${inFooter ? ` ft-lg ft-${lg.pos}` : ''}${bare ? ' ft-bare' : ''}">${ftInner}</div>`;
     const abs = lg && !inFooter ? logoImg(lg, `lg-${lg.pos}`) : '';
     const b = brandFor(brand, s, tone);
     const cls = `${lg ? ` lg-${lg.top ? 'top' : 'bot'}` : ''}${b.cls}${hideClasses(s.hide)}${acc ? ` A-${acc}` : ''}${pi !== null ? ` pt-${pi}` : ''}${artItems(s) ? ' has-art' : ''}`;
@@ -1061,7 +1079,7 @@ export function deckParts(spec, opts) {
 
   return {
     W, H, mode,
-    attrs: { theme, tone, font: fontBody, style: deckStyle, bg, tcase: spec.font?.titleCase === 'upper' ? 'upper' : 'sentence', tr: TRANSITIONS.includes(spec.transition) ? spec.transition : TRANSITIONS[0] },
+    attrs: { theme, tone, font: fontBody, style: deckStyle, bg, tcase: spec.font?.titleCase === 'upper' ? 'upper' : 'sentence', tr: TRANSITIONS.includes(spec.transition) ? spec.transition : TRANSITIONS[0], iv: IMAGE_VIEWS.includes(spec.imageView) ? spec.imageView : IMAGE_VIEWS[0], hud: `${spec.footerBar === false ? '' : 'bar '}${spec.pageNum === false ? '' : 'num'}`.trim() || 'none' },
     rootCss: `:root{--W:${W}px;--H:${H}px;--f-sans:${fontStack(fontBody)};--f-head:${fontStack(fontHead)}}`,
     themeCss: `${themeVarsCss(theme, spec.palette)}${brand ? inkVarsCss(theme, spec.palette) : ''}${partVarsCss(theme, spec.palette, parts)}`,
     fontIds: [fontHead, fontBody],
@@ -1090,7 +1108,7 @@ export function renderDeckHtml(spec, opts) {
   const a = d.attrs;
 
   return `<!doctype html>
-<html lang="${esc(opts.lang || 'vi')}" data-deck-theme="${a.theme}" data-tone="${a.tone}" data-font="${a.font}" data-style="${a.style}" data-tcase="${a.tcase}">
+<html lang="${esc(opts.lang || 'vi')}" data-deck-theme="${a.theme}" data-tone="${a.tone}" data-font="${a.font}" data-style="${a.style}" data-tcase="${a.tcase}" data-iv="${a.iv}" data-hud="${a.hud}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">

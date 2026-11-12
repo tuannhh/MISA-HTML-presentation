@@ -4,7 +4,7 @@
 //  - strict (người dùng lưu): vượt giới hạn → trả danh sách lỗi để API báo 422 (không âm thầm cắt dữ liệu người dùng).
 import { randomUUID } from 'node:crypto';
 import { cleanChart } from '../../shared/deck/chart.js';
-import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE, BRAND_SLOTS, BUILDS } from '../../shared/deck/render.js';
+import { LAYOUTS, THEMES, BACKGROUNDS, LOGO_POSITIONS, LOGO_SHOW, LOGO_SIZE, BRAND_SLOTS, BUILDS, IMAGE_VIEWS } from '../../shared/deck/render.js';
 import { hasRich, canonicalRich, plainText, cutRich, hrefWeight, safeHref, validPhrases } from '../../shared/deck/rich.js';
 import { CUSTOM_THEME, normHex, PART_COLORS } from '../../shared/deck/palette.js';
 import { FONT_IDS, DEFAULT_FONT } from '../../shared/deck/fonts.js';
@@ -19,7 +19,7 @@ import { cleanVideoOpts, VIMEO_ID_RE, VIMEO_HASH_RE, cleanImageSize } from '../.
 import { cleanMoves, cleanHide } from '../../shared/deck/layers.js';
 import { TITLE_CASES } from '../../shared/deck/textCase.js';
 import { PHONE_CHANNELS, CONTACT_LIMITS as CL, validPhone, validEmail, webHref } from '../../shared/deck/contact.js';
-import { FREE_TYPES, TEXT_STYLES, TEXT_ALIGNS, TEXT_VALIGNS, TEXT_COLORS, FILLS, SHAPES, SHAPE_FILLS, TABLE_STYLES, RADII, SIZE_RANGE } from '../../shared/deck/free.js';
+import { FREE_TYPES, TEXT_STYLES, TEXT_ALIGNS, TEXT_VALIGNS, TEXT_COLORS, FILLS, SHAPES, SHAPE_FILLS, TABLE_STYLES, RADII, SIZE_RANGE, cleanTextLook } from '../../shared/deck/free.js';
 
 export { SPEC_LIMITS };
 
@@ -195,7 +195,14 @@ export function cleanDesign(c, o) {
   }
   // Chuyển trang mặc định cả bài (shared/deck/blocks.js) — 'fade' = mặc định, không lưu.
   const transition = cleanTransition(o.transition, true);
-  return { theme, palette, background, font, logo, brand: cleanBrand(c, o.brand), ...(transition ? { transition } : {}) };
+  // Chân trang + xem ảnh khi trình chiếu (lựa chọn của người dùng, không qua AI): mặc định bật thanh tiến trình/chữ chân trang, bật số
+  // trang, bấm ảnh = phóng toàn màn hình → không lưu; chỉ lưu khi người dùng tắt / chọn giữ cỡ gốc của ảnh.
+  const view = {
+    ...(o.footerBar === false ? { footerBar: false } : {}),
+    ...(o.pageNum === false ? { pageNum: false } : {}),
+    ...(IMAGE_VIEWS.includes(o.imageView) && o.imageView !== IMAGE_VIEWS[0] ? { imageView: o.imageView } : {}),
+  };
+  return { theme, palette, background, font, logo, brand: cleanBrand(c, o.brand), ...(transition ? { transition } : {}), ...view };
 }
 
 // Bộ nhận diện thương hiệu: ảnh nền trang bìa / trang nội dung / trang mở đầu phần / trang kết + dải đầu trang, chân trang.
@@ -255,6 +262,7 @@ function cleanElement(c, v, path, seen) {
       color: oneOf(o.color, Object.keys(TEXT_COLORS), 'text'),
       fill: oneOf(o.fill, Object.keys(FILLS), 'none'),
       size,
+      ...cleanTextLook(o),
     });
   }
   if (o.type === 'image') return Object.assign(el, { image: cleanImage(c, o.image, `${path}.image`), radius: oneOf(o.radius, Object.keys(RADII), 'md') });

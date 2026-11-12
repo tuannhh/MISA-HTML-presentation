@@ -17,7 +17,7 @@ export const BACKGROUND_OPTIONS = [
   { value: 'none', label: 'Không hiệu ứng' },
 ];
 
-export const FONT_OPTIONS = Object.entries(DECK_FONTS).map(([value, f]) => ({ value, label: f.label || value, stack: fontStack(value) }));
+export const FONT_OPTIONS = Object.entries(DECK_FONTS).map(([value, f]) => ({ value, label: f.label || value, note: f.note || '', stack: fontStack(value) }));
 
 export const LOGO_POSITIONS = [
   { value: 'tl', label: 'Trên – trái' },

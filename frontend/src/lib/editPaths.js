@@ -4,8 +4,8 @@
 import { SPEC_LIMITS as L } from '../../../shared/deck/limits.js';
 import { hasRich, canonicalRich, cutRich, plainText, hrefWeight } from '../../../shared/deck/rich.js';
 import { CONTACT_LIMITS as CL } from '../../../shared/deck/contact.js';
-import { isMovePath, MOVE_LIMIT, MOVE_RANGE, DECORS, cleanHide, cleanSize, cleanLh, cleanBox } from '../../../shared/deck/layers.js';
-import { newElement } from '../../../shared/deck/free.js';
+import { isMovePath, isBlockPath, MOVE_LIMIT, MOVE_RANGE, DECORS, cleanHide, cleanSize, cleanLh, cleanBox, cleanLs } from '../../../shared/deck/layers.js';
+import { newElement, cleanTextLook, SIZE_RANGE } from '../../../shared/deck/free.js';
 import { VIDEO_SIZE_MIN, VIDEO_SIZE_MAX, IMAGE_SIZE_MIN, IMAGE_SIZE_MAX } from '../../../shared/deck/video.js';
 
 const clean = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
@@ -163,6 +163,31 @@ export function applyMediaSize(spec, index, path, size) {
   return false;
 }
 
+/**
+ * Cỡ chữ (hệ số size) / giãn dòng (lh) / giãn chữ (ls) của phần tử chữ — chỉnh trên thanh định dạng nổi của khung ('deck:ellook').
+ * Trường không gửi (undefined/null) = giữ nguyên; 0 = về theo kiểu chữ. Chỉ phần tử chữ; số bị kẹp.
+ */
+export function applyElementLook(spec, index, id, patch) {
+  const slide = at(spec?.slides, index);
+  const el = slide && Array.isArray(slide.elements) ? slide.elements.find((e) => e && e.id === id) : null;
+  if (!el || el.type !== 'text' || !patch || typeof patch !== 'object') return false;
+  let changed = false;
+  if (patch.size !== undefined && patch.size !== null) {
+    const n = Number(patch.size);
+    if (Number.isFinite(n)) {
+      const v = Math.round(Math.min(SIZE_RANGE.max, Math.max(SIZE_RANGE.min, n)) * 100) / 100;
+      if (el.size !== v) { el.size = v; changed = true; }
+    }
+  }
+  for (const k of ['lh', 'ls']) {
+    if (patch[k] === undefined || patch[k] === null) continue;
+    const v = cleanTextLook({ [k]: patch[k] })[k] || 0;
+    if (v && el[k] !== v) { el[k] = v; changed = true; }
+    else if (!v && k in el) { delete el[k]; changed = true; }
+  }
+  return changed;
+}
+
 /* ---- tinh chỉnh tay trên trang có bố cục (shared/deck/layers.js) ---- */
 const num = (v, min, max) => {
   const n = Number(v);
@@ -175,7 +200,7 @@ const num = (v, min, max) => {
  * Về chỗ cũ + mọi thứ theo bố cục = xoá mục.
  * @returns {boolean} true nếu bản nháp thay đổi
  */
-export function applyFrameMove(spec, index, path, x, y, size, lh, box) {
+export function applyFrameMove(spec, index, path, x, y, size, lh, box, ls) {
   const s = at(spec?.slides, index);
   if (!s || s.layout === 'free' || !isMovePath(path)) return false;
   const X = num(x, -MOVE_RANGE, MOVE_RANGE);
@@ -183,20 +208,24 @@ export function applyFrameMove(spec, index, path, x, y, size, lh, box) {
   if (X === null || Y === null) return false;
   const moves = { ...(s.moves || {}) };
   const old = moves[path];
-  const S = size === undefined || size === null ? old?.s ?? 1 : cleanSize(size);
-  const LH = lh === undefined || lh === null ? cleanLh(old?.l) : cleanLh(lh);
-  const BX = box === undefined || box === null ? cleanBox(old?.w) : cleanBox(box);
-  const reset = Math.abs(X) < 0.05 && Math.abs(Y) < 0.05 && S === 1 && !LH && !BX;
+  // Khối dời cả cụm (blk.*) chỉ có vị trí — bỏ qua cỡ / giãn dòng / giãn chữ / độ rộng khung khung gửi kèm.
+  const blk = isBlockPath(path);
+  const S = blk ? 1 : size === undefined || size === null ? old?.s ?? 1 : cleanSize(size);
+  const LH = blk ? 0 : lh === undefined || lh === null ? cleanLh(old?.l) : cleanLh(lh);
+  const BX = blk ? 0 : box === undefined || box === null ? cleanBox(old?.w) : cleanBox(box);
+  const LS = blk ? 0 : ls === undefined || ls === null ? cleanLs(old?.t) : cleanLs(ls);
+  const reset = Math.abs(X) < 0.05 && Math.abs(Y) < 0.05 && S === 1 && !LH && !BX && !LS;
   if (reset) {
     if (!old) return false;
     delete moves[path];
   } else {
-    if (old && old.x === X && old.y === Y && (old.s ?? 1) === S && cleanLh(old.l) === LH && cleanBox(old.w) === BX) return false;
+    if (old && old.x === X && old.y === Y && (old.s ?? 1) === S && cleanLh(old.l) === LH && cleanBox(old.w) === BX && cleanLs(old.t) === LS) return false;
     if (!old && Object.keys(moves).length >= MOVE_LIMIT) return false;
     const m = { x: X, y: Y };
     if (S !== 1) m.s = S;
     if (LH) m.l = LH;
     if (BX) m.w = BX;
+    if (LS) m.t = LS;
     moves[path] = m;
   }
   if (Object.keys(moves).length) s.moves = moves;

@@ -35,7 +35,7 @@
 13. **Bộ nhận diện / mẫu:** ảnh trong `brand` luôn là asset kind `brand` của **chính bài** (qua `collectAssetIds`/`dropForeignAssets`/`remapAssetIds`); mẫu chỉ liên hệ ảnh bằng **sao chép** (không dùng chung tệp giữa bài và mẫu, không tham chiếu chéo tenant). Thêm ô ảnh nhận diện = sửa `BRAND_SLOTS` + `cleanBrand` + `brandFor` + `BrandSettings` + test.
 14. **Trình chiếu / 3D:** `slide.build` và nền 3D là lựa chọn của người dùng — **không** đưa vào prompt/schema AI. Đơn vị "ý" và khối phóng được khai báo bằng bộ chọn `UNIT`/`ZOOM` trong `engine.js` — thêm bố cục/lớp khối mới phải cập nhật hai bộ chọn này (test `present-3d.test.js` đối chiếu). Server/renderer chỉ import `shared/deck/bg3d.js` (không import three); `FALLBACK_2D` có bản sao trong engine (test đối chiếu). Hiệu ứng 3D phải có đường lùi khi không có WebGL.
 
-15. **Vị trí / cỡ chữ / hoạ tiết** (`slide.moves`, `slide.hide`) là chỉnh tay của người dùng — **không** đưa vào prompt/schema AI. Mọi hàm kiểm tra ở `shared/deck/layers.js` (dùng chung server + app). Thêm ô chữ dời được = mở rộng `MOVE_PATH_RE` + gắn qua `E()`; thêm hoạ tiết = `DECORS` (nhãn, bố cục, `pick`) + CSS `x-<khoá>` (ẩn + nắn bố cục) + `DC()` nếu bấm được + test `layers.test.js`. Vị trí ô chữ chỉ dùng thuộc tính `translate` (không `transform`). `moves[path]` = `{x, y, s?, l?, w?}` — thêm thuộc tính mới phải đi đủ 4 chỗ: `cleanMoves` + `moveAttr` (layers.js), `applyFrameMove` (editPaths.js, undefined = giữ cũ), `commitMove`/`setMv` (engine, luôn gửi đủ giá trị) + test `layers.test.js`. Kích thước tính trong hệ toạ độ đã `zoom` → chia cho `s`.
+15. **Vị trí / cỡ chữ / hoạ tiết** (`slide.moves`, `slide.hide`) là chỉnh tay của người dùng — **không** đưa vào prompt/schema AI. Mọi hàm kiểm tra ở `shared/deck/layers.js` (dùng chung server + app). Thêm ô chữ dời được = mở rộng `MOVE_PATH_RE` + gắn qua `E()`; thêm hoạ tiết = `DECORS` (nhãn, bố cục, `pick`) + CSS `x-<khoá>` (ẩn + nắn bố cục) + `DC()` nếu bấm được + test `layers.test.js`. Vị trí ô chữ chỉ dùng thuộc tính `translate` (không `transform`). `moves[path]` = `{x, y, s?, l?, w?, t?}` (`t` = giãn chữ em; khối bìa `blk.text`/`blk.media` chỉ `{x, y}`, gắn bằng `blockMove`) — thêm thuộc tính mới phải đi đủ 4 chỗ: `cleanMoves` + `moveAttr` (layers.js), `applyFrameMove` (editPaths.js, undefined = giữ cũ), `commitMove`/`setMv` (engine, luôn gửi đủ giá trị) + test `layers.test.js`. Kích thước tính trong hệ toạ độ đã `zoom` → chia cho `s`.
 
 16. **Hoàn tác / Làm lại**: mọi thay đổi nội dung phải đi qua `draft` của `useEditor` (lịch sử tự ghi qua `watch`) — không giữ trạng thái nội dung
     bài ngoài bản nháp, không "chuẩn hoá" bản nháp trong component (sinh bước thừa, mất nhánh làm lại). Thao tác gửi nhiều thông điệp từ khung cho
@@ -46,6 +46,21 @@
     YouTube/Vimeo luôn kiểm lại regex ở engine và `useVideoPlayer` (không tin DOM/postMessage). Gọi ffmpeg/ffprobe chỉ qua `videoService` (tham số có
     `-nostdin -protocol_whitelist file`, `execFile`, có hạn thời gian); tạo asset video mới ở đâu cũng phải `videos.inspect` + `processState:'pending'` +
     `videos.enqueue` (3 đường hiện có: `addVideo`, `storeUserMedia`, `storeVideoBuffer`).
+
+18. **Ngắt dòng chữ trên trang**: chữ lấp đầy dòng (`text-wrap: pretty`), **không** dùng `balance` cho tiêu đề / mô tả / thẻ (chỉ `.tag`, `.chip`,
+    `.fbadge`) — balance đẩy chữ xuống dù dòng trên còn trống và người dùng không kéo lên được. Cụm nghĩa `span.nbp` (inline-block) chỉ là **ưu tiên**:
+    engine `unwaste` cho cụm chảy như chữ thường (`.nbf`) khi dòng trên trống > 25% và việc đó bớt dòng / không tạo chữ lẻ; `fixOrphans` chia cân
+    (`.nbb`) riêng trong cụm phải gãy mà dòng cuối còn 1 chữ. Thêm bộ chọn tiêu đề mới thì đi qua `fitTitles` / `fitItemTitles`.
+
+19. **Vùng nội dung `.body`**: `overflow: clip` + `overflow-clip-margin` (không `hidden`) để bóng đổ thẻ không bị cắt; bìa có lề cắt lớn (khối dời
+    ra mép). Đo tràn trong engine luôn đo phần chữ / khung gốc (bỏ `translate` của `[data-mv]`, `scale` của `.media[data-mz]` khi `.fit-m`), không
+    đo `scrollHeight` của khung có tay nắm (`.fe-h` thò ra ngoài → `fitFree` từng co chữ về 40%).
+
+20. **Thiết lập hiển thị khi trình chiếu** (`footerBar`, `pageNum`, `imageView` ∈ `IMAGE_VIEWS`) là lựa chọn của người dùng — không đưa vào AI; chỉ lưu
+    khi khác mặc định (`cleanDesign`). Renderer ghi `data-iv` + `data-hud` lên `<html>`, engine `applyRender` cập nhật lại khi xem trước.
+
+21. **Phông**: thêm phông = `DECK_FONTS` (tệp woff2 trong `shared/deck/fonts/<id>/` + LICENSE OFL, tập con latin/latin-ext/vietnamese) — không dùng CDN.
+    Phông thay thế (Times New Roman → Tinos) ghi rõ trong `label`/`note` và có `fallback` riêng. `DEFAULT_FONT` chỉ áp cho bài mới.
 
 ## Quy trình
 

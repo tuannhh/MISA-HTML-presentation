@@ -257,12 +257,16 @@ function delCol() {
 
       <!-- Bảng -->
       <template v-else-if="el.type === 'table'">
-        <div class="flex flex-wrap items-center gap-2 text-[13px]">
-          <span class="text-[var(--mds-text-secondary)]">{{ el.rows.length }} hàng × {{ cols }} cột</span>
-          <MButton variant="outline" @click="addRow"><template #icon><MIcon name="row-insert-bottom" :size="16" /></template>Hàng</MButton>
-          <MButton variant="outline" @click="addCol"><template #icon><MIcon name="column-insert-right" :size="16" /></template>Cột</MButton>
-          <MButton variant="ghost" :disabled="el.rows.length <= 1" @click="delRow">− Hàng</MButton>
-          <MButton variant="ghost" :disabled="cols <= 1" @click="delCol">− Cột</MButton>
+        <!-- Nút ghi rõ "Thêm"/"Bớt" (bản cũ chỉ "Hàng"/"Cột" + biểu tượng nhỏ → người dùng tưởng không thêm được). Hàng/cột mới thêm
+             vào cuối bảng; khung phần tử giữ nguyên, bảng tự giãn đều theo chiều cao khung. -->
+        <div class="flex flex-col gap-2 text-[13px]">
+          <span class="text-[var(--mds-text-secondary)]">Bảng {{ el.rows.length }} hàng × {{ cols }} cột</span>
+          <div class="grid grid-cols-2 gap-2">
+            <MButton variant="outline" :disabled="el.rows.length >= L.tableRows" @click="addRow"><template #icon><MIcon name="row-insert-bottom" :size="16" /></template>Thêm hàng</MButton>
+            <MButton variant="outline" :disabled="cols >= L.tableCols" @click="addCol"><template #icon><MIcon name="column-insert-right" :size="16" /></template>Thêm cột</MButton>
+            <MButton variant="ghost" :disabled="el.rows.length <= 1" @click="delRow"><template #icon><MIcon name="trash" :size="16" /></template>Bớt hàng cuối</MButton>
+            <MButton variant="ghost" :disabled="cols <= 1" @click="delCol"><template #icon><MIcon name="trash" :size="16" /></template>Bớt cột cuối</MButton>
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <FormField label="Kiểu bảng"><MSelect v-model="el.style" :options="TABLE_OPTS" /></FormField>

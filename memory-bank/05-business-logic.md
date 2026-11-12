@@ -913,3 +913,29 @@ Sơ đồ + chú giải dùng chung khung `.dg` (lưới: hình vuông `containe
 - Trình soạn thảo: bảng **"Dữ liệu biểu đồ"** (xem `06`) — gõ trực tiếp hoặc **dán bảng từ Excel/Google Sheets** (Tab hoặc ";"; cột đầu = hạng mục, hàng đầu =
   tên chuỗi nếu có ô chữ hoặc toàn là năm). Đổi **Con số → Biểu đồ** (cùng họ `['stats','chart']` trong bảng chọn kiểu): số liệu dạng số → 1 chuỗi, hậu tố
   chung → đơn vị (`chartFromStats`); ngược lại `statsFromChart` (chuỗi đầu, tối đa 8). Trang biểu đồ mới (chưa có số) nhận dữ liệu mẫu "Mục A–D".
+
+## 31. Thanh định dạng chữ, giãn chữ / nghiêng, dời khối bìa, hiển thị khi trình chiếu, phông mới (2026-11-12, góp ý 9 mục)
+### Thanh định dạng nổi (engine `#rtb`)
+- Ô chữ trang có bố cục **và phần tử chữ trang tự do** (`.fe-text .fe-t`) đều có: **Cỡ (pt)**, **Giãn dòng**, **Giãn chữ** (−5% → +30% cỡ chữ),
+  B, **I (nghiêng, Ctrl+I)**, màu, hoa/thường, giữ cụm, liên kết, xoá định dạng.
+- Trang có bố cục: lưu `slide.moves[path]` (`s` cỡ, `l` giãn dòng, `t` giãn chữ em) qua `deck:move`. Phần tử tự do: `deck:ellook {index, id, size?, lh?, ls?}`
+  → `applyElementLook` ghi `el.size / el.lh / el.ls` (0 = xoá). Ô số pt của phần tử tự do hiện **cỡ đặt** (`--fs × --fz`), không gồm phần tự co `--fk`.
+- Tăng cỡ / giãn mà khung phần tử không đủ cao → engine **nới khung xuống** (tới mép trang, `deck:geom`) thay vì tự co chữ.
+- Nghiêng: thuộc tính `i` trong chữ định dạng `⟦…⟧` (thứ tự khoá c,b,i,n,href), HTML `font-style:italic` + `data-ri`.
+### Ngắt dòng tiêu đề / thẻ
+- `text-wrap: pretty` (lấp đầy dòng). Cụm nghĩa AI chia (`wrap` → `span.nbp`) chỉ là ưu tiên: dòng trên trống > 25% mà chữ đầu cụm sau vừa → cụm chảy lên
+  (`.nbf`), trừ khi việc đó không bớt dòng và để 1 chữ lẻ ở cuối ("Người quen, / nhà sư" giữ nguyên). Cụm phải gãy bên trong mà dòng cuối còn 1 chữ → chia
+  cân trong cụm (`.nbb`). Giảm cỡ chữ → cụm vừa dòng trên thì tự lên.
+### Trang bìa
+- Khối chữ (`blk.text`) và ảnh (`blk.media`, không áp cho video) dời được nguyên cụm: nút "dời cả khối" trong cụm nút cạnh ô chữ; ảnh kéo thẳng (ngưỡng 6px,
+  hút về gốc trong 14px, Shift khoá trục; bấm không kéo = đổi ảnh như cũ). Phóng ảnh (`image.size` ≤ 150%) **không làm co chữ** ở cả hai bố cục (engine đo
+  khi tắt `scale`).
+### Thiết lập bài → "Hiển thị khi trình chiếu"
+- `footerBar: false` ẩn thanh theo phần / chữ chân trang + vạch tiến trình đáy màn hình; `pageNum: false` ẩn số trang ở chân trang + cụm điều hướng. Tắt cả hai
+  → bỏ hẳn chân trang (còn logo ở chân trang thì giữ hàng, không kẻ vạch).
+- `imageView`: `full` (mặc định — bấm ảnh phóng vừa toàn màn hình, kể cả ảnh nhỏ) | `natural` (giữ cỡ thật của ảnh, không phóng ảnh nhỏ).
+### Bảng (phần tử tự do)
+- Bảng lấp đầy khung (kéo khung cao → hàng giãn đều, chữ ô giữa theo chiều dọc). Panel: "Thêm hàng", "Thêm cột", "Bớt hàng cuối", "Bớt cột cuối".
+### Phông
+- Thêm Quicksand, Dosis, Prompt, "Times New Roman (Tinos)" (Google Fonts không có Times New Roman — Tinos cùng số đo ký tự). **Mặc định bài mới: Google Sans**
+  (bài đã lưu phông giữ nguyên). Bóng đổ thẻ không còn bị cắt (`.body` `overflow: clip` + lề cắt).

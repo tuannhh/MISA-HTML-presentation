@@ -1,9 +1,11 @@
 // Tinh chỉnh tay trên trang có bố cục (người dùng làm trên khung soạn thảo — KHÔNG qua AI):
-//  1) moves — dời vị trí, đổi cỡ chữ, giãn dòng, độ rộng khung từng ô chữ: { "<đường dẫn trường>": { x, y, s?, l?, w? } }
+//  1) moves — dời vị trí, đổi cỡ chữ, giãn dòng, giãn chữ, độ rộng khung từng ô chữ: { "<đường dẫn trường>": { x, y, s?, l?, w?, t? } }
 //     x/y = % bề rộng/cao khung, dịch tương đối so với chỗ bố cục đặt (giống kéo hộp chữ trong PowerPoint); s = hệ số cỡ chữ
 //     (1 = cỡ bố cục, 0,5–3); l = giãn dòng (line-height không đơn vị 0,8–3, không có = theo bố cục); w = độ rộng khung chữ
-//     (% bề rộng khung 5–100, không có = theo bố cục — chữ tự xuống dòng theo khung mới). Renderer gắn data-mv/data-fz/data-lh/data-bw
-//     + style `zoom` (cỡ chữ), `line-height`, `width` và `translate` (độc lập với `transform` của hiệu ứng) → mọi chế độ
+//     (% bề rộng khung 5–100, không có = theo bố cục — chữ tự xuống dòng theo khung mới); t = giãn chữ (letter-spacing, em −0,1–0,5,
+//     không có = theo bố cục). Khối dời cả cụm (`blk.text` = cả khối chữ trang bìa, `blk.media` = ảnh trang bìa) chỉ dùng x/y.
+//     Renderer gắn data-mv/data-fz/data-lh/data-bw/data-ls
+//     + style `zoom` (cỡ chữ), `line-height`, `letter-spacing`, `width` và `translate` (độc lập với `transform` của hiệu ứng) → mọi chế độ
 //     (trình chiếu, HTML xuất, PDF, ảnh bìa) đều đúng vị trí, đúng cỡ.
 //  2) hide — tắt hoạ tiết trang trí của trang (quầng sáng, hình bìa, số phần lớn, dấu ngoặc kép…). Thay hoạ tiết bằng ảnh/hình khối
 //     = tắt hoạ tiết + chèn phần tử (elements) đúng chỗ hoạ tiết cũ.
@@ -11,7 +13,7 @@
 import { SPEC_LIMITS } from './limits.js';
 
 // Trường chữ được phép dời (khớp đường dẫn data-e của renderer, trừ phần tử tự do/chân trang — phần tử tự do đã có toạ độ riêng).
-const MOVE_PATH_RE = /^(?:kicker|title|subtitle|caption|root|quote\.(?:text|author|role)|(?:items|steps)\.\d{1,2}\.(?:title|text|value|label)|stats\.\d{1,2}\.(?:value|label|prefix|suffix)|columns\.\d\.(?:title|subtitle|points\.\d{1,2})|tags\.\d{1,2}|images\.\d{1,2}\.caption|(?:image|video)\.caption)$/;
+const MOVE_PATH_RE = /^(?:blk\.(?:text|media)|kicker|title|subtitle|caption|root|quote\.(?:text|author|role)|(?:items|steps)\.\d{1,2}\.(?:title|text|value|label)|stats\.\d{1,2}\.(?:value|label|prefix|suffix)|columns\.\d\.(?:title|subtitle|points\.\d{1,2})|tags\.\d{1,2}|images\.\d{1,2}\.caption|(?:image|video)\.caption)$/;
 export const MOVE_LIMIT = SPEC_LIMITS.moves; // số ô chữ dời được mỗi trang
 export const MOVE_RANGE = 100; // ±% khung
 export const SIZE_MIN = 0.5; // cỡ chữ tối thiểu / tối đa so với cỡ bố cục
@@ -33,6 +35,15 @@ export const cleanBox = (v) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.round(Math.max(BOX_MIN, Math.min(BOX_MAX, n)) * 10) / 10 : 0;
 };
+// Giãn chữ (letter-spacing, đơn vị em): âm = khít lại, dương = thưa ra. 0 / không phải số = theo bố cục (không lưu).
+export const LS_MIN = -0.1;
+export const LS_MAX = 0.5;
+export const cleanLs = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n !== 0 ? Math.round(Math.max(LS_MIN, Math.min(LS_MAX, n)) * 1000) / 1000 || 0 : 0;
+};
+// Khối dời cả cụm (không phải 1 ô chữ): chỉ có vị trí.
+export const isBlockPath = (p) => p === 'blk.text' || p === 'blk.media';
 
 export const isMovePath = (p) => typeof p === 'string' && p.length <= 40 && MOVE_PATH_RE.test(p);
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -52,10 +63,14 @@ export function cleanMoves(raw) {
     const sz = v.s === undefined ? 1 : cleanSize(v.s);
     const lh = cleanLh(v.l);
     const bw = cleanBox(v.w);
-    if (sz !== 1) m.s = sz;
-    if (lh) m.l = lh;
-    if (bw) m.w = bw;
-    if (Math.abs(m.x) < 0.05 && Math.abs(m.y) < 0.05 && sz === 1 && !lh && !bw) continue; // về chỗ cũ, mọi thứ theo bố cục = không lưu
+    const ls = cleanLs(v.t);
+    if (!isBlockPath(k)) {
+      if (sz !== 1) m.s = sz;
+      if (lh) m.l = lh;
+      if (bw) m.w = bw;
+      if (ls) m.t = ls;
+    }
+    if (Math.abs(m.x) < 0.05 && Math.abs(m.y) < 0.05 && !m.s && !m.l && !m.w && !m.t) continue; // về chỗ cũ, mọi thứ theo bố cục = không lưu
     out[k] = m;
     n += 1;
   }
@@ -76,14 +91,32 @@ export function moveAttr(moves, path, W, H) {
   const s = m.s && m.s !== 1 ? cleanSize(m.s) : 1;
   const l = cleanLh(m.l);
   const bw = cleanBox(m.w);
-  if (!x && !y && s === 1 && !l && !bw) return '';
-  const st = [
+  const ls = cleanLs(m.t);
+  if (!x && !y && s === 1 && !l && !bw && !ls) return '';
+  const st = moveCss(x, y, s, l, bw, ls, W);
+  return ` data-mv="${x} ${y}"${s !== 1 ? ` data-fz="${s}"` : ''}${l ? ` data-lh="${l}"` : ''}${bw ? ` data-bw="${bw}"` : ''}${ls ? ` data-ls="${ls}"` : ''} style="${st}"`;
+}
+function moveCss(x, y, s, l, bw, ls, W) {
+  return [
     x || y ? `translate:${r2(x / s)}px ${r2(y / s)}px` : '',
     s !== 1 ? `zoom:${s}` : '',
     l ? `line-height:${l}` : '',
+    ls ? `letter-spacing:${ls}em` : '',
     bw ? `width:${r2((bw * W) / 100 / s)}px;max-width:none;flex-shrink:0` : '',
   ].filter(Boolean).join(';');
-  return ` data-mv="${x} ${y}"${s !== 1 ? ` data-fz="${s}"` : ''}${l ? ` data-lh="${l}"` : ''}${bw ? ` data-bw="${bw}"` : ''} style="${st}"`;
+}
+
+/**
+ * Khối dời cả cụm (blk.text / blk.media): { attr, css } — attr gắn data-mv (+ data-mk ở chế độ sửa, engine nhận ra khối),
+ * css ghép vào thuộc tính style sẵn có của phần tử (khối ảnh đã có style riêng). Chỉ dời vị trí (translate).
+ */
+export function blockMove(moves, key, W, H, edit) {
+  const m = moves && Object.prototype.hasOwnProperty.call(moves, key) ? moves[key] : null;
+  const x = m ? Math.round(((m.x || 0) * W) / 100) : 0;
+  const y = m ? Math.round(((m.y || 0) * H) / 100) : 0;
+  const mk = edit ? ` data-mk="${key}"` : '';
+  if (!x && !y) return { attr: mk, css: '' };
+  return { attr: `${mk} data-mv="${x} ${y}"`, css: `translate:${x}px ${y}px` };
 }
 
 // Hoạ tiết trang trí ẩn được theo từng trang. layouts: bố cục có hoạ tiết đó (null = mọi bố cục có cấu trúc).

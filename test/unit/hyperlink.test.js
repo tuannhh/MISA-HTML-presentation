@@ -18,7 +18,7 @@ test('safeHref: chỉ http(s) có tên miền, mailto, tel; chặn javascript:/d
 test('cú pháp lưu: href đứng cuối, URL có dấu phẩy; kết hợp màu/đậm; thẻ có URL xấu → chữ thường', () => {
   const s = 'Xem ⟦accent,b,href=https://misa.vn/a?x=1,2⟧tài liệu⟦/⟧ nhé';
   const segs = parseRich(s);
-  assert.deepEqual(segs[1], { t: 'tài liệu', c: 'accent', b: true, n: false, h: 'https://misa.vn/a?x=1,2' });
+  assert.deepEqual(segs[1], { t: 'tài liệu', c: 'accent', b: true, i: false, n: false, h: 'https://misa.vn/a?x=1,2' });
   assert.equal(serializeRich(segs), s);
   assert.equal(plainText(s), 'Xem tài liệu nhé');
   assert.equal(canonicalRich('⟦href=https://misa.vn⟧MISA⟦/⟧'), '⟦href=https://misa.vn/⟧MISA⟦/⟧');

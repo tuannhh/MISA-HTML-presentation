@@ -21,12 +21,30 @@ export const DECK_FONTS = Object.freeze({
   roboto: { label: 'Roboto', family: 'Deck Roboto', faces: sub3('roboto', '100 900', 'roboto-{s}-wght-normal.woff2') },
   // Google Sans (OFL từ 2025) chỉ có độ đậm 400–700: tiêu đề đậm nhất hiển thị ở 700.
   'google-sans': { label: 'Google Sans', family: 'Deck Google Sans', faces: sub3('google-sans', '400 700', 'google-sans-{s}-wght-normal.woff2') },
+  // Quicksand (bo tròn, thân thiện) 300–700; Dosis (hẹp, hiện đại) 200–800 — bản biến thiên.
+  quicksand: { label: 'Quicksand', family: 'Deck Quicksand', faces: sub3('quicksand', '300 700', 'quicksand-{s}-wght-normal.woff2') },
+  dosis: { label: 'Dosis', family: 'Deck Dosis', faces: sub3('dosis', '200 800', 'dosis-{s}-wght-normal.woff2') },
+  // Prompt không có bản biến thiên → mỗi độ đậm 1 tệp (400–900), như Barlow.
+  prompt: { label: 'Prompt', family: 'Deck Prompt', faces: [400, 500, 600, 700, 800, 900].flatMap((w) => sub3('prompt', String(w), `prompt-{s}-${w}-normal.woff2`)) },
+  // "Times New Roman": Google Fonts không có phông này → dùng Tinos (Google Fonts, cùng số đo từng ký tự với Times New Roman — chữ
+  // chiếm đúng chỗ như Times New Roman, máy nào cũng hiển thị giống nhau, xuất PDF đúng). Phông có chân → dự phòng serif.
+  tinos: {
+    label: 'Times New Roman',
+    note: 'Tinos — phông của Google Fonts cùng số đo với Times New Roman',
+    family: 'Deck Tinos',
+    fallback: '"Times New Roman", Times, Georgia, serif',
+    faces: [400, 700].flatMap((w) => sub3('tinos', String(w), `tinos-{s}-${w}-normal.woff2`)),
+  },
 });
 export const FONT_IDS = Object.freeze(Object.keys(DECK_FONTS));
-export const DEFAULT_FONT = 'inter';
+// Bài mới dùng Google Sans (bài cũ đã lưu phông riêng trong spec.font → không đổi).
+export const DEFAULT_FONT = 'google-sans';
 const FALLBACK = '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif';
 
-export const fontStack = (id) => `"${(DECK_FONTS[id] || DECK_FONTS[DEFAULT_FONT]).family}", ${FALLBACK}`;
+export const fontStack = (id) => {
+  const f = DECK_FONTS[id] || DECK_FONTS[DEFAULT_FONT];
+  return `"${f.family}", ${f.fallback || FALLBACK}`;
+};
 
 // Mọi tệp phông hợp lệ (allowlist cho route /deck-assets/fonts/… và khi nhúng base64).
 export const FONT_FILES = Object.freeze([...new Set(Object.values(DECK_FONTS).flatMap((f) => f.faces.map((x) => x.file)))]);

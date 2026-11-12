@@ -3,7 +3,7 @@
 //
 // Định dạng lưu NGAY TRONG CHUỖI để đi theo nội dung khi sắp xếp/nhân bản/đổi bố cục:
 //   "Hỏi đáp ⟦accent,b⟧song song⟦/⟧ và trợ lý AI"     — đoạn "song song" màu nhấn, chữ đậm
-//   thuộc tính (phân tách dấu phẩy): token màu theo theme (RICH_COLORS) | #RRGGBB | b (đậm) | n (giữ liền)
+//   thuộc tính (phân tách dấu phẩy): token màu theo theme (RICH_COLORS) | #RRGGBB | b (đậm) | i (nghiêng) | n (giữ liền)
 //   | href=<URL> (liên kết — luôn đứng CUỐI vì URL có thể chứa dấu phẩy): "⟦b,href=https://amis.misa.vn/⟧AMIS⟦/⟧"
 //   xuống dòng = ký tự "\n". Không lồng nhau; dấu ⟦ ⟧ (U+27E6/U+27E7) không xuất hiện trong văn bản thường.
 // AN TOÀN: chỉ nhận thuộc tính trong danh sách cho phép (màu hex kiểm định dạng, URL chỉ http(s)/mailto/tel — safeHref) — thẻ sai
@@ -55,9 +55,9 @@ export function safeHref(v) {
   return u.href.length <= HREF_MAX && !BAD_URL_CH.test(u.href) ? u.href : null;
 }
 
-/** Thuộc tính hợp lệ → { c, b, n, h } | null (sai → cả thẻ là chữ thường). h = URL liên kết (đã chuẩn hoá) | null. */
+/** Thuộc tính hợp lệ → { c, b, i, n, h } | null (sai → cả thẻ là chữ thường). h = URL liên kết (đã chuẩn hoá) | null. */
 export function parseAttrs(str) {
-  const out = { c: null, b: false, n: false, h: null };
+  const out = { c: null, b: false, i: false, n: false, h: null };
   let s = String(str);
   // href luôn đứng cuối: phần sau "href=" là nguyên URL (có thể chứa dấu phẩy).
   const at = s.startsWith('href=') ? 0 : s.indexOf(',href=');
@@ -70,27 +70,29 @@ export function parseAttrs(str) {
     for (const raw of s.split(',')) {
       const a = raw.trim();
       if (a === 'b') out.b = true;
+      else if (a === 'i') out.i = true;
       else if (a === 'n') out.n = true;
       else if (RICH_COLORS[a] && !out.c) out.c = a;
       else if (HEX.test(a) && !out.c) out.c = a.toUpperCase();
       else return null;
     }
   }
-  return out.c || out.b || out.n || out.h ? out : null;
+  return out.c || out.b || out.i || out.n || out.h ? out : null;
 }
-const attrKey = (s) => [s.c || '', s.b ? 'b' : '', s.n ? 'n' : '', s.h ? `href=${s.h}` : ''].filter(Boolean).join(',');
+// Thứ tự cố định c, b, i, n, href (khớp keyOf của engine) — cùng định dạng luôn ra cùng chuỗi.
+const attrKey = (s) => [s.c || '', s.b ? 'b' : '', s.i ? 'i' : '', s.n ? 'n' : '', s.h ? `href=${s.h}` : ''].filter(Boolean).join(',');
 
 export const hasRich = (s) => typeof s === 'string' && s.includes(RICH_OPEN);
 
-/** Chuỗi → các đoạn [{ t, c, b, n, h }] (đoạn thường: c = h = null, b = n = false). */
+/** Chuỗi → các đoạn [{ t, c, b, i, n, h }] (đoạn thường: c = h = null, b = i = n = false). */
 export function parseRich(s) {
   const str = String(s ?? '');
-  if (!str.includes(RICH_OPEN)) return str ? [{ t: str, c: null, b: false, n: false, h: null }] : [];
+  if (!str.includes(RICH_OPEN)) return str ? [{ t: str, c: null, b: false, i: false, n: false, h: null }] : [];
   const out = [];
   // Dấu ⟦ ⟧ lẻ (thẻ sai cú pháp) bị bỏ — chữ thuần, bản lưu và HTML luôn khớp nhau.
   const plain = (t) => {
     const v = t.replace(/[⟦⟧]/g, '');
-    if (v) out.push({ t: v, c: null, b: false, n: false, h: null });
+    if (v) out.push({ t: v, c: null, b: false, i: false, n: false, h: null });
   };
   let last = 0;
   RUN.lastIndex = 0;
@@ -119,7 +121,7 @@ export function serializeRich(segs) {
   for (const s of segs || []) {
     const t = String(s?.t ?? '').replace(/[⟦⟧]/g, '');
     if (!t) continue;
-    const at = { c: s.c && (RICH_COLORS[s.c] || HEX.test(s.c)) ? s.c : null, b: !!s.b, n: !!s.n, h: s.h ? safeHref(s.h) : null };
+    const at = { c: s.c && (RICH_COLORS[s.c] || HEX.test(s.c)) ? s.c : null, b: !!s.b, i: !!s.i, n: !!s.n, h: s.h ? safeHref(s.h) : null };
     const prev = merged[merged.length - 1];
     if (prev && attrKey(prev) === attrKey(at)) prev.t += t;
     else merged.push({ t, ...at });
@@ -152,7 +154,7 @@ export function cutRich(s, max) {
 // vị trí con trỏ của DOM trong khung sửa trực tiếp).
 function toChars(segs) {
   const out = [];
-  for (const s of segs) for (let i = 0; i < s.t.length; i += 1) out.push({ t: s.t[i], c: s.c, b: s.b, n: s.n, h: s.h || null });
+  for (const s of segs) for (let i = 0; i < s.t.length; i += 1) out.push({ t: s.t[i], c: s.c, b: s.b, i: !!s.i, n: s.n, h: s.h || null });
   return out;
 }
 
@@ -170,15 +172,15 @@ export function repaintRich(oldRaw, newPlain) {
   while (a < old.length && a < nw.length && old[a] === nw[a]) a += 1;
   let b = 0;
   while (b < old.length - a && b < nw.length - a && old[old.length - 1 - b] === nw[nw.length - 1 - b]) b += 1;
-  const fmt = chars[a - 1] || chars[a] || { c: null, b: false, n: false, h: null };
+  const fmt = chars[a - 1] || chars[a] || { c: null, b: false, i: false, n: false, h: null };
   // Chữ gõ thêm chỉ thuộc liên kết khi nằm GIỮA liên kết (gõ nối sau cuối liên kết là chữ thường).
   const after = chars[old.length - b];
   const h = chars[a - 1] && after && chars[a - 1].h === after.h ? chars[a - 1].h : null;
-  const mid = nw.slice(a, nw.length - b).map((t) => ({ t, c: fmt.c, b: fmt.b, n: fmt.n && t !== '\n', h }));
+  const mid = nw.slice(a, nw.length - b).map((t) => ({ t, c: fmt.c, b: fmt.b, i: !!fmt.i, n: fmt.n && t !== '\n', h }));
   return serializeRich([...chars.slice(0, a), ...mid, ...chars.slice(old.length - b)]);
 }
 
-/** Áp định dạng cho khoảng [start, end) theo chữ thuần: patch = { c?: token|hex|null, b?: bool, n?: bool, h?: URL|null, upper?: 'upper'|'lower'|'title' }. */
+/** Áp định dạng cho khoảng [start, end) theo chữ thuần: patch = { c?: token|hex|null, b?: bool, i?: bool, n?: bool, h?: URL|null, upper?: 'upper'|'lower'|'title' }. */
 export function formatRange(raw, start, end, patch) {
   const chars = toChars(parseRich(raw));
   const s = Math.max(0, Math.min(start, chars.length));
@@ -193,6 +195,7 @@ export function formatRange(raw, start, end, patch) {
     const o = { ...ch };
     if ('c' in patch) o.c = patch.c || null;
     if ('b' in patch) o.b = !!patch.b;
+    if ('i' in patch) o.i = !!patch.i;
     if ('n' in patch) o.n = !!patch.n && o.t !== '\n';
     if ('h' in patch) o.h = patch.h ? safeHref(patch.h) : null;
     if (patch.upper === 'upper') o.t = o.t.toLocaleUpperCase('vi');
@@ -221,10 +224,10 @@ export const linkAttrs = (href) => ` href="${escText(href)}" target="_blank" rel
 
 function wrap(seg, html) {
   let out = html;
-  if (seg.c || seg.b || seg.n) {
+  if (seg.c || seg.b || seg.i || seg.n) {
     const css = colorCss(seg.c);
-    const st = `${css ? `color:${css};` : ''}${seg.b ? 'font-weight:800;' : ''}${seg.n ? 'white-space:nowrap;' : ''}`;
-    const data = `${seg.c ? ` data-rc="${escText(seg.c)}"` : ''}${seg.b ? ' data-rb=""' : ''}${seg.n ? ' data-rn=""' : ''}`;
+    const st = `${css ? `color:${css};` : ''}${seg.b ? 'font-weight:800;' : ''}${seg.i ? 'font-style:italic;' : ''}${seg.n ? 'white-space:nowrap;' : ''}`;
+    const data = `${seg.c ? ` data-rc="${escText(seg.c)}"` : ''}${seg.b ? ' data-rb=""' : ''}${seg.i ? ' data-ri=""' : ''}${seg.n ? ' data-rn=""' : ''}`;
     out = `<span class="rt"${data} style="${st}">${html}</span>`;
   }
   const h = seg.h ? safeHref(seg.h) : null;

@@ -1,6 +1,7 @@
 // Trang tự do (layout 'free'): danh mục phần tử + mẫu bố cục gợi ý khi chèn trang trắng.
 // Dùng chung cho server (specService chuẩn hoá), renderer (render.js) và trình soạn thảo (chèn trang, bảng thuộc tính).
 // Toạ độ phần tử tính theo % khung slide (x, y = góc trên trái; w, h = kích thước) → giữ đúng vị trí khi đổi tỷ lệ khung.
+import { cleanLh, cleanLs } from './layers.js';
 
 export const FREE_TYPES = Object.freeze(['text', 'image', 'video', 'table', 'shape', 'logo3d']);
 // Kiểu chữ: cỡ gốc (px trên khung cao 1440) + độ đậm — người dùng phóng to/thu nhỏ bằng hệ số size.
@@ -21,6 +22,17 @@ export const SHAPE_FILLS = Object.freeze({ accent: 'Màu nhấn', 'accent-2': 'M
 export const TABLE_STYLES = Object.freeze({ striped: 'Sọc xen kẽ', grid: 'Kẻ ô', lines: 'Kẻ ngang' });
 export const RADII = Object.freeze({ none: 'Vuông', md: 'Bo nhẹ', lg: 'Bo nhiều', circle: 'Tròn' });
 export const SIZE_RANGE = Object.freeze({ min: 0.4, max: 4 });
+
+// Giãn dòng (lh, line-height không đơn vị 0,8–3) + giãn chữ (ls, em −0,1–0,5) của phần tử chữ — chỉnh trên thanh định dạng nổi.
+// 0 / thiếu = theo kiểu chữ (không lưu). Dùng chung specService (làm sạch) và editPaths (khung soạn thảo gửi lên).
+export function cleanTextLook(o) {
+  const out = {};
+  const lh = cleanLh(o && o.lh);
+  const ls = cleanLs(o && o.ls);
+  if (lh) out.lh = lh;
+  if (ls) out.ls = ls;
+  return out;
+}
 
 let seq = 0;
 export const newElementId = () => `e-${Date.now().toString(36).slice(-5)}${(seq++ % 1296).toString(36).padStart(2, '0')}`;
